@@ -1,0 +1,1 @@
+import{_ as e,o as _,c as a}from"./index.b9fd04e8.js";const t={},o={class:"main-layout"};function c(n,s){return _(),a("div",o)}var d=e(t,[["render",c],["__scopeId","data-v-61191b79"]]);export{d as default};
