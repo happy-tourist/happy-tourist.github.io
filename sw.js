@@ -4,7 +4,7 @@ const initCache = () => {
   console.log('caches', caches);
   return caches.open(CacheKey).then((cache) => {
     return cache.addAll([
-      ".",
+      "/",
   ]);
   }, (error) => {
     console.log(error)
