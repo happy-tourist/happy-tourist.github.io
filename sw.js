@@ -1,10 +1,10 @@
-const CacheKey = "cache-v1";
+const CacheKey = "cache-v2";
 
 const initCache = () => {
   return caches.open(CacheKey).then((cache) => {
     return cache.addAll([
-      "./index.html", 
-    "./page1.html", 
+      "./index.html",
+    "./page1.html",
     "./page2.html"
   ]);
   }, (error) => {
