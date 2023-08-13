@@ -1,6 +1,7 @@
 const CacheKey = "cache-v2";
 
 const initCache = () => {
+  console.log('CacheKey', CacheKey)
   return caches.open(CacheKey).then((cache) => {
     return cache.addAll([
       "./assets",
