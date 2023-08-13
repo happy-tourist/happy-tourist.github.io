@@ -1,4 +1,4 @@
-const CacheKey = "cache-v1";
+const CacheKey = "cache-v2";
 
 const initCache = () => {
   return caches.open(CacheKey).then((cache) => {
