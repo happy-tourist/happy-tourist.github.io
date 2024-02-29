@@ -79,10 +79,11 @@ const user = useCurrentUser();
 const xxx = computed(() => useCollection(user.value ? collection(db, 'xxx') : null));
 
 const $q = useQuasar();
-$q.loading.show();
+// $q.loading.show();
 
 onMounted(() => {
   getRedirectResult(auth).finally(() => {
+    // $q.loading.hide();
   }).catch((reason) => {
     console.error('Failed redirect result', reason);
   });
