@@ -3,7 +3,7 @@ import { VueFire, VueFireAuth } from 'vuefire';
 import { initializeApp } from 'firebase/app';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyBZ7EDF3k_El21gpTAIcJly3xq1kvm1qyY',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: 'translate-79432.firebaseapp.com',
   projectId: 'translate-79432',
   storageBucket: 'translate-79432.appspot.com',
