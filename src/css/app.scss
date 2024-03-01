@@ -1,1 +1,27 @@
-// app global css in SCSS form
+.d-flex{
+  display: flex;
+}
+
+.flex-wrap{
+  flex-wrap: wrap;
+}
+
+.gap-1{
+  gap: 8px;
+}
+
+.gap-2{
+  gap: 16px;
+}
+
+.gap-3{
+  gap: 24px;
+}
+
+.align-start{
+  align-items: flex-start;
+}
+
+.flex-column{
+  flex-direction: column;
+}
