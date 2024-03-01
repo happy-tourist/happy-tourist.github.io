@@ -12,8 +12,8 @@ const { user, entity } = inject('app');
 <template>
   <q-layout>
     <q-header elevated>
-      <q-toolbar class="gap-2">
-        <AddEntity v-if="user && (!entity || entity.type === 'folder')" />
+      <q-toolbar class="gap-1">
+        <AddEntity :class="user && (!entity || entity.type === 'folder') ? '' : 'invisible'" />
 
         <q-toolbar-title>
           Happy Tourist
