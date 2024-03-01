@@ -28,8 +28,6 @@ const onPush = async () => {
   if (entity.value) {
     parentFolders
       .push(...entity.value.parentFolders, { name: entity.value.name, id: entity.value.id });
-  } else {
-    parentFolders.push({ name: 'На главную', id: '' });
   }
   await addDoc(collection(db, 'entities'), {
     uid: user.value.uid,

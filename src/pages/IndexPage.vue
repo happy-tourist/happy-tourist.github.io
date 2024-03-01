@@ -8,14 +8,22 @@ const { entities, user, entity } = inject('app');
 
 <template>
   <q-page v-if="user" class="d-flex flex-column q-pa-md gap-3">
-    <q-breadcrumbs v-if="entity?.parentFolders.length">
+    <q-breadcrumbs>
       <q-breadcrumbs-el
-        v-for="item in entity.parentFolders"
-        :key="item.id"
-        :to="{ name: 'index', params: { id: item.id } }"
-        :label="item.name"
+        :to="{ name: 'index', params: { id: '' } }"
+        label="Главная"
       />
+      <template v-if="entity?.parentFolders.length">
+        <q-breadcrumbs-el
+          v-for="item in entity.parentFolders"
+          :key="item.id"
+          :to="{ name: 'index', params: { id: item.id } }"
+          :label="item.name"
+        />
+      </template>
+
       <q-breadcrumbs-el
+        v-if="entity"
         :to="{ name: 'index', params: { id: entity.id } }"
         :label="entity.name"
       />
