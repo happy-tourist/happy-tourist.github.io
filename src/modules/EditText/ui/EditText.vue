@@ -4,8 +4,10 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore';
-import { inject } from 'vue';
+import { inject, ref } from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
+import { Splitpanes, Pane } from 'splitpanes';
+import 'splitpanes/dist/splitpanes.css';
 
 const db = useFirestore();
 
@@ -26,22 +28,51 @@ const addTranslate = async (lid, translate) => {
     decreaseCounterLoadings();
   });
 };
+
+const showPanes = ref(false);
 </script>
 
 <template>
-  <div v-if="text">
-    <p
-      v-for="(p, indexP) in text.originalText"
-      :key="indexP"
-      class="q-mb-md"
-    >
-      <EditLine
-        v-for="(line, indexLine) in p"
-        :key="indexLine"
-        :line="line"
-        :translate="text.translates && text.translates[`${indexP}${indexLine}`]"
-        @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+  <splitpanes v-if="text" horizontal class="default-theme" style="height: calc(100dvh - 175px)">
+    <pane class="overflow-auto bg-white">
+      <q-btn
+        round
+        color="secondary"
+        :icon="showPanes ? 'visibility_off' : 'visibility'"
+        size="sm"
+        class="absolute"
+        style="right: 30px;"
+        @click="showPanes = !showPanes"
       />
-    </p>
-  </div>
+
+      <p
+        v-for="(p, indexP) in text.originalText"
+        :key="indexP"
+        class="q-mb-md"
+      >
+        <EditLine
+          v-for="(line, indexLine) in p"
+          :key="indexLine"
+          :line="line"
+          :translate="text.translates && text.translates[`${indexP}${indexLine}`]"
+          @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+        />
+      </p>
+    </pane>
+    <pane v-if="showPanes" class="overflow-auto bg-white">
+      <p
+        v-for="(p, indexP) in text.originalText"
+        :key="indexP"
+        class="q-mb-md"
+      >
+        <EditLine
+          v-for="(line, indexLine) in p"
+          :key="indexLine"
+          :line="line"
+          :translate="text.translates && text.translates[`${indexP}${indexLine}`]"
+          @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+        />
+      </p>
+    </pane>
+  </splitpanes>
 </template>
