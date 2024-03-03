@@ -13,9 +13,7 @@ watch(translateInner, (cur) => {
 const input = ref();
 
 const onFocus = () => {
-  setTimeout(() => {
-    input.value.focus();
-  }, 1000);
+  input.value.focus();
 };
 </script>
 
