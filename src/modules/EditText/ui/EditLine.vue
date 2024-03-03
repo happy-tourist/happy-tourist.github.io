@@ -14,7 +14,10 @@ const input = ref();
 
 const onFocus = () => {
   setTimeout(() => {
+    console.log('input.value', input.value);
     input.value.focus();
+    window.getSelection().selectAllChildren(input.value);
+    window.getSelection().collapseToEnd();
   }, 1000);
 };
 </script>
@@ -27,8 +30,8 @@ const onFocus = () => {
     {{ translateInner || line }}
 
     <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
-      <input ref="input" type="text" />
         <q-input
+          ref="input"
           dense
           v-model="scope.value"
           :model-value="scope.value"
