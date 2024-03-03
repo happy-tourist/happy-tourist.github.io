@@ -30,10 +30,15 @@ watch(translateInner, (cur) => {
     <q-popup-edit v-model="translateInner" v-slot="scope">
         <q-input
           autogrow
-          autofocus="autofocus"
+          autofocus
           dense
           v-model="scope.value"
           :model-value="scope.value"
+          type="search"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
         >
           <template v-slot:after>
             <q-btn
