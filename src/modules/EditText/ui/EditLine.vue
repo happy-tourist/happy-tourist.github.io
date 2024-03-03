@@ -10,14 +10,13 @@ watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
 
-// const input = ref();
-//
-// const onFocus = () => {
-//   setTimeout(() => {
-//     const inputInner = input.value.$el.querySelector('input');
-//     inputInner.focus();
-//   }, 1000);
-// };
+const input = ref();
+
+const onFocus = () => {
+  setTimeout(() => {
+    input.value.focus();
+  }, 1000);
+};
 </script>
 
 <template>
@@ -27,7 +26,19 @@ watch(translateInner, (cur) => {
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+      <input
+        ref="input"
+        id="search-input"
+        type="search"
+        value=""
+        placeholder="search"
+        name="keywords"
+        spellcheck="false"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+      />
         <q-input
           autogrow
           autofocus
