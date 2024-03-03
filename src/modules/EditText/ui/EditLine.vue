@@ -32,7 +32,6 @@ const onFocus = () => {
           dense
           v-model="scope.value"
           :model-value="scope.value"
-          type="textarea"
           autogrow
         >
           <template v-slot:after>
