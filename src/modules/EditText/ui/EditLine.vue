@@ -29,7 +29,7 @@ const input = ref();
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="$refs.input?.focus">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="input?.focus">
         <q-input
           ref="input"
           dense
