@@ -27,8 +27,8 @@ const onFocus = () => {
     {{ translateInner || line }}
 
     <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+      <input ref="input" type="text" />
         <q-input
-          ref="input"
           dense
           v-model="scope.value"
           :model-value="scope.value"
