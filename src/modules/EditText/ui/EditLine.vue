@@ -12,14 +12,14 @@ watch(translateInner, (cur) => {
 
 const input = ref();
 
-const onFocus = () => {
-  setTimeout(() => {
-    console.log('input.value', input.value);
-    input.value.focus();
-    window.getSelection().selectAllChildren(input.value);
-    window.getSelection().collapseToEnd();
-  }, 1000);
-};
+// const onFocus = () => {
+//   setTimeout(() => {
+//     console.log('input.value', input.value);
+//     input.value.focus();
+//     window.getSelection().selectAllChildren(input.value);
+//     window.getSelection().collapseToEnd();
+//   }, 1000);
+// };
 </script>
 
 <template>
@@ -29,7 +29,7 @@ const onFocus = () => {
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="$refs.input.focus">
         <q-input
           ref="input"
           dense
