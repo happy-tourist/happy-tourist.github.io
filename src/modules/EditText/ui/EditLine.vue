@@ -10,14 +10,14 @@ watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
 
-const input = ref();
-
-const onFocus = () => {
-  setTimeout(() => {
-    const inputInner = input.value.$el.querySelector('input');
-    inputInner.focus();
-  }, 1000);
-};
+// const input = ref();
+//
+// const onFocus = () => {
+//   setTimeout(() => {
+//     const inputInner = input.value.$el.querySelector('input');
+//     inputInner.focus();
+//   }, 1000);
+// };
 </script>
 
 <template>
@@ -27,9 +27,10 @@ const onFocus = () => {
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+    <q-popup-edit v-model="translateInner" v-slot="scope">
         <q-input
-          ref="input"
+          autogrow
+          autofocus="autofocus"
           dense
           v-model="scope.value"
           :model-value="scope.value"
