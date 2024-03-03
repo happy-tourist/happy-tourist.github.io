@@ -11,6 +11,12 @@ watch(translateInner, (cur) => {
 });
 
 const input = ref();
+
+const onFocus = () => {
+  setTimeout(() => {
+    input.value.focus();
+  });
+};
 </script>
 
 <template>
@@ -20,7 +26,7 @@ const input = ref();
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="$refs.input.focus()">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
         <q-input
           ref="input"
           dense
