@@ -9,6 +9,8 @@ const translateInner = ref(props.translate || '');
 watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
+
+const input = ref();
 </script>
 
 <template>
@@ -18,9 +20,9 @@ watch(translateInner, (cur) => {
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="$refs.input.focus()">
         <q-input
-          autofocus
+          ref="input"
           dense
           v-model="scope.value"
           :model-value="scope.value"
