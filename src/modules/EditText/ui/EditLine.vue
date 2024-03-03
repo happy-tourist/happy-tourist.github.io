@@ -35,7 +35,6 @@ const input = ref();
           dense
           v-model="scope.value"
           :model-value="scope.value"
-          autogrow
         >
           <template v-slot:after>
             <q-btn
