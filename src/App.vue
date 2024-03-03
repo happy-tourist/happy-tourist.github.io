@@ -1,7 +1,7 @@
 <script setup>
 import {
   useCollection,
-  useCurrentUser,
+  useCurrentUser, useDocument,
   useFirebaseAuth,
   useFirestore,
 } from 'vuefire';
@@ -28,13 +28,18 @@ const allEntities = useCollection(() => (user.value ? query(collection(db, 'enti
 const entities = computed(() => allEntities.data.value.filter((item) => item.parentId === (route.params.id || '')));
 const entity = computed(() => allEntities.data.value.find((item) => item.id === (route.params.id || '')));
 
+const document = useDocument(() => (entity.value ? query(collection(db, 'texts'), where('eid', '==', entity.value?.id)) : null));
+const text = computed(() => document?.data.value && document?.data.value[0]);
+
 const counterLoadings = ref(0);
 
 const increaseCounterLoadings = () => {
   counterLoadings.value += 1;
 };
 const decreaseCounterLoadings = () => {
-  counterLoadings.value -= 1;
+  if (counterLoadings.value > 0) {
+    counterLoadings.value -= 1;
+  }
 };
 
 onMounted(() => {
@@ -62,10 +67,19 @@ watch(() => allEntities.pending, (cur) => {
   }
 }, { deep: true });
 
+watch(() => document.pending, (cur) => {
+  if (cur.value) {
+    increaseCounterLoadings();
+  } else {
+    decreaseCounterLoadings();
+  }
+}, { deep: true });
+
 provide('app', {
   user,
   entities,
   entity,
+  text,
   increaseCounterLoadings,
   decreaseCounterLoadings,
 });

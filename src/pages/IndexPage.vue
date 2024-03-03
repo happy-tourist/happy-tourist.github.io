@@ -1,15 +1,19 @@
 <script setup>
 import { DeleteEntity } from 'src/modules/DeleteEntity';
-
+import { EditEntity } from 'src/modules/EditEntity';
 import {
+  computed,
   inject,
 } from 'vue';
+import { EditText } from 'src/modules/EditText';
 
 const { entities, user, entity } = inject('app');
+
+const isDescription = computed(() => entity.value?.type === 'description');
 </script>
 
 <template>
-  <q-page v-if="user" class="d-flex flex-column q-pa-md gap-1">
+  <q-page v-if="user" class="q-pa-md">
     <div class="d-flex justify-between">
       <q-breadcrumbs>
         <q-breadcrumbs-el
@@ -34,14 +38,19 @@ const { entities, user, entity } = inject('app');
 
       <DeleteEntity :class="entity ? '' : 'invisible'" :disabled="entities?.length" />
     </div>
-    <div class="d-flex flex-wrap gap-3 align-start">
-      <q-btn
-        v-for="item in entities"
-        :key="item.id"
-        :icon="item.type"
-        :to="{ name: 'index', params: { id: item.id } }"
-        :label="item.name"
-      />
+    <div class="d-flex flex-column gap-3">
+      <EditEntity />
+      <div class="d-flex flex-wrap gap-3 align-start">
+        <q-btn
+          v-for="item in entities"
+          :key="item.id"
+          :icon="item.type"
+          :to="{ name: 'index', params: { id: item.id } }"
+          :label="item.name"
+        />
+      </div>
     </div>
+
+    <EditText v-if="isDescription" />
   </q-page>
 </template>
