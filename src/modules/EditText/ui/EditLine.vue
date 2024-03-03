@@ -15,7 +15,7 @@ const input = ref();
 const onFocus = () => {
   setTimeout(() => {
     input.value.focus();
-  });
+  }, 100);
 };
 </script>
 
