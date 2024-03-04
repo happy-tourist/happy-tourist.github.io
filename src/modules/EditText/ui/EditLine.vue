@@ -9,60 +9,26 @@ const translateInner = ref(props.translate || '');
 watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
-
-const input = ref();
-const span = ref();
-
-const onFocus = () => {
-  input.value.focus();
-  setTimeout(() => {
-    span.value.click();
-  }, 1000);
-};
 </script>
 
 <template>
-  <div>
   <span
     class="text-body1 cursor-pointer q-ml-sm"
     :class="translateInner ? '' : 'text-bold'"
-    @click="onFocus"
   >
-    <input ref="input" type="text">
     {{ translateInner || line }}
-  </span>
-    <span
-      ref="span"
-      class="text-body1 cursor-pointer q-ml-sm"
-      :class="translateInner ? '' : 'text-bold'"
-    >
 
-    <q-popup-edit v-model="translateInner" v-slot="scope">
+    <q-menu>
         <q-input
           autofocus
           autogrow
           dense
-          v-model="scope.value"
-          :model-value="scope.value"
-        >
-          <template v-slot:after>
-            <q-btn
-              flat dense color="negative" icon="cancel"
-              @click.stop.prevent="scope.cancel"
-            />
-
-            <q-btn
-              flat dense color="positive" icon="check_circle"
-              @click.stop.prevent="scope.set"
-              :disable="scope.validate(scope.value) === false || scope.initialValue === scope.value"
-            />
-          </template>
-        </q-input>
+          v-model="translateInner"
+        />
 
         <p class="q-mt-md">
           {{ line }}
         </p>
-      </q-popup-edit>
+      </q-menu>
   </span>
-  </div>
 </template>
