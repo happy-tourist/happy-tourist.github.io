@@ -10,7 +10,7 @@ watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
 
-const keyInput = ref(0);
+const input = ref();
 </script>
 
 <template>
@@ -20,9 +20,12 @@ const keyInput = ref(0);
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="keyInput++">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="input?.focus">
+      <div contenteditable autofocus>
+        Lorem ipsum dolor sit amet, consectetur adipisicing elit. Cumque, quidem!
+      </div>
         <q-input
-          :key="keyInput"
+          ref="input"
           autofocus
           autogrow
           dense
