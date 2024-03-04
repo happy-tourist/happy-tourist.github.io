@@ -21,11 +21,12 @@ const onFocus = () => {
   <span
     class="text-body1 cursor-pointer q-ml-sm"
     :class="translateInner ? '' : 'text-bold'"
+    @click="onFocus"
   >
     <input ref="input" type="text">
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+    <q-popup-edit v-model="translateInner" v-slot="scope">
         <q-input
           autofocus
           autogrow
