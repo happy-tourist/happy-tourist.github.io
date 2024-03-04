@@ -13,9 +13,7 @@ watch(translateInner, (cur) => {
 const input = ref();
 
 const onFocus = () => {
-  setTimeout(() => {
-    input.value.$el.click();
-  }, 1000);
+  input.value.focus();
 };
 </script>
 
@@ -24,11 +22,12 @@ const onFocus = () => {
     class="text-body1 cursor-pointer q-ml-sm"
     :class="translateInner ? '' : 'text-bold'"
   >
+    <input ref="input" type="text">
     {{ translateInner || line }}
 
     <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
         <q-input
-          ref="input"
+          autofocus
           autogrow
           dense
           v-model="scope.value"

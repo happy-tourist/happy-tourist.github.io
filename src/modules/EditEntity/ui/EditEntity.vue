@@ -22,22 +22,15 @@ const onUpdate = async () => {
   });
 };
 
-// const input = ref();
-const autofocus = ref(false);
-
 watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
-    setTimeout(() => {
-      document.getElementById('myTextField').focus();
-    }, 1000);
   }
 });
 </script>
 
 <template>
   <div v-if="entity" class="d-flex gap-2">
-    <input :key="autofocus" id="myTextField" type="text" :autofocus="autofocus">
     <template v-if="!showForm">
       <p class="text-h5">
         {{ entity.name }}
@@ -46,7 +39,7 @@ watch(showForm, (cur) => {
     </template>
 
     <q-form v-else @submit.prevent="onUpdate" class="d-flex gap-2 align-start">
-      <q-input filled v-model="name" :rules="[val => !!val || 'Обязательно']"/>
+      <q-input filled v-model="name" :rules="[val => !!val || 'Обязательно']" autofocus />
 
       <q-btn round type="submit" icon="save" color="primary" size="sm" class="q-mt-md" />
       <q-btn round icon="close" color="red" size="sm" class="q-mt-md" @click="showForm = false" />
