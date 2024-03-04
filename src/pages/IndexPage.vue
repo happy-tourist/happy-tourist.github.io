@@ -11,11 +11,11 @@ const { entities, user, entity } = inject('app');
 
 const isDescription = computed(() => entity.value?.type === 'description');
 
-const keyInput = ref(0);
+const input = ref();
 
 const onClick = () => {
   setTimeout(() => {
-    keyInput.value += 1;
+    input.value.focus();
   }, 1000);
 };
 </script>
@@ -58,7 +58,7 @@ const onClick = () => {
         />
       </div>
     </div>
-    <div :key="keyInput" :autofocus="Boolean(keyInput)" contenteditable>лорем</div>
+    <div ref="input" contenteditable>лорем</div>
     <q-btn @click="onClick">+++</q-btn>
     <EditText v-if="isDescription" />
   </q-page>
