@@ -13,7 +13,7 @@ watch(translateInner, (cur) => {
 const input = ref();
 
 const onFocus = () => {
-  input.value.focus();
+  input.value.$el.click();
 };
 </script>
 
@@ -25,21 +25,9 @@ const onFocus = () => {
     {{ translateInner || line }}
 
     <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
-      <input
-        ref="input"
-        id="search-input"
-        type="search"
-        value=""
-        placeholder="search"
-        name="keywords"
-        spellcheck="false"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="off"
-      />
         <q-input
+          ref="input"
           autogrow
-          autofocus
           dense
           v-model="scope.value"
           :model-value="scope.value"
