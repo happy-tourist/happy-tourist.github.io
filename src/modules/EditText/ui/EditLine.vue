@@ -15,7 +15,9 @@ const span = ref();
 
 const onFocus = () => {
   input.value.focus();
-  span.value.click();
+  setTimeout(() => {
+    span.value.click();
+  }, 1000);
 };
 </script>
 
