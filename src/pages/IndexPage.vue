@@ -3,7 +3,9 @@ import { DeleteEntity } from 'src/modules/DeleteEntity';
 import { EditEntity } from 'src/modules/EditEntity';
 import {
   computed,
-  inject, ref, nextTick
+  inject,
+  ref,
+  nextTick,
 } from 'vue';
 import { EditText } from 'src/modules/EditText';
 
