@@ -25,5 +25,31 @@ const onFocus = () => {
   >
     <input ref="input" type="text">
     {{ translateInner || line }}
+
+    <q-popup-edit v-model="translateInner" v-slot="scope">
+        <q-input
+          autogrow
+          dense
+          v-model="scope.value"
+          :model-value="scope.value"
+        >
+          <template v-slot:after>
+            <q-btn
+              flat dense color="negative" icon="cancel"
+              @click.stop.prevent="scope.cancel"
+            />
+
+            <q-btn
+              flat dense color="positive" icon="check_circle"
+              @click.stop.prevent="scope.set"
+              :disable="scope.validate(scope.value) === false || scope.initialValue === scope.value"
+            />
+          </template>
+        </q-input>
+
+        <p class="q-mt-md">
+          {{ line }}
+        </p>
+      </q-popup-edit>
   </span>
 </template>
