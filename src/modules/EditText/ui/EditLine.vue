@@ -13,7 +13,9 @@ watch(translateInner, (cur) => {
 const input = ref();
 
 const onFocus = () => {
-  input.value.$el.click();
+  setTimeout(() => {
+    input.value.$el.click();
+  }, 1000);
 };
 </script>
 
@@ -31,11 +33,6 @@ const onFocus = () => {
           dense
           v-model="scope.value"
           :model-value="scope.value"
-          type="search"
-          spellcheck="false"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
         >
           <template v-slot:after>
             <q-btn
