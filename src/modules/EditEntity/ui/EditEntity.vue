@@ -23,12 +23,13 @@ const onUpdate = async () => {
 };
 
 const input = ref();
+const autofocus = ref(false);
 
 watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
     setTimeout(() => {
-      input.value.focus();
+      autofocus.value = true;
     }, 1000);
   }
 });
@@ -36,7 +37,7 @@ watch(showForm, (cur) => {
 
 <template>
   <div v-if="entity" class="d-flex gap-2">
-    <input ref="input" type="text">
+    <input :key="autofocus" ref="input" type="text" :autofocus="autofocus">
     <template v-if="!showForm">
       <p class="text-h5">
         {{ entity.name }}
