@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 
 const props = defineProps(['line', 'translate']);
 const emits = defineEmits(['addTranslate']);
@@ -11,6 +11,12 @@ watch(translateInner, (cur) => {
 });
 
 const input = ref();
+
+const onFocus = () => {
+  nextTick(() => {
+    input.value.focus();
+  });
+};
 </script>
 
 <template>
@@ -20,13 +26,11 @@ const input = ref();
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope" @show="input?.focus">
-      <div contenteditable autofocus>
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="onFocus">
+      <div ref="input" contenteditable>
         Lorem ipsum dolor sit amet, consectetur adipisicing elit. Cumque, quidem!
       </div>
         <q-input
-          ref="input"
-          autofocus
           autogrow
           dense
           v-model="scope.value"
