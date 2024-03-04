@@ -28,7 +28,7 @@ watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
     setTimeout(() => {
-      input.value.$el.querySelector('input').focus();
+      input.value.focus();
     }, 1000);
   }
 });
@@ -36,6 +36,7 @@ watch(showForm, (cur) => {
 
 <template>
   <div v-if="entity" class="d-flex gap-2">
+    <input ref="input" type="text">
     <template v-if="!showForm">
       <p class="text-h5">
         {{ entity.name }}
@@ -44,7 +45,7 @@ watch(showForm, (cur) => {
     </template>
 
     <q-form v-else @submit.prevent="onUpdate" class="d-flex gap-2 align-start">
-      <q-input ref="input" filled v-model="name" :rules="[val => !!val || 'Обязательно']"/>
+      <q-input filled v-model="name" :rules="[val => !!val || 'Обязательно']"/>
 
       <q-btn round type="submit" icon="save" color="primary" size="sm" class="q-mt-md" />
       <q-btn round icon="close" color="red" size="sm" class="q-mt-md" @click="showForm = false" />
