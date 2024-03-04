@@ -9,22 +9,24 @@ const translateInner = ref(props.translate || '');
 watch(translateInner, (cur) => {
   emits('addTranslate', cur);
 });
+
+const keyInput = ref(0);
 </script>
 
 <template>
   <span
-    class="text-body1 cursor-pointer q-ml-sm"
+    class="text-body1 cursor-pointer q-mr-sm"
     :class="translateInner ? '' : 'text-bold'"
   >
     {{ translateInner || line }}
 
-    <q-popup-edit v-model="translateInner" v-slot="scope">
+    <q-popup-edit v-model="translateInner" v-slot="scope" @show="keyInput++">
         <q-input
+          :key="keyInput"
           autofocus
           autogrow
           dense
           v-model="scope.value"
-          :model-value="scope.value"
           @keydown.enter="scope.set"
         >
           <template v-slot:after>
