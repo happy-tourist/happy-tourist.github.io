@@ -3,7 +3,7 @@ import { DeleteEntity } from 'src/modules/DeleteEntity';
 import { EditEntity } from 'src/modules/EditEntity';
 import {
   computed,
-  inject, ref,
+  inject, ref, nextTick
 } from 'vue';
 import { EditText } from 'src/modules/EditText';
 
@@ -14,9 +14,9 @@ const isDescription = computed(() => entity.value?.type === 'description');
 const input = ref();
 
 const onClick = () => {
-  setTimeout(() => {
+  nextTick(() => {
     input.value.focus();
-  }, 1000);
+  });
 };
 </script>
 
