@@ -3,13 +3,15 @@ import { DeleteEntity } from 'src/modules/DeleteEntity';
 import { EditEntity } from 'src/modules/EditEntity';
 import {
   computed,
-  inject,
+  inject, ref,
 } from 'vue';
 import { EditText } from 'src/modules/EditText';
 
 const { entities, user, entity } = inject('app');
 
 const isDescription = computed(() => entity.value?.type === 'description');
+
+const keyInput = ref(0);
 </script>
 
 <template>
@@ -50,7 +52,8 @@ const isDescription = computed(() => entity.value?.type === 'description');
         />
       </div>
     </div>
-
+    <q-input :key="keyInput" :autofocus="Boolean(keyInput)" />
+    <q-btn @click="keyInput++">+++</q-btn>
     <EditText v-if="isDescription" />
   </q-page>
 </template>
