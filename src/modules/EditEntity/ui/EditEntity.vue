@@ -28,8 +28,8 @@ watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
     setTimeout(() => {
-      input.value.focus();
-    });
+      input.value.$el.querySelector('input').focus();
+    }, 1000);
   }
 });
 </script>
