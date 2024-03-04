@@ -58,7 +58,7 @@ const onClick = () => {
         />
       </div>
     </div>
-    <q-input :key="keyInput" :autofocus="Boolean(keyInput)" />
+    <div :key="keyInput" :autofocus="Boolean(keyInput)">лорем</div>
     <q-btn @click="onClick">+++</q-btn>
     <EditText v-if="isDescription" />
   </q-page>
