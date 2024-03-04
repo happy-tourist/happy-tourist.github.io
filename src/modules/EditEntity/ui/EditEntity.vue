@@ -28,7 +28,7 @@ watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
     setTimeout(() => {
-      input.value.$el.click();
+      input.value.focus();
     });
   }
 });
