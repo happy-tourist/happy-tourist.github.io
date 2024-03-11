@@ -4,22 +4,12 @@ import { EditEntity } from 'src/modules/EditEntity';
 import {
   computed,
   inject,
-  ref,
-  nextTick,
 } from 'vue';
 import { EditText } from 'src/modules/EditText';
 
 const { entities, user, entity } = inject('app');
 
 const isDescription = computed(() => entity.value?.type === 'description');
-
-const input = ref();
-
-const onClick = () => {
-  nextTick(() => {
-    input.value.focus();
-  });
-};
 </script>
 
 <template>
@@ -60,8 +50,7 @@ const onClick = () => {
         />
       </div>
     </div>
-    <div ref="input" contenteditable>лорем</div>
-    <q-btn @click="onClick">+++</q-btn>
+
     <EditText v-if="isDescription" />
   </q-page>
 </template>
