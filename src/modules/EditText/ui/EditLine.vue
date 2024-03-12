@@ -92,7 +92,7 @@ const onOpen = () => {
 .edit-line {
   &__form{
     position: absolute;
-    max-width: 95vw;
+    max-width: 90vw;
     width: max-content;
     z-index: 999;
     left: 0;
