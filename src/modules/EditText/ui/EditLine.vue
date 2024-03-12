@@ -45,10 +45,10 @@ const onOpen = () => {
 <template>
   <span
     class="text-body1 cursor-pointer q-mr-sm relative-position"
-    :class="translateInner ? '' : 'text-bold'"
+    :class="translate ? '' : 'text-bold'"
   >
     <span @click="onOpen">
-      {{ translateInner || line }}
+      {{ translate || line }}
     </span>
 
     <q-card
