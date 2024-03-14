@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { nextTick, reactive, ref } from 'vue';
 import { onClickOutside } from '@vueuse/core';
 
 const props = defineProps(['line', 'translate']);
@@ -30,8 +30,13 @@ const onCancel = () => {
   closeForm();
 };
 
+const field = ref();
+
 const onOpen = () => {
   showForm.value = true;
+  nextTick(() => {
+    field.value.focus();
+  });
   setTimeout(() => {
     const rect = form.value.$el.getBoundingClientRect();
     margins.left = Math.min(window.innerWidth - rect.x - rect.width - 36, 0);
@@ -61,6 +66,7 @@ const onOpen = () => {
       }"
     >
         <q-input
+          ref="field"
           autofocus
           autogrow
           dense
