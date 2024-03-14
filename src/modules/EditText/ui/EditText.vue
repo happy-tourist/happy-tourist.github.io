@@ -4,10 +4,12 @@ import {
   doc,
   updateDoc,
 } from 'firebase/firestore';
-import { inject, ref } from 'vue';
+import { inject, nextTick, ref } from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
+import { ExampleText } from 'src/modules/ExampleText';
+import { useScroll } from '@vueuse/core';
 
 const db = useFirestore();
 
@@ -30,11 +32,24 @@ const addTranslate = async (lid, translate) => {
 };
 
 const showPanes = ref(false);
+const pane1 = ref();
+const pane2 = ref();
+
+const togglePane = () => {
+  showPanes.value = !showPanes.value;
+
+  if (showPanes.value) {
+    nextTick(() => {
+      const { y } = useScroll(pane2.value.$el, { behavior: 'smooth' });
+      y.value = pane1.value.$el.scrollTop;
+    });
+  }
+};
 </script>
 
 <template>
   <splitpanes v-if="text" horizontal class="default-theme" style="height: calc(100dvh - 175px)">
-    <pane class="overflow-auto bg-white">
+    <pane ref="pane1" class="overflow-auto bg-white">
       <q-btn
         round
         color="secondary"
@@ -42,7 +57,7 @@ const showPanes = ref(false);
         size="sm"
         class="absolute"
         style="right: 30px;"
-        @click="showPanes = !showPanes"
+        @click="togglePane"
       />
 
       <p
@@ -59,20 +74,8 @@ const showPanes = ref(false);
         />
       </p>
     </pane>
-    <pane v-if="showPanes" class="overflow-auto bg-white">
-      <p
-        v-for="(p, indexP) in text.originalText"
-        :key="indexP"
-        class="q-mb-md"
-      >
-        <EditLine
-          v-for="(line, indexLine) in p"
-          :key="indexLine"
-          :line="line"
-          :translate="text.translates && text.translates[`${indexP}${indexLine}`]"
-          @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
-        />
-      </p>
+    <pane ref="pane2" v-if="showPanes" class="overflow-auto bg-white">
+      <ExampleText />
     </pane>
   </splitpanes>
 </template>

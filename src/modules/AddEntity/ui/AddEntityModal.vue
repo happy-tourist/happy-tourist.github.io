@@ -2,6 +2,7 @@
 import { computed, inject, ref } from 'vue';
 import { addDoc, collection } from 'firebase/firestore';
 import { useFirestore } from 'vuefire';
+import { AddFile, useAddFile } from 'src/modules/AddFile';
 
 const props = defineProps(['modelValue']);
 const emits = defineEmits(['update:modelValue']);
@@ -26,47 +27,7 @@ const isDescription = computed(() => typeEntity.value?.value === 'description');
 
 const db = useFirestore();
 
-const readFile = (id) => {
-  increaseCounterLoadings();
-  const fr = new FileReader();
-  fr.onload = async () => {
-    const prepareResult = fr.result.replace(/(<([^>]+)>)|‘|'|"/ig, '');
-    const paragraphs = prepareResult.replace(/(\r)/gm, '').split('\n').filter(Boolean);
-    // eslint-disable-next-line no-restricted-globals
-    const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
-    const paragraphsByLines = [];
-
-    paragraphsFiltered.forEach((p) => {
-      paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));
-    });
-
-    const paragraphsByLinesObj = {};
-
-    paragraphsByLines.forEach((parent, indexParent) => {
-      parent.forEach((child, indexChild) => {
-        if (paragraphsByLinesObj[indexParent]) {
-          paragraphsByLinesObj[indexParent] = {
-            ...paragraphsByLinesObj[indexParent],
-            [indexChild]: child,
-          };
-        } else {
-          paragraphsByLinesObj[indexParent] = {
-            [indexChild]: child,
-          };
-        }
-      });
-    });
-
-    await addDoc(collection(db, 'texts'), {
-      originalText: paragraphsByLinesObj,
-      eid: id,
-    }).finally(() => {
-      decreaseCounterLoadings();
-    });
-  };
-
-  fr.readAsText(file.value);
-};
+const { readFile } = useAddFile();
 
 const onPush = async () => {
   increaseCounterLoadings();
@@ -86,14 +47,12 @@ const onPush = async () => {
   });
 
   if (isDescription.value) {
-    readFile(newEntity.id);
-  }
-};
-
-const changeFile = () => {
-  if (!/\.(txt|srt)$/i.test(file.value.name)) {
-    file.value = null;
-    alert('Не подходящий формат файла!');
+    readFile(file.value, async (paragraphsByLinesObj) => {
+      await addDoc(collection(db, 'texts'), {
+        originalText: paragraphsByLinesObj,
+        eid: newEntity.id,
+      });
+    });
   }
 };
 
@@ -136,13 +95,9 @@ const options = [
           label="Название"
         />
 
-        <q-file
+        <AddFile
           v-if="isDescription"
-          filled
           v-model="file"
-          :rules="[val => !!val || 'Обязательно']"
-          label="Файл *.(srt|txt)"
-          @update:model-value="changeFile"
         />
 
         <q-btn type="submit" label="Добавить" color="primary" />

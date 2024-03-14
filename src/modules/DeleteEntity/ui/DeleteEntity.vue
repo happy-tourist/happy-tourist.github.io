@@ -7,9 +7,12 @@ const show = ref(false);
 
 <template>
   <q-btn
+    round
     color="red"
     icon="delete"
-    label="Удалить"
+    size="sm"
+    class="absolute"
+    style="right: 30px;"
     v-bind="$attrs"
     @click="show = true"
   >
