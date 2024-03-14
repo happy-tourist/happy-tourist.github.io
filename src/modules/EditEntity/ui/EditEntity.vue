@@ -22,9 +22,12 @@ const onUpdate = async () => {
   });
 };
 
+const textField = ref();
+
 watch(showForm, (cur) => {
   if (cur) {
     name.value = entity.value.name;
+    textField.value.focus();
   }
 });
 </script>
@@ -39,7 +42,9 @@ watch(showForm, (cur) => {
     </template>
 
     <q-form v-else @submit.prevent="onUpdate" class="d-flex gap-2 align-start">
-      <q-input filled v-model="name" :rules="[val => !!val || 'Обязательно']" autofocus />
+      <q-input
+        ref="textField"
+        filled v-model="name" :rules="[val => !!val || 'Обязательно']" autofocus />
 
       <q-btn round type="submit" icon="save" color="primary" size="sm" class="q-mt-md" />
       <q-btn round icon="close" color="red" size="sm" class="q-mt-md" @click="showForm = false" />
