@@ -9,7 +9,7 @@ import {
   inject,
   nextTick,
   ref,
-  computed, provide,
+  provide,
 } from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
 import { Splitpanes, Pane } from 'splitpanes';
@@ -25,8 +25,7 @@ const {
   entity,
 } = inject('app');
 
-const document = useDocument(doc(collection(db, 'texts'), entity.value.tid));
-const text = computed(() => document?.data.value && document?.data.value[0]);
+const text = useDocument(doc(collection(db, 'texts'), entity.value.tid));
 
 provide('text', text);
 
