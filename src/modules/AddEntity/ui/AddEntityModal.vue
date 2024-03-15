@@ -53,12 +53,10 @@ const onPush = async () => {
 
   if (isDescription.value) {
     readFile(file.value, async (paragraphsByLinesObj) => {
-      const newDoc = await addDoc(collection(db, 'texts'), {
-        originalText: paragraphsByLinesObj,
-        eid: newEntity.id,
-      });
       await updateDoc(doc(db, 'entities', newEntity.id), {
-        tid: newDoc.id,
+        text: {
+          originalText: paragraphsByLinesObj,
+        },
       });
     });
   }

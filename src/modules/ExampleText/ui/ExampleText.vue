@@ -9,16 +9,18 @@ const file = ref(null);
 const {
   increaseCounterLoadings,
   decreaseCounterLoadings,
+  entity,
 } = inject('app');
-
-const text = inject('text');
 
 const db = useFirestore();
 const { readFile } = useAddFile();
 const onSubmit = () => {
   readFile(file.value, async (paragraphsByLinesObj) => {
-    await updateDoc(doc(db, 'texts', text.value.id), {
-      exampleText: paragraphsByLinesObj,
+    await updateDoc(doc(db, 'entities', entity.value.id), {
+      text: {
+        ...entity.value.text,
+        exampleText: paragraphsByLinesObj,
+      },
     });
     file.value = null;
   });
@@ -26,8 +28,12 @@ const onSubmit = () => {
 
 const onDelete = async () => {
   increaseCounterLoadings();
-  await updateDoc(doc(db, 'texts', text.value.id), {
-    exampleText: '',
+
+  await updateDoc(doc(db, 'entities', entity.value.id), {
+    text: {
+      ...entity.value.text,
+      exampleText: '',
+    },
   }).finally(() => {
     decreaseCounterLoadings();
   });
@@ -36,7 +42,7 @@ const onDelete = async () => {
 
 <template>
   <q-form
-    v-if="!text.exampleText"
+    v-if="!entity.text.exampleText"
     @submit.prevent="onSubmit" class="d-flex flex-column align-start">
     <AddFile
       v-model="file"
@@ -57,7 +63,7 @@ const onDelete = async () => {
     />
 
     <p
-      v-for="(p, indexP) in text.exampleText"
+      v-for="(p, indexP) in entity.text.exampleText"
       :key="indexP"
       class="q-mb-md"
     >

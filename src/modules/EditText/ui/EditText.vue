@@ -1,64 +1,89 @@
 <script setup>
-import { useFirestore, useDocument } from 'vuefire';
+import { useFirestore } from 'vuefire';
 import {
   doc,
-  // updateDoc,
-  collection,
+  updateDoc,
 } from 'firebase/firestore';
 import {
   inject,
-  // nextTick,
-  // ref,
-  provide,
+  nextTick,
+  ref,
 } from 'vue';
-// import EditLine from 'src/modules/EditText/ui/EditLine.vue';
-// import { Splitpanes, Pane } from 'splitpanes';
+import EditLine from 'src/modules/EditText/ui/EditLine.vue';
+import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
-// import { ExampleText } from 'src/modules/ExampleText';
-// import { useScroll } from '@vueuse/core';
+import { ExampleText } from 'src/modules/ExampleText';
+import { useScroll } from '@vueuse/core';
 
 const db = useFirestore();
 
 const {
-  // increaseCounterLoadings,
-  // decreaseCounterLoadings,
+  increaseCounterLoadings,
+  decreaseCounterLoadings,
   entity,
 } = inject('app');
 
-const text = useDocument(doc(collection(db, 'texts'), entity.value.tid));
+const addTranslate = async (lid, translate) => {
+  increaseCounterLoadings();
+  const translates = Object.assign(entity.value.text.translates || {}, {
+    [lid]: translate,
+  });
+  await updateDoc(doc(db, 'entities', entity.value.id), {
+    text: {
+      ...entity.value.text,
+      translates,
+    },
+  }).finally(() => {
+    decreaseCounterLoadings();
+  });
+};
 
-provide('text', text);
+const showPanes = ref(false);
+const pane1 = ref();
+const pane2 = ref();
 
-// const addTranslate = async (lid, translate) => {
-//   increaseCounterLoadings();
-//   const translates = Object.assign(text.value?.translates || {}, {
-//     [lid]: translate,
-//   });
-//   await updateDoc(doc(db, 'texts', text.value.id), {
-//     translates,
-//   }).finally(() => {
-//     decreaseCounterLoadings();
-//   });
-// };
+const togglePane = () => {
+  showPanes.value = !showPanes.value;
 
-// const showPanes = ref(false);
-// const pane1 = ref();
-// const pane2 = ref();
-
-// const togglePane = () => {
-//   showPanes.value = !showPanes.value;
-//
-//   if (showPanes.value) {
-//     nextTick(() => {
-//       const { y } = useScroll(pane2.value.$el, { behavior: 'smooth' });
-//       y.value = pane1.value.$el.scrollTop;
-//     });
-//   }
-// };
+  if (showPanes.value) {
+    nextTick(() => {
+      const { y } = useScroll(pane2.value.$el, { behavior: 'smooth' });
+      y.value = pane1.value.$el.scrollTop;
+    });
+  }
+};
 </script>
 
 <template>
-  <div>
-    {{ text }}
-  </div>
+  <splitpanes
+    v-if="entity.text" horizontal class="default-theme" style="height: calc(100dvh - 175px)">
+    <pane ref="pane1" class="overflow-auto bg-white">
+      <q-btn
+        round
+        color="secondary"
+        :icon="showPanes ? 'visibility_off' : 'visibility'"
+        size="sm"
+        class="absolute"
+        style="right: 30px;"
+        @click="togglePane"
+      />
+
+      <p
+        v-for="(p, indexP) in entity.text.originalText"
+        :key="indexP"
+        class="q-mb-md"
+      >
+        <EditLine
+          v-for="(line, indexLine) in p"
+          :key="indexLine"
+          :line="line"
+          :translate="entity.text.translates && entity.text.translates[`${indexP}${indexLine}`]"
+          @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+        />
+      </p>
+    </pane>
+    <pane ref="pane2" v-if="showPanes" class="overflow-auto bg-white">
+      <ExampleText />
+    </pane>
+  </splitpanes>
 </template>
