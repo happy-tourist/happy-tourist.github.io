@@ -3,9 +3,7 @@ import { useFirestore, useDocument } from 'vuefire';
 import {
   doc,
   updateDoc,
-  where,
   collection,
-  query,
 } from 'firebase/firestore';
 import {
   inject,
@@ -27,7 +25,7 @@ const {
   entity,
 } = inject('app');
 
-const document = useDocument(() => (entity.value ? query(collection(db, 'texts'), where('eid', '==', entity.value?.id)) : null));
+const document = useDocument(doc(collection(db, 'texts'), entity.value.tid));
 const text = computed(() => document?.data.value && document?.data.value[0]);
 
 provide('text', text);
