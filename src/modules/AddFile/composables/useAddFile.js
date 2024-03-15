@@ -11,7 +11,9 @@ const useAddFile = () => {
     const fr = new FileReader();
     fr.onload = async () => {
       const prepareResult = fr.result.replace(/(<([^>]+)>)|‘|'|"/ig, '');
-      await cb(prepareResult).finally(() => {
+      const encoder = new TextEncoder();
+      const view = JSON.stringify(Array.from(encoder.encode(prepareResult)));
+      await cb(view).finally(() => {
         decreaseCounterLoadings();
       });
     };

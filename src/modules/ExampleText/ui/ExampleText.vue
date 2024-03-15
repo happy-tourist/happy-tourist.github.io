@@ -40,7 +40,9 @@ const onDelete = async () => {
 };
 
 const exampleText = computed(() => {
-  const paragraphs = entity.value.text.exampleText.replace(/(\r)/gm, '').split('\n').filter(Boolean);
+  const decoder = new TextDecoder();
+  const arr = new Uint8Array(JSON.parse(entity.value.text.originalText));
+  const paragraphs = decoder.decode(arr).replace(/(\r)/gm, '').split('\n').filter(Boolean);
   // eslint-disable-next-line no-restricted-globals
   const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
   const paragraphsByLines = [];
