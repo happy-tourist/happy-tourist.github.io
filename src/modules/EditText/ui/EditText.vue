@@ -8,6 +8,7 @@ import {
   inject,
   nextTick,
   ref,
+  computed,
 } from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
 import { Splitpanes, Pane } from 'splitpanes';
@@ -52,6 +53,36 @@ const togglePane = () => {
     });
   }
 };
+
+const originalText = computed(() => {
+  const paragraphs = entity.value.text.originalText.replace(/(\r)/gm, '').split('\n').filter(Boolean);
+  // eslint-disable-next-line no-restricted-globals
+  const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
+  const paragraphsByLines = [];
+
+  paragraphsFiltered.forEach((p) => {
+    paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));
+  });
+
+  const paragraphsByLinesObj = {};
+
+  paragraphsByLines.forEach((parent, indexParent) => {
+    parent.forEach((child, indexChild) => {
+      if (paragraphsByLinesObj[indexParent]) {
+        paragraphsByLinesObj[indexParent] = {
+          ...paragraphsByLinesObj[indexParent],
+          [indexChild]: child,
+        };
+      } else {
+        paragraphsByLinesObj[indexParent] = {
+          [indexChild]: child,
+        };
+      }
+    });
+  });
+
+  return paragraphsByLinesObj;
+});
 </script>
 
 <template>
@@ -69,7 +100,7 @@ const togglePane = () => {
       />
 
       <p
-        v-for="(p, indexP) in entity.text.originalText"
+        v-for="(p, indexP) in originalText"
         :key="indexP"
         class="q-mb-md"
       >

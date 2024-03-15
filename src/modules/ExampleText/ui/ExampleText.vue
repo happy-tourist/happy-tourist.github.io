@@ -1,6 +1,6 @@
 <script setup>
 import { AddFile, useAddFile } from 'src/modules/AddFile';
-import { inject, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useFirestore } from 'vuefire';
 
@@ -15,11 +15,11 @@ const {
 const db = useFirestore();
 const { readFile } = useAddFile();
 const onSubmit = () => {
-  readFile(file.value, async (paragraphsByLinesObj) => {
+  readFile(file.value, async (prepareResult) => {
     await updateDoc(doc(db, 'entities', entity.value.id), {
       text: {
         ...entity.value.text,
-        exampleText: paragraphsByLinesObj,
+        exampleText: prepareResult,
       },
     });
     file.value = null;
@@ -38,6 +38,36 @@ const onDelete = async () => {
     decreaseCounterLoadings();
   });
 };
+
+const exampleText = computed(() => {
+  const paragraphs = entity.value.text.exampleText.replace(/(\r)/gm, '').split('\n').filter(Boolean);
+  // eslint-disable-next-line no-restricted-globals
+  const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
+  const paragraphsByLines = [];
+
+  paragraphsFiltered.forEach((p) => {
+    paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));
+  });
+
+  const paragraphsByLinesObj = {};
+
+  paragraphsByLines.forEach((parent, indexParent) => {
+    parent.forEach((child, indexChild) => {
+      if (paragraphsByLinesObj[indexParent]) {
+        paragraphsByLinesObj[indexParent] = {
+          ...paragraphsByLinesObj[indexParent],
+          [indexChild]: child,
+        };
+      } else {
+        paragraphsByLinesObj[indexParent] = {
+          [indexChild]: child,
+        };
+      }
+    });
+  });
+
+  return paragraphsByLinesObj;
+});
 </script>
 
 <template>
@@ -63,7 +93,7 @@ const onDelete = async () => {
     />
 
     <p
-      v-for="(p, indexP) in entity.text.exampleText"
+      v-for="(p, indexP) in exampleText"
       :key="indexP"
       class="q-mb-md"
     >

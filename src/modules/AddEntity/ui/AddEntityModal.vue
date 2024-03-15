@@ -52,10 +52,10 @@ const onPush = async () => {
   });
 
   if (isDescription.value) {
-    readFile(file.value, async (paragraphsByLinesObj) => {
+    readFile(file.value, async (prepareResult) => {
       await updateDoc(doc(db, 'entities', newEntity.id), {
         text: {
-          originalText: paragraphsByLinesObj,
+          originalText: prepareResult,
         },
       });
     });
