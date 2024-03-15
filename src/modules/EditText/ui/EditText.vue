@@ -1,10 +1,18 @@
 <script setup>
-import { useFirestore } from 'vuefire';
+import { useFirestore, useDocument } from 'vuefire';
 import {
   doc,
   updateDoc,
+  where,
+  collection,
+  query,
 } from 'firebase/firestore';
-import { inject, nextTick, ref } from 'vue';
+import {
+  inject,
+  nextTick,
+  ref,
+  computed, provide,
+} from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
@@ -16,8 +24,13 @@ const db = useFirestore();
 const {
   increaseCounterLoadings,
   decreaseCounterLoadings,
-  text,
+  entity,
 } = inject('app');
+
+const document = useDocument(() => (entity.value ? query(collection(db, 'texts'), where('eid', '==', entity.value?.id)) : null));
+const text = computed(() => document?.data.value && document?.data.value[0]);
+
+provide('text', text);
 
 const addTranslate = async (lid, translate) => {
   increaseCounterLoadings();

@@ -9,8 +9,9 @@ const file = ref(null);
 const {
   increaseCounterLoadings,
   decreaseCounterLoadings,
-  text,
 } = inject('app');
+
+const text = inject('text');
 
 const db = useFirestore();
 const { readFile } = useAddFile();

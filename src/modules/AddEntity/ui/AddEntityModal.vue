@@ -1,6 +1,11 @@
 <script setup>
 import { computed, inject, ref } from 'vue';
-import { addDoc, collection } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  updateDoc,
+} from 'firebase/firestore';
 import { useFirestore } from 'vuefire';
 import { AddFile, useAddFile } from 'src/modules/AddFile';
 
@@ -48,9 +53,12 @@ const onPush = async () => {
 
   if (isDescription.value) {
     readFile(file.value, async (paragraphsByLinesObj) => {
-      await addDoc(collection(db, 'texts'), {
+      const newDoc = await addDoc(collection(db, 'texts'), {
         originalText: paragraphsByLinesObj,
         eid: newEntity.id,
+      });
+      await updateDoc(doc(db, 'entities', newEntity.id), {
+        tid: newDoc.id,
       });
     });
   }

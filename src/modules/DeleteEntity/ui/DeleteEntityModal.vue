@@ -19,7 +19,6 @@ const {
   increaseCounterLoadings,
   decreaseCounterLoadings,
   entity,
-  text,
 } = inject('app');
 
 const db = useFirestore();
@@ -33,7 +32,7 @@ const onRemove = async () => {
 
   if (isDescription.value) {
     increaseCounterLoadings();
-    await deleteDoc(doc(db, 'texts', text.value.id)).finally(() => {
+    await deleteDoc(doc(db, 'texts', entity.value.tid)).finally(() => {
       decreaseCounterLoadings();
     });
   }
