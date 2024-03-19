@@ -1,8 +1,9 @@
 <script setup>
-import { AddFile, useAddFile } from 'src/modules/AddFile';
+import { AddFile } from 'src/modules/AddFile';
 import { computed, inject, ref } from 'vue';
 import { doc, updateDoc } from 'firebase/firestore';
-import { useFirestore } from 'vuefire';
+import { useFirebaseStorage, useFirestore } from 'vuefire';
+import { ref as storageRef, getBytes, uploadBytes } from 'firebase/storage';
 
 const file = ref(null);
 
@@ -12,18 +13,36 @@ const {
   entity,
 } = inject('app');
 
+const storage = useFirebaseStorage();
+const mountainFileRef = storageRef(storage, entity.value.text.exampleText);
+const fileArr = ref();
+
+const load = async () => {
+  increaseCounterLoadings();
+  fileArr.value = await getBytes(mountainFileRef).finally(() => {
+    decreaseCounterLoadings();
+  });
+};
+
+if (entity.value.text.exampleText) {
+  load();
+}
+
 const db = useFirestore();
-const { readFile } = useAddFile();
-const onSubmit = () => {
-  readFile(file.value, async (prepareResult) => {
-    await updateDoc(doc(db, 'entities', entity.value.id), {
+
+const onSubmit = async () => {
+  await Promise.all([
+    updateDoc(doc(db, 'entities', entity.value.id), {
       text: {
         ...entity.value.text,
-        exampleText: prepareResult,
+        exampleText: `texts/examples/${entity.value.id}.txt`,
       },
-    });
-    file.value = null;
-  });
+    }),
+    uploadBytes(storageRef(storage, `texts/examples/${entity.value.id}.txt`), file.value),
+  ]);
+
+  file.value = null;
+  load();
 };
 
 const onDelete = async () => {
@@ -40,9 +59,12 @@ const onDelete = async () => {
 };
 
 const exampleText = computed(() => {
+  if (!fileArr.value) return;
+
   const decoder = new TextDecoder();
-  const arr = new Uint8Array(JSON.parse(entity.value.text.exampleText));
-  const paragraphs = decoder.decode(arr).replace(/(\r)/gm, '').split('\n').filter(Boolean);
+  const paragraphs = decoder.decode(fileArr.value).replace(/(<([^>]+)>)|‘|'|"/ig, '')
+    .replace(/(\r)/gm, '').split('\n')
+    .filter(Boolean);
   // eslint-disable-next-line no-restricted-globals
   const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
   const paragraphsByLines = [];
@@ -68,6 +90,7 @@ const exampleText = computed(() => {
     });
   });
 
+  // eslint-disable-next-line consistent-return
   return paragraphsByLinesObj;
 });
 </script>

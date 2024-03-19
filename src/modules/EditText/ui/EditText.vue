@@ -1,5 +1,5 @@
 <script setup>
-import { useFirestore } from 'vuefire';
+import { useFirestore, useFirebaseStorage } from 'vuefire';
 import {
   doc,
   updateDoc,
@@ -15,6 +15,7 @@ import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { ExampleText } from 'src/modules/ExampleText';
 import { useScroll } from '@vueuse/core';
+import { ref as storageRef, getBytes } from 'firebase/storage';
 
 const db = useFirestore();
 
@@ -23,6 +24,19 @@ const {
   decreaseCounterLoadings,
   entity,
 } = inject('app');
+
+const storage = useFirebaseStorage();
+const mountainFileRef = storageRef(storage, entity.value.text.originalText);
+const fileArr = ref();
+
+const load = async () => {
+  increaseCounterLoadings();
+  fileArr.value = await getBytes(mountainFileRef).finally(() => {
+    decreaseCounterLoadings();
+  });
+};
+
+load();
 
 const addTranslate = async (lid, translate) => {
   increaseCounterLoadings();
@@ -55,9 +69,12 @@ const togglePane = () => {
 };
 
 const originalText = computed(() => {
+  if (!fileArr.value) return;
+
   const decoder = new TextDecoder();
-  const arr = new Uint8Array(JSON.parse(entity.value.text.originalText));
-  const paragraphs = decoder.decode(arr).replace(/(\r)/gm, '').split('\n').filter(Boolean);
+  const paragraphs = decoder.decode(fileArr.value).replace(/(<([^>]+)>)|‘|'|"/ig, '')
+    .replace(/(\r)/gm, '').split('\n')
+    .filter(Boolean);
   // eslint-disable-next-line no-restricted-globals
   const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
   const paragraphsByLines = [];
@@ -83,13 +100,15 @@ const originalText = computed(() => {
     });
   });
 
+  // eslint-disable-next-line consistent-return
   return paragraphsByLinesObj;
 });
 </script>
 
 <template>
   <splitpanes
-    v-if="entity.text" horizontal class="default-theme" style="height: calc(100dvh - 175px)">
+    v-if="entity.text"
+    horizontal class="default-theme" style="height: calc(100dvh - 175px)">
     <pane ref="pane1" class="overflow-auto bg-white">
       <q-btn
         round

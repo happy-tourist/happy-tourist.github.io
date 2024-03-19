@@ -7,7 +7,10 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { useFirestore } from 'vuefire';
-import { AddFile, useAddFile } from 'src/modules/AddFile';
+import { AddFile } from 'src/modules/AddFile';
+import { getStorage, ref as storageRef, uploadBytes } from 'firebase/storage';
+
+const storage = getStorage();
 
 const props = defineProps(['modelValue']);
 const emits = defineEmits(['update:modelValue']);
@@ -32,8 +35,6 @@ const isDescription = computed(() => typeEntity.value?.value === 'description');
 
 const db = useFirestore();
 
-const { readFile } = useAddFile();
-
 const onPush = async () => {
   increaseCounterLoadings();
   const parentFolders = [];
@@ -52,13 +53,14 @@ const onPush = async () => {
   });
 
   if (isDescription.value) {
-    readFile(file.value, async (prepareResult) => {
-      await updateDoc(doc(db, 'entities', newEntity.id), {
+    await Promise.all([
+      updateDoc(doc(db, 'entities', newEntity.id), {
         text: {
-          originalText: prepareResult,
+          originalText: `texts/originals/${newEntity.id}.txt`,
         },
-      });
-    });
+      }),
+      uploadBytes(storageRef(storage, `texts/originals/${newEntity.id}.txt`), file.value),
+    ]);
   }
 };
 
