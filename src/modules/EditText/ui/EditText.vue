@@ -139,7 +139,7 @@ watch(scrollTop, (cur) => {
 <template>
   <splitpanes
     v-if="entity.text"
-    horizontal class="default-theme d-flex" style="height: 1px;flex-grow: 1;">
+    horizontal class="default-theme" style="height: 1px;flex-grow: 1;">
     <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
       <q-btn
         round

@@ -13,44 +13,46 @@ const isDescription = computed(() => entity.value?.type === 'description');
 </script>
 
 <template>
-  <q-page v-if="user" class="d-flex flex-column">
-    <div class="q-pa-md d-flex justify-between">
-      <q-breadcrumbs>
-        <q-breadcrumbs-el
-          :to="{ name: 'index', params: { id: '' } }"
-          label="Главная"
-        />
-        <template v-if="entity?.parentFolders.length">
+  <q-page v-if="user">
+    <div class="d-flex flex-column" style="height: 100%;">
+      <div class="q-pa-md d-flex justify-between">
+        <q-breadcrumbs>
           <q-breadcrumbs-el
-            v-for="item in entity.parentFolders"
+            :to="{ name: 'index', params: { id: '' } }"
+            label="Главная"
+          />
+          <template v-if="entity?.parentFolders.length">
+            <q-breadcrumbs-el
+              v-for="item in entity.parentFolders"
+              :key="item.id"
+              :to="{ name: 'index', params: { id: item.id } }"
+              :label="item.name"
+            />
+          </template>
+
+          <q-breadcrumbs-el
+            v-if="entity"
+            :to="{ name: 'index', params: { id: entity.id } }"
+            :label="entity.name"
+          />
+        </q-breadcrumbs>
+
+        <DeleteEntity :class="entity ? '' : 'invisible'" :disabled="entities?.length" />
+      </div>
+      <div class="q-pa-md d-flex flex-column gap-3">
+        <EditEntity />
+        <div v-if="entities.length" class="d-flex flex-wrap gap-3 align-start">
+          <q-btn
+            v-for="item in entities"
             :key="item.id"
+            :icon="item.type"
             :to="{ name: 'index', params: { id: item.id } }"
             :label="item.name"
           />
-        </template>
-
-        <q-breadcrumbs-el
-          v-if="entity"
-          :to="{ name: 'index', params: { id: entity.id } }"
-          :label="entity.name"
-        />
-      </q-breadcrumbs>
-
-      <DeleteEntity :class="entity ? '' : 'invisible'" :disabled="entities?.length" />
-    </div>
-    <div class="q-pa-md d-flex flex-column gap-3">
-      <EditEntity />
-      <div v-if="entities.length" class="d-flex flex-wrap gap-3 align-start">
-        <q-btn
-          v-for="item in entities"
-          :key="item.id"
-          :icon="item.type"
-          :to="{ name: 'index', params: { id: item.id } }"
-          :label="item.name"
-        />
+        </div>
       </div>
-    </div>
 
-    <EditText v-if="isDescription" />
+      <EditText v-if="isDescription" />
+    </div>
   </q-page>
 </template>
