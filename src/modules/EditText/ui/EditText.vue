@@ -128,13 +128,8 @@ watch(scrollTop, (cur) => {
 
   const rect = useElementBounding(pane1.value.$el);
 
-  // console.log(cur, rect.y.value);
-
   const { y } = useScroll(pane1.value.$el, { behavior: 'smooth' });
 
-  console.log(cur - rect.y.value, y.value);
-
-  // const top = cur - rect.y.value - 16;
   y.value += cur - rect.y.value;
 
   scrollTop.value = 0;
@@ -144,7 +139,7 @@ watch(scrollTop, (cur) => {
 <template>
   <splitpanes
     v-if="entity.text"
-    horizontal class="default-theme" style="height: 1px;flex-grow: 1;">
+    horizontal class="default-theme d-flex" style="height: 1px;flex-grow: 1;">
     <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
       <q-btn
         round
