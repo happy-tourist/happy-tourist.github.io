@@ -41,9 +41,6 @@ const onOpen = () => {
     margins.left = Math.min(window.innerWidth - rect.x.value - rect.width.value - 36, 0);
     margins.top = Math.min(window.innerHeight - rect.y.value - rect.height.value - 20, 0);
 
-    const { y } = useWindowScroll();
-    y.value = 1000;
-
     setTimeout(() => {
       const rectNew = useElementBounding(form.value.$el);
       scrollTop.value = rectNew.y.value;
