@@ -53,6 +53,7 @@ const onPush = async () => {
   });
 
   if (isDescription.value) {
+    increaseCounterLoadings();
     await Promise.all([
       updateDoc(doc(db, 'entities', newEntity.id), {
         text: {
@@ -60,7 +61,9 @@ const onPush = async () => {
         },
       }),
       uploadBytes(storageRef(storage, `texts/originals/${newEntity.id}.txt`), file.value),
-    ]);
+    ]).finally(() => {
+      decreaseCounterLoadings();
+    });
   }
 };
 

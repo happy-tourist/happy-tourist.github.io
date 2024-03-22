@@ -1,9 +1,9 @@
 <script setup>
 import { reactive, ref } from 'vue';
-import { onClickOutside } from '@vueuse/core';
+import { onClickOutside, useElementBounding, useVModel } from '@vueuse/core';
 
-const props = defineProps(['line', 'translate']);
-const emits = defineEmits(['addTranslate']);
+const props = defineProps(['line', 'translate', 'modelValue']);
+const emits = defineEmits(['addTranslate', 'update:modelValue']);
 
 const translateInner = ref(props.translate || '');
 const showForm = ref(false);
@@ -30,12 +30,19 @@ const onCancel = () => {
   closeForm();
 };
 
+const scrollTop = useVModel(props, 'modelValue', emits);
+
 const onOpen = () => {
   showForm.value = true;
   setTimeout(() => {
-    const rect = form.value.$el.getBoundingClientRect();
-    margins.left = Math.min(window.innerWidth - rect.x - rect.width - 36, 0);
-    margins.top = Math.min(window.innerHeight - rect.y - rect.height - 20, 0);
+    const rect = useElementBounding(form.value.$el);
+    margins.left = Math.min(window.innerWidth - rect.x.value - rect.width.value - 36, 0);
+    margins.top = Math.min(window.innerHeight - rect.y.value - rect.height.value - 20, 0);
+
+    setTimeout(() => {
+      const rectNew = useElementBounding(form.value.$el);
+      scrollTop.value = rectNew.y.value;
+    });
 
     onClickOutside(form, closeForm);
   });

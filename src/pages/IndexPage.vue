@@ -13,8 +13,8 @@ const isDescription = computed(() => entity.value?.type === 'description');
 </script>
 
 <template>
-  <q-page v-if="user" class="q-pa-md">
-    <div class="d-flex justify-between">
+  <q-page v-if="user" class="d-flex flex-column">
+    <div class="q-pa-md d-flex justify-between">
       <q-breadcrumbs>
         <q-breadcrumbs-el
           :to="{ name: 'index', params: { id: '' } }"
@@ -38,9 +38,9 @@ const isDescription = computed(() => entity.value?.type === 'description');
 
       <DeleteEntity :class="entity ? '' : 'invisible'" :disabled="entities?.length" />
     </div>
-    <div class="d-flex flex-column gap-3">
+    <div class="q-pa-md d-flex flex-column gap-3">
       <EditEntity />
-      <div class="d-flex flex-wrap gap-3 align-start">
+      <div v-if="entities.length" class="d-flex flex-wrap gap-3 align-start">
         <q-btn
           v-for="item in entities"
           :key="item.id"

@@ -9,12 +9,13 @@ import {
   nextTick,
   ref,
   computed,
+  watch,
 } from 'vue';
 import EditLine from 'src/modules/EditText/ui/EditLine.vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { ExampleText } from 'src/modules/ExampleText';
-import { useScroll } from '@vueuse/core';
+import { useElementBounding, useScroll } from '@vueuse/core';
 import { ref as storageRef, getBytes } from 'firebase/storage';
 
 const db = useFirestore();
@@ -26,17 +27,30 @@ const {
 } = inject('app');
 
 const storage = useFirebaseStorage();
-const mountainFileRef = storageRef(storage, entity.value.text.originalText);
-const fileArr = ref();
+const originalFileRef = storageRef(storage, entity.value.text.originalText);
+const originalArr = ref();
+const exampleArr = ref();
 
-const load = async () => {
+const loadOriginal = async () => {
   increaseCounterLoadings();
-  fileArr.value = await getBytes(mountainFileRef).finally(() => {
+  originalArr.value = await getBytes(originalFileRef).finally(() => {
     decreaseCounterLoadings();
   });
 };
 
-load();
+loadOriginal();
+
+const loadExample = async () => {
+  const exampleFileRef = storageRef(storage, entity.value.text.exampleText);
+  increaseCounterLoadings();
+  exampleArr.value = await getBytes(exampleFileRef).finally(() => {
+    decreaseCounterLoadings();
+  });
+};
+
+if (entity.value.text.exampleText) {
+  loadExample();
+}
 
 const addTranslate = async (lid, translate) => {
   increaseCounterLoadings();
@@ -68,11 +82,11 @@ const togglePane = () => {
   }
 };
 
-const originalText = computed(() => {
-  if (!fileArr.value) return;
+const getText = (arr) => {
+  if (!arr) return;
 
   const decoder = new TextDecoder();
-  const paragraphs = decoder.decode(fileArr.value).replace(/(<([^>]+)>)|‘|'|"/ig, '')
+  const paragraphs = decoder.decode(arr).replace(/(<([^>]+)>)|‘|'|"/ig, '')
     .replace(/(\r)/gm, '').split('\n')
     .filter(Boolean);
   // eslint-disable-next-line no-restricted-globals
@@ -102,21 +116,43 @@ const originalText = computed(() => {
 
   // eslint-disable-next-line consistent-return
   return paragraphsByLinesObj;
+};
+
+const originalText = computed(() => getText(originalArr.value));
+const exampleText = computed(() => getText(exampleArr.value));
+
+const scrollTop = ref(0);
+
+watch(scrollTop, (cur) => {
+  if (!cur) return;
+
+  const rect = useElementBounding(pane1.value.$el);
+
+  // console.log(cur, rect.y.value);
+
+  const { y } = useScroll(pane1.value.$el, { behavior: 'smooth' });
+
+  console.log(cur - rect.y.value, y.value);
+
+  // const top = cur - rect.y.value - 16;
+  y.value += cur - rect.y.value;
+
+  scrollTop.value = 0;
 });
 </script>
 
 <template>
   <splitpanes
     v-if="entity.text"
-    horizontal class="default-theme" style="height: calc(100dvh - 175px)">
-    <pane ref="pane1" class="overflow-auto bg-white">
+    horizontal class="default-theme" style="height: 1px;flex-grow: 1;">
+    <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
       <q-btn
         round
         color="secondary"
         :icon="showPanes ? 'visibility_off' : 'visibility'"
         size="sm"
         class="absolute"
-        style="right: 30px;"
+        style="right: 30px;z-index: 9999;"
         @click="togglePane"
       />
 
@@ -127,6 +163,7 @@ const originalText = computed(() => {
       >
         <EditLine
           v-for="(line, indexLine) in p"
+          v-model="scrollTop"
           :key="indexLine"
           :line="line"
           :translate="entity.text.translates && entity.text.translates[`${indexP}${indexLine}`]"
@@ -134,8 +171,8 @@ const originalText = computed(() => {
         />
       </p>
     </pane>
-    <pane ref="pane2" v-if="showPanes" class="overflow-auto bg-white">
-      <ExampleText />
+    <pane ref="pane2" v-if="showPanes" class="q-pa-md overflow-auto bg-white">
+      <ExampleText :exampleText="exampleText" @load="loadExample" />
     </pane>
   </splitpanes>
 </template>

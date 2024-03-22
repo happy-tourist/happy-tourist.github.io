@@ -1,9 +1,19 @@
 <script setup>
 import { AddFile } from 'src/modules/AddFile';
-import { computed, inject, ref } from 'vue';
+import {
+  inject,
+  ref,
+} from 'vue';
 import { doc, updateDoc } from 'firebase/firestore';
 import { useFirebaseStorage, useFirestore } from 'vuefire';
-import { ref as storageRef, getBytes, uploadBytes } from 'firebase/storage';
+import {
+  ref as storageRef,
+  uploadBytes,
+  deleteObject,
+} from 'firebase/storage';
+
+defineProps(['exampleText']);
+const emits = defineEmits(['load']);
 
 const file = ref(null);
 
@@ -14,23 +24,11 @@ const {
 } = inject('app');
 
 const storage = useFirebaseStorage();
-const mountainFileRef = storageRef(storage, entity.value.text.exampleText);
-const fileArr = ref();
-
-const load = async () => {
-  increaseCounterLoadings();
-  fileArr.value = await getBytes(mountainFileRef).finally(() => {
-    decreaseCounterLoadings();
-  });
-};
-
-if (entity.value.text.exampleText) {
-  load();
-}
 
 const db = useFirestore();
 
 const onSubmit = async () => {
+  increaseCounterLoadings();
   await Promise.all([
     updateDoc(doc(db, 'entities', entity.value.id), {
       text: {
@@ -39,60 +37,36 @@ const onSubmit = async () => {
       },
     }),
     uploadBytes(storageRef(storage, `texts/examples/${entity.value.id}.txt`), file.value),
-  ]);
+  ]).finally(() => {
+    decreaseCounterLoadings();
+  });
 
   file.value = null;
-  load();
+
+  emits('load');
 };
 
 const onDelete = async () => {
   increaseCounterLoadings();
+  const exampleTextPath = entity.value.text.exampleText;
 
-  await updateDoc(doc(db, 'entities', entity.value.id), {
-    text: {
-      ...entity.value.text,
-      exampleText: '',
-    },
-  }).finally(() => {
+  const promises = [
+    updateDoc(doc(db, 'entities', entity.value.id), {
+      text: {
+        ...entity.value.text,
+        exampleText: '',
+      },
+    }),
+  ];
+
+  if (exampleTextPath) {
+    promises.push(deleteObject(storageRef(storage, exampleTextPath)));
+  }
+
+  await Promise.all(promises).finally(() => {
     decreaseCounterLoadings();
   });
 };
-
-const exampleText = computed(() => {
-  if (!fileArr.value) return;
-
-  const decoder = new TextDecoder();
-  const paragraphs = decoder.decode(fileArr.value).replace(/(<([^>]+)>)|‘|'|"/ig, '')
-    .replace(/(\r)/gm, '').split('\n')
-    .filter(Boolean);
-  // eslint-disable-next-line no-restricted-globals
-  const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
-  const paragraphsByLines = [];
-
-  paragraphsFiltered.forEach((p) => {
-    paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));
-  });
-
-  const paragraphsByLinesObj = {};
-
-  paragraphsByLines.forEach((parent, indexParent) => {
-    parent.forEach((child, indexChild) => {
-      if (paragraphsByLinesObj[indexParent]) {
-        paragraphsByLinesObj[indexParent] = {
-          ...paragraphsByLinesObj[indexParent],
-          [indexChild]: child,
-        };
-      } else {
-        paragraphsByLinesObj[indexParent] = {
-          [indexChild]: child,
-        };
-      }
-    });
-  });
-
-  // eslint-disable-next-line consistent-return
-  return paragraphsByLinesObj;
-});
 </script>
 
 <template>
