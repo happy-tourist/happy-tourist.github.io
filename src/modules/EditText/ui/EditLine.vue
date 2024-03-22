@@ -1,6 +1,8 @@
 <script setup>
 import { reactive, ref } from 'vue';
-import { onClickOutside, useElementBounding, useVModel } from '@vueuse/core';
+import {
+  onClickOutside, useElementBounding, useVModel, useWindowScroll,
+} from '@vueuse/core';
 
 const props = defineProps(['line', 'translate', 'modelValue']);
 const emits = defineEmits(['addTranslate', 'update:modelValue']);
@@ -38,6 +40,9 @@ const onOpen = () => {
     const rect = useElementBounding(form.value.$el);
     margins.left = Math.min(window.innerWidth - rect.x.value - rect.width.value - 36, 0);
     margins.top = Math.min(window.innerHeight - rect.y.value - rect.height.value - 20, 0);
+
+    const { y } = useWindowScroll();
+    y.value = 1000;
 
     setTimeout(() => {
       const rectNew = useElementBounding(form.value.$el);
