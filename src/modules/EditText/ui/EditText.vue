@@ -137,37 +137,39 @@ watch(scrollTop, (cur) => {
 </script>
 
 <template>
-  <splitpanes
-    v-if="entity.text"
-    horizontal class="default-theme" style="height: 1px;flex-grow: 1;">
-    <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
-      <q-btn
-        round
-        color="secondary"
-        :icon="showPanes ? 'visibility_off' : 'visibility'"
-        size="sm"
-        class="absolute"
-        style="right: 30px;z-index: 9999;"
-        @click="togglePane"
-      />
-
-      <p
-        v-for="(p, indexP) in originalText"
-        :key="indexP"
-        class="q-mb-md"
-      >
-        <EditLine
-          v-for="(line, indexLine) in p"
-          v-model="scrollTop"
-          :key="indexLine"
-          :line="line"
-          :translate="entity.text.translates && entity.text.translates[`${indexP}${indexLine}`]"
-          @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+  <div style="height: 1px;flex-grow: 1;">
+    <splitpanes
+      v-if="entity.text"
+      horizontal class="default-theme">
+      <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
+        <q-btn
+          round
+          color="secondary"
+          :icon="showPanes ? 'visibility_off' : 'visibility'"
+          size="sm"
+          class="absolute"
+          style="right: 30px;z-index: 9999;"
+          @click="togglePane"
         />
-      </p>
-    </pane>
-    <pane ref="pane2" v-if="showPanes" class="q-pa-md overflow-auto bg-white">
-      <ExampleText :exampleText="exampleText" @load="loadExample" />
-    </pane>
-  </splitpanes>
+
+        <p
+          v-for="(p, indexP) in originalText"
+          :key="indexP"
+          class="q-mb-md"
+        >
+          <EditLine
+            v-for="(line, indexLine) in p"
+            v-model="scrollTop"
+            :key="indexLine"
+            :line="line"
+            :translate="entity.text.translates && entity.text.translates[`${indexP}${indexLine}`]"
+            @add-translate="addTranslate(`${indexP}${indexLine}`, $event)"
+          />
+        </p>
+      </pane>
+      <pane ref="pane2" v-if="showPanes" class="q-pa-md overflow-auto bg-white">
+        <ExampleText :exampleText="exampleText" @load="loadExample" />
+      </pane>
+    </splitpanes>
+  </div>
 </template>
