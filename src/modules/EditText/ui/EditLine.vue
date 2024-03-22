@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue';
 import {
-  onClickOutside, useElementBounding, useVModel, useWindowScroll,
+  onClickOutside, useElementBounding, useVModel,
 } from '@vueuse/core';
 
 const props = defineProps(['line', 'translate', 'modelValue']);
