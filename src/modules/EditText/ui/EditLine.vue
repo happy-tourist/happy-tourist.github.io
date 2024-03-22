@@ -103,7 +103,7 @@ const onOpen = () => {
     position: absolute;
     max-width: 85vw;
     width: max-content;
-    z-index: 999;
+    z-index: 2;
     left: 0;
     top: 0;
   }

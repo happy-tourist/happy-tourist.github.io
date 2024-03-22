@@ -152,7 +152,7 @@ watch(scrollTop, (cur) => {
           :icon="showPanes ? 'visibility_off' : 'visibility'"
           size="sm"
           class="absolute"
-          style="right: 30px;z-index: 9999;"
+          style="right: 30px;z-index: 1;"
           @click="togglePane"
         />
 
