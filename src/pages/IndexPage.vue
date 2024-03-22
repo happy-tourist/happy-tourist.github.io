@@ -14,7 +14,7 @@ const isDescription = computed(() => entity.value?.type === 'description');
 
 <template>
   <q-page v-if="user">
-    <div class="d-flex flex-column" style="height: 100%;">
+    <div class="d-flex flex-column" style="min-height: inherit;">
       <div class="q-pa-md d-flex justify-between">
         <q-breadcrumbs>
           <q-breadcrumbs-el
