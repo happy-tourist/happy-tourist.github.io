@@ -137,11 +137,11 @@ watch(scrollTop, (cur) => {
 </script>
 
 <template>
-  <div style="height: 1px;flex-grow: 1;">
+  <div class="d-flex" style="height: 1px;flex-grow: 1;">
     <splitpanes
       v-if="entity.text"
       horizontal class="default-theme">
-      <pane ref="pane1" class="q-pa-md overflow-auto bg-white">
+      <pane ref="pane1" class="q-pa-md overflow-auto bg-white d-flex" style="height: auto;flex: 1;">
         <q-btn
           round
           color="secondary"
