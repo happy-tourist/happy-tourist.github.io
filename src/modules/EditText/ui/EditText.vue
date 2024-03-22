@@ -141,7 +141,9 @@ watch(scrollTop, (cur) => {
     <splitpanes
       v-if="entity.text"
       horizontal class="default-theme">
-      <pane ref="pane1" class="q-pa-md overflow-auto bg-white d-flex" style="height: auto;flex: 1;">
+      <pane
+        ref="pane1"
+        class="q-pa-md overflow-auto bg-white d-flex flex-wrap" style="height: auto;flex: 1;">
         <q-btn
           round
           color="secondary"
@@ -156,6 +158,7 @@ watch(scrollTop, (cur) => {
           v-for="(p, indexP) in originalText"
           :key="indexP"
           class="q-mb-md"
+          style="width: 100%;"
         >
           <EditLine
             v-for="(line, indexLine) in p"
