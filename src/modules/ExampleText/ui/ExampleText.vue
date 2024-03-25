@@ -11,6 +11,7 @@ import {
   uploadBytes,
   deleteObject,
 } from 'firebase/storage';
+import { ConfirmModal } from 'src/modules/ConfirmModal';
 
 defineProps(['exampleText']);
 const emits = defineEmits(['load']);
@@ -67,6 +68,8 @@ const onDelete = async () => {
     decreaseCounterLoadings();
   });
 };
+
+const show = ref(false);
 </script>
 
 <template>
@@ -88,8 +91,11 @@ const onDelete = async () => {
       size="sm"
       class="absolute"
       style="right: 30px;"
-      @click="onDelete"
+      @click="show = true"
     />
+
+    <ConfirmModal
+      v-model="show" title="Вы уверены что хотите удалить пример?" :cb="onDelete" />
 
     <p
       v-for="(p, indexP) in exampleText"

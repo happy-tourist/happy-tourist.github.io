@@ -72,10 +72,13 @@ watch(() => document.pending, (cur) => {
   }
 }, { deep: true });
 
+const hideHeader = ref(false);
+
 provide('app', {
   user,
   entities,
   entity,
+  hideHeader,
   increaseCounterLoadings,
   decreaseCounterLoadings,
 });

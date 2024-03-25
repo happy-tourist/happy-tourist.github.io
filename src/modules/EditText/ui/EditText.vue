@@ -24,6 +24,7 @@ const {
   increaseCounterLoadings,
   decreaseCounterLoadings,
   entity,
+  hideHeader,
 } = inject('app');
 
 const storage = useFirebaseStorage();
@@ -137,7 +138,17 @@ watch(scrollTop, (cur) => {
 </script>
 
 <template>
-  <div class="d-flex" style="height: 1px;flex-grow: 1;">
+  <div class="d-flex relative" style="height: 1px;flex-grow: 1;">
+    <q-btn
+      round
+      color="secondary"
+      :icon="!hideHeader ? 'expand_less' : 'expand_more'"
+      size="sm"
+      class="absolute"
+      style="left: 50%;top:0;z-index: 1;"
+      @click="hideHeader = !hideHeader"
+    />
+
     <splitpanes
       v-if="entity.text"
       horizontal class="default-theme"
