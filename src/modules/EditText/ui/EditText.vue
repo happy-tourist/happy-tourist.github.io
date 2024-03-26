@@ -93,8 +93,22 @@ const getText = (arr) => {
   // eslint-disable-next-line no-restricted-globals
   const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
   const paragraphsByLines = [];
+  const prepareParagraphs = [];
+
+  let acc = '';
 
   paragraphsFiltered.forEach((p) => {
+    const lastChar = p.slice(-1);
+
+    if (['.', '!', '?'].includes(lastChar)) {
+      prepareParagraphs.push(`${acc ? `${acc} ` : ''}${p}`);
+      acc = '';
+    } else {
+      acc += acc ? ` ${p}` : p;
+    }
+  });
+
+  prepareParagraphs.forEach((p) => {
     paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));
   });
 
@@ -145,7 +159,7 @@ watch(scrollTop, (cur) => {
       :icon="!hideHeader ? 'expand_less' : 'expand_more'"
       size="sm"
       class="absolute"
-      style="left: 50%;top:0;z-index: 1;"
+      style="left: 50%;top:-10px;z-index: 1;"
       @click="hideHeader = !hideHeader"
     />
 
