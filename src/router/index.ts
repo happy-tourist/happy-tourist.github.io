@@ -1,6 +1,9 @@
-import { route } from 'quasar/wrappers';
+import { defineRouter } from '#q-app/wrappers';
 import {
-  createRouter, createMemoryHistory, createWebHistory, createWebHashHistory,
+  createMemoryHistory,
+  createRouter,
+  createWebHashHistory,
+  createWebHistory,
 } from 'vue-router';
 import routes from './routes';
 
@@ -13,7 +16,7 @@ import routes from './routes';
  * with the Router instance.
  */
 
-export default route((/* { store, ssrContext } */) => {
+export default defineRouter(function (/* { store, ssrContext } */) {
   const createHistory = process.env.SERVER
     ? createMemoryHistory
     : (process.env.VUE_ROUTER_MODE === 'history' ? createWebHistory : createWebHashHistory);

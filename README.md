@@ -1,4 +1,4 @@
-# Quasar App (translate-app3)
+# Quasar App (quasar-project)
 
 A Quasar Project
 
@@ -22,6 +22,13 @@ yarn lint
 npm run lint
 ```
 
+
+### Format the files
+```bash
+yarn format
+# or
+npm run format
+```
 
 
 ### Build the app for production

@@ -1,10 +1,10 @@
-const routes = [
+import type { RouteRecordRaw } from 'vue-router';
+
+const routes: RouteRecordRaw[] = [
   {
-    path: '/:id?',
+    path: '/',
     component: () => import('layouts/MainLayout.vue'),
-    children: [
-      { name: 'index', path: '', component: () => import('pages/IndexPage.vue') },
-    ],
+    children: [{ path: '', component: () => import('pages/IndexPage.vue') }],
   },
 
   // Always leave this as last one,
