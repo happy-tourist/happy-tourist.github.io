@@ -2,6 +2,7 @@
 // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js
 
 import { defineConfig } from '#q-app/wrappers';
+import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig((/* ctx */) => {
   return {
@@ -66,6 +67,15 @@ export default defineConfig((/* ctx */) => {
       // viteVuePluginOptions: {},
 
       vitePlugins: [
+        ['@vitejs/plugin-legacy', {
+          targets: [
+            'defaults', // Современные браузеры
+            'chrome 63', // Минимальный Chrome
+            'firefox 52', // Минимальный Firefox
+            'safari 9',  // Минимальный Safari
+          ],
+          additionalLegacyPolyfills: ['regenerator-runtime/runtime'], // Для async/await
+        }],
         ['vite-plugin-checker', {
           vueTsc: true,
           eslint: {
