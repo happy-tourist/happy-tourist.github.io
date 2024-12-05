@@ -72,7 +72,9 @@ export default defineConfig((/* ctx */) => {
             'chrome 40', // Минимальный Chrome
             'safari 5',  // Минимальный Safari
           ],
-          additionalLegacyPolyfills: ['regenerator-runtime/runtime'], // Для async/await
+          additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
+          renderLegacyChunks: true,
+          modernPolyfills: true,
         }],
         ['vite-plugin-checker', {
           vueTsc: true,
