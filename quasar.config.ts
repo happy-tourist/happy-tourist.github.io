@@ -37,7 +37,7 @@ export default defineConfig((/* ctx */) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#build
     build: {
       target: {
-        browser: [ 'es5', 'safari9', 'chrome63', 'firefox52' ],
+        browser: [ 'es5', 'safari5', 'chrome40' ],
         node: 'node10'
       },
 
@@ -69,10 +69,8 @@ export default defineConfig((/* ctx */) => {
       vitePlugins: [
         ['@vitejs/plugin-legacy', {
           targets: [
-            'defaults', // Современные браузеры
-            'chrome 63', // Минимальный Chrome
-            'firefox 52', // Минимальный Firefox
-            'safari 9',  // Минимальный Safari
+            'chrome 40', // Минимальный Chrome
+            'safari 5',  // Минимальный Safari
           ],
           additionalLegacyPolyfills: ['regenerator-runtime/runtime'], // Для async/await
         }],
