@@ -36,8 +36,8 @@ export default defineConfig((/* ctx */) => {
     // Full list of options: https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#build
     build: {
       target: {
-        browser: [ 'es2022', 'firefox115', 'chrome115', 'safari14' ],
-        node: 'node20'
+        browser: [ 'es5', 'safari9', 'chrome63', 'firefox52' ],
+        node: 'node10'
       },
 
       typescript: {
@@ -64,7 +64,7 @@ export default defineConfig((/* ctx */) => {
 
       // extendViteConf (viteConf) {},
       // viteVuePluginOptions: {},
-      
+
       vitePlugins: [
         ['vite-plugin-checker', {
           vueTsc: true,
