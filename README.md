@@ -1,6 +1,6 @@
-# Quasar App (quasar-project)
+# Translator App (translator)
 
-A Quasar Project
+Translator
 
 ## Install the dependencies
 ```bash
@@ -12,22 +12,6 @@ npm install
 ### Start the app in development mode (hot-code reloading, error reporting, etc.)
 ```bash
 quasar dev
-```
-
-
-### Lint the files
-```bash
-yarn lint
-# or
-npm run lint
-```
-
-
-### Format the files
-```bash
-yarn format
-# or
-npm run format
 ```
 
 

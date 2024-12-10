@@ -45,11 +45,11 @@
   </q-layout>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue';
-import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
+<script setup>
+import { ref } from 'vue'
+import EssentialLink from 'components/EssentialLink.vue'
 
-const linksList: EssentialLinkProps[] = [
+const linksList = [
   {
     title: 'Docs',
     caption: 'quasar.dev',
@@ -92,11 +92,11 @@ const linksList: EssentialLinkProps[] = [
     icon: 'favorite',
     link: 'https://awesome.quasar.dev'
   }
-];
+]
 
-const leftDrawerOpen = ref(false);
+const leftDrawerOpen = ref(false)
 
 function toggleLeftDrawer () {
-  leftDrawerOpen.value = !leftDrawerOpen.value;
+  leftDrawerOpen.value = !leftDrawerOpen.value
 }
 </script>
