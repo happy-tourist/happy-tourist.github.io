@@ -8,11 +8,11 @@ const auth = useFirebaseAuth();
 const { increaseLoadings, decreaseLoadings } = inject('loading');
 const router = useRouter();
 const logout = async () => {
-  router.push({ name: 'index', params: { id: '' } });
   increaseLoadings();
   await signOut(auth).finally(() => {
     decreaseLoadings();
   });
+  router.push({ name: 'index', params: { id: '' } });
 };
 </script>
 
