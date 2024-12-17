@@ -1,8 +1,11 @@
 <script setup>
-import { inject } from 'vue';
+import { computed, inject } from 'vue';
+import { Translator } from 'src/modules/translator/Translator';
 
 const { user } = inject('user');
-const { entities } = inject('entities');
+const { entities, entity } = inject('entities');
+
+const isDescription = computed(() => entity.value?.type === 'description');
 </script>
 
 <template>
@@ -17,6 +20,8 @@ const { entities } = inject('entities');
           :label="item.name"
         />
       </div>
+
+      <Translator v-if="isDescription" />
     </div>
   </q-page>
 </template>

@@ -16,7 +16,9 @@ const { user } = inject('user');
     <q-header elevated>
       <q-toolbar class="gap-1">
         <q-toolbar-title>
-          Happy Tourist
+          <q-btn flat :to="{ name: 'index', params: { id: '' } }">
+            Happy Tourist
+          </q-btn>
         </q-toolbar-title>
 
         <LogoutBtn v-if="user" />
