@@ -3,8 +3,10 @@ import {
   watch,
   provide,
 } from 'vue';
+import { useQuasar } from 'quasar';
 
 const useLoading = () => {
+  const $q = useQuasar();
   const counterLoadings = ref(0);
 
   const increaseLoadings = () => {

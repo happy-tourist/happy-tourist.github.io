@@ -1,6 +1,8 @@
 <script setup>
 import { useAutoAuth } from 'src/modules/auth/AutoAuth';
 import { inject } from 'vue'
+import { LoginBtn } from 'src/modules/auth/LoginBtn';
+import { LogoutBtn } from 'src/modules/auth/LogoutBtn';
 
 useAutoAuth();
 const { user } = inject('user');
@@ -15,12 +17,8 @@ const { user } = inject('user');
           Happy Tourist
         </q-toolbar-title>
 
-        <span v-if="user">
-          Yes
-        </span>
-        <span v-else>
-          No
-        </span>
+        <LogoutBtn v-if="user" />
+        <LoginBtn v-else />
       </q-toolbar>
     </q-header>
 
