@@ -38,16 +38,22 @@ const addTranslate = async () => {
   <q-dialog v-model="show" maximized>
     <q-card class="q-pa-lg d-flex flex-column gap-2">
       <div class="flex-grow d-flex flex-column gap-3">
-        <p>
-          {{ line }}
-        </p>
+        <div class="d-flex flex-column">
+          <p class="text-weight-bold">Оригинал:</p>
+          <p>
+            {{ line }}
+          </p>
+        </div>
 
-        <q-input
-          autofocus
-          autogrow
-          dense
-          v-model="translateInner"
-        />
+        <div class="d-flex flex-column">
+          <p class="text-weight-bold">Перевод:</p>
+          <q-input
+            outlined
+            autogrow
+            filled
+            v-model="translateInner"
+          />
+        </div>
       </div>
 
       <q-card-actions align="right" class="text-primary">
