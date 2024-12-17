@@ -1,5 +1,5 @@
 <script setup>
-import { GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { useFirebaseAuth } from 'vuefire';
 import { inject } from 'vue';
 
@@ -9,7 +9,7 @@ const login = async () => {
   increaseLoadings();
   const provider = new GoogleAuthProvider();
 
-  await signInWithRedirect(auth, provider).finally(() => {
+  await signInWithPopup(auth, provider).finally(() => {
     decreaseLoadings();
   });
 };
