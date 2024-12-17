@@ -3,8 +3,10 @@ import { useAutoAuth } from 'src/modules/auth/AutoAuth';
 import { inject } from 'vue'
 import { LoginBtn } from 'src/modules/auth/LoginBtn';
 import { LogoutBtn } from 'src/modules/auth/LogoutBtn';
+import { useEntities } from 'src/modules/Entities';
 
 useAutoAuth();
+useEntities();
 const { user } = inject('user');
 
 </script>
