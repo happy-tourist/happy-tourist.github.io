@@ -6,11 +6,13 @@ import {
 import { collection, query, where } from 'firebase/firestore';
 import {
   computed,
+  watch,
 } from 'vue';
 import { useRoute } from 'vue-router';
 
 const useEntities = () => {
   const { user } = inject('user');
+  const { increaseLoadings, decreaseLoadings } = inject('loading');
 
   const db = useFirestore();
   const route = useRoute();
@@ -24,6 +26,22 @@ const useEntities = () => {
     entities,
     entity,
   });
+
+  watch(() => allEntities.pending, (cur) => {
+    if (cur.value) {
+      increaseLoadings();
+    } else {
+      decreaseLoadings();
+    }
+  }, { deep: true });
+
+  watch(() => document.pending, (cur) => {
+    if (cur.value) {
+      increaseLoadings();
+    } else {
+      decreaseLoadings();
+    }
+  }, { deep: true });
 }
 
 export default useEntities;
