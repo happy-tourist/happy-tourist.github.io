@@ -85,7 +85,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
     console.log('numPages', numPages)
 
     const container = pdfContainer.value;
-    console.log('container', container)
+    alert(container.innerHTML)
     container.innerHTML = '';
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -115,6 +115,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
         viewport: viewport
       }).promise;
     }
+    alert(container.innerHTML)
 
   } catch (error) {
     console.error('Ошибка загрузки PDF:', error);
@@ -124,7 +125,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
 
 export const getText = async (text, format, pdfContainer) => {
   if (!text) return;
-  console.log('getText')
+  alert('getText')
 
   let prepareParagraphs = [];
 
