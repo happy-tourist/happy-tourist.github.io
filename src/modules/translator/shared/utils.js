@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist/webpack';
 import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
 GlobalWorkerOptions.workerPort = new Worker(
-  new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url),
+  new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url),
   { type: 'module' }
 );
 import Epub from 'epubjs';
@@ -76,26 +76,20 @@ const getEpubParagraphs = async (text) => {
 }
 
 const getPDFParagraphs = async (text, pdfContainer) => {
-  console.log('getPDFParagraphs1')
   let paragraphTexts = [];
   try {
     const pdf = await pdfjsLib.getDocument(text).promise;
-    console.log('getPDFParagraphs2')
     const numPages = pdf.numPages;
-    console.log('numPages', numPages)
 
     const container = pdfContainer.value;
-    alert(container.innerHTML)
     container.innerHTML = '';
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
-      console.log('page', page)
 
       // Получаем канвас для рендеринга страницы
       const canvas = document.createElement('canvas');
       container.appendChild(canvas);
-      console.log('container html', container)
 
       const viewport = page.getViewport({ scale: 1 });
 
@@ -107,34 +101,21 @@ const getPDFParagraphs = async (text, pdfContainer) => {
 
       const context = canvas.getContext('2d');
 
-      console.log('context', context)
-
       // Рендерим страницу на канвас
       await page.render({
         canvasContext: context,
         viewport: viewport
       }).promise;
     }
-    alert(container.innerHTML)
 
   } catch (error) {
     console.error('Ошибка загрузки PDF:', error);
-    alert('Ошибка: ' + error.message);
-    alert('Ошибка2: ' + JSON.stringify(error, Object.getOwnPropertyNames(error)));
-    const errorDetails = `
-    Тип ошибки: ${error.name}
-    Сообщение: ${error.message}
-    Стек: ${error.stack || 'Нет стека'}
-  `;
-
-    alert('Ошибка3: ' + errorDetails);
   }
   return paragraphTexts;
 }
 
 export const getText = async (text, format, pdfContainer) => {
   if (!text) return;
-  alert('getText')
 
   let prepareParagraphs = [];
 
@@ -146,11 +127,9 @@ export const getText = async (text, format, pdfContainer) => {
       prepareParagraphs = getSRTParagraphs(text);
       break;
     case 'epub':
-      console.log('epub')
       prepareParagraphs = await getEpubParagraphs(text);
       break;
     case 'pdf':
-      console.log('pdf')
       prepareParagraphs = await getPDFParagraphs(text, pdfContainer);
       break;
     default:
