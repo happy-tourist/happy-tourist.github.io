@@ -40,6 +40,7 @@ const maxHeight = window.innerHeight - 32;
 <template>
   <div>
     <PinchScrollZoom
+      v-if="entity.format === 'pdf'"
       within
       key-actions
       :min-scale="0.3"
