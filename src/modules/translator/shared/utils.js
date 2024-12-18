@@ -119,7 +119,15 @@ const getPDFParagraphs = async (text, pdfContainer) => {
 
   } catch (error) {
     console.error('Ошибка загрузки PDF:', error);
-    alert(JSON.stringify(error))
+    alert('Ошибка: ' + error.message);
+    alert('Ошибка2: ' + JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    const errorDetails = `
+    Тип ошибки: ${error.name}
+    Сообщение: ${error.message}
+    Стек: ${error.stack || 'Нет стека'}
+  `;
+
+    alert('Ошибка3: ' + errorDetails);
   }
   return paragraphTexts;
 }
