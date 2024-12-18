@@ -13,8 +13,7 @@ export default defineConfig((/* ctx */) => {
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: [
       'vuefire',
-      'promise-with-resolvers',
-      'gesture',
+      'promise-with-resolvers'
     ],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#css

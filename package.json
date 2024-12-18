@@ -13,9 +13,8 @@
     "postinstall": "quasar prepare"
   },
   "dependencies": {
+    "@coddicat/vue-pinch-scroll-zoom": "4.7.1",
     "@quasar/extras": "1.16.4",
-    "@vueuse/gesture": "2.0.0",
-    "@vueuse/motion": "2.2.6",
     "epubjs": "^0.3.93",
     "firebase": "10.14.1",
     "pdfjs-dist": "4.9.155",
