@@ -76,20 +76,26 @@ const getEpubParagraphs = async (text) => {
 }
 
 const getPDFParagraphs = async (text, pdfContainer) => {
+  console.log('getPDFParagraphs1')
   let paragraphTexts = [];
   try {
     const pdf = await pdfjsLib.getDocument(text).promise;
+    console.log('getPDFParagraphs2')
     const numPages = pdf.numPages;
+    console.log('numPages', numPages)
 
     const container = pdfContainer.value;
+    console.log('container', container)
     container.innerHTML = '';
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
+      console.log('page', page)
 
       // Получаем канвас для рендеринга страницы
       const canvas = document.createElement('canvas');
       container.appendChild(canvas);
+      console.log('container html', container)
 
       const viewport = page.getViewport({ scale: 1 });
 
@@ -100,6 +106,8 @@ const getPDFParagraphs = async (text, pdfContainer) => {
       canvas.height = canvasHeight;
 
       const context = canvas.getContext('2d');
+
+      console.log('context', context)
 
       // Рендерим страницу на канвас
       await page.render({

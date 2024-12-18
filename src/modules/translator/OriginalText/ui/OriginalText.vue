@@ -39,6 +39,7 @@ watch([originalFile, entity], async () => {
       v-for="(p, indexP) in originalText"
       :key="indexP"
       class="q-mb-md"
+      style="max-width: calc(100vw - 32px);"
     >
       <TextLine
         v-for="(line, indexLine) in p"
