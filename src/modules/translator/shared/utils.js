@@ -124,6 +124,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
 
 export const getText = async (text, format, pdfContainer) => {
   if (!text) return;
+  console.log('getText')
 
   let prepareParagraphs = [];
 
@@ -135,9 +136,11 @@ export const getText = async (text, format, pdfContainer) => {
       prepareParagraphs = getSRTParagraphs(text);
       break;
     case 'epub':
+      console.log('epub')
       prepareParagraphs = await getEpubParagraphs(text);
       break;
     case 'pdf':
+      console.log('pdf')
       prepareParagraphs = await getPDFParagraphs(text, pdfContainer);
       break;
     default:
