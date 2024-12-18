@@ -91,7 +91,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
       const canvas = document.createElement('canvas');
       container.appendChild(canvas);
 
-      const viewport = page.getViewport({ scale: 5 });
+      const viewport = page.getViewport({ scale: 2 });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
