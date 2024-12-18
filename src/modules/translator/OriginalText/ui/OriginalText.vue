@@ -4,7 +4,8 @@ import { ref as storageRef, getBytes } from 'firebase/storage';
 import { useFirebaseStorage } from 'vuefire';
 import { getText } from 'src/modules/translator/shared/utils';
 import { TextLine } from 'src/modules/translator/TextLine';
-import { useMotions } from '@vueuse/motion'
+import PinchScrollZoom from '@coddicat/vue-pinch-scroll-zoom';
+import '@coddicat/vue-pinch-scroll-zoom/style.css';
 
 const { entity } = inject('entities');
 const { increaseLoadings, decreaseLoadings } = inject('loading');
@@ -32,18 +33,23 @@ watch([originalFile, entity], async () => {
   });
 }, { immediate: true })
 
-const motions = useMotions();
-
-const pinchHandler = ({ offset: [d, a] }) => {
-  if (!motions.zoom) return
-
-  motions.zoom.apply({ zoom: d, rotateZ: a })
-}
+const maxWidth = window.innerWidth - 32;
+const maxHeight = window.innerHeight - 32;
 </script>
 
 <template>
-  <div v-motion="'zoom'" v-pinch="pinchHandler">
-    <div ref="pdfContainer" class="d-flex flex-column"></div>
+  <div>
+    <PinchScrollZoom
+      within
+      key-actions
+      :min-scale="0.3"
+      :max-scale="6"
+      :width="maxWidth"
+      :height="maxHeight"
+      :content-height="20000"
+    >
+      <div ref="pdfContainer" class="d-flex flex-column"></div>
+    </PinchScrollZoom>
     <p
       v-for="(p, indexP) in originalText"
       :key="indexP"
