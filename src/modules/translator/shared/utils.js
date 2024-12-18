@@ -1,14 +1,25 @@
-export const getText = (text) => {
-  if (!text) return;
+import JSZip from 'jszip';
+import * as pdfjsLib from 'pdfjs-dist/webpack';
+import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
+GlobalWorkerOptions.workerPort = new Worker(
+  new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url),
+  { type: 'module' }
+);
 
+const getTXTParagraphs = (text) => {
   const decoder = new TextDecoder();
-  const paragraphs = decoder.decode(text).replace(/(<([^>]+)>)|‘|'|"/ig, '')
+
+  return decoder.decode(text).replace(/(<([^>]+)>)|‘|'|"/ig, '')
     .replace(/(\r)/gm, '').split('\n')
     .filter(Boolean);
+};
+
+const getSRTParagraphs = (text) => {
+  const prepareParagraphs = [];
+
+  const paragraphs = getTXTParagraphs(text);
 
   const paragraphsFiltered = paragraphs.filter((s) => isNaN(Number(s)) && !s.includes('-->'));
-  const paragraphsByLines = [];
-  const prepareParagraphs = [];
 
   let acc = '';
 
@@ -22,6 +33,126 @@ export const getText = (text) => {
       acc += acc ? ` ${p}` : p;
     }
   });
+
+  return prepareParagraphs;
+};
+
+const getFB2Paragraphs = (text) => {
+  const decoder = new TextDecoder();
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(decoder.decode(text), 'application/xml');
+
+  const paragraphs = xmlDoc.querySelectorAll('body p');
+  const paragraphTexts = Array.from(paragraphs).map(p => p.textContent.trim());
+
+  return paragraphTexts;
+}
+
+const getEpubParagraphs = async (text) => {
+  const typedArray = new Uint8Array(text);
+  const zip = await JSZip.loadAsync(typedArray);
+
+  const containerFile = zip.file('META-INF/container.xml');
+  const containerContent = await containerFile.async('text');
+  const parser = new DOMParser();
+  const containerDoc = parser.parseFromString(containerContent, 'application/xml');
+  const opfFilePath = containerDoc.querySelector('rootfile').getAttribute('full-path');
+  const opfFile = zip.file(opfFilePath);
+  const opfContent = await opfFile.async('text');
+  const opfDoc = parser.parseFromString(opfContent, 'application/xml');
+
+  const items = opfDoc.querySelectorAll('manifest item');
+  const htmlFiles = [];
+
+  items.forEach(item => {
+    const href = item.getAttribute('href');
+    const mediaType = item.getAttribute('media-type');
+    if (mediaType === 'application/xhtml+xml' || mediaType === 'application/xhtml') {
+      htmlFiles.push(href);
+    }
+  });
+
+  const paragraphTexts = [];
+  for (const htmlFile of htmlFiles) {
+    const htmlFileContent = await zip.file(htmlFile).async('text');
+
+    const htmlDoc = parser.parseFromString(htmlFileContent, 'text/html');
+
+    const paragraphs = htmlDoc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div');
+    paragraphs.forEach(p => {
+      const text = p.textContent.trim();
+
+      if (text) {
+        paragraphTexts.push(text);
+      }
+    });
+  }
+
+  return paragraphTexts;
+}
+
+const getPDFParagraphs = async (text, pdfContainer) => {
+  let paragraphTexts = [];
+  try {
+    const pdf = await pdfjsLib.getDocument(text).promise;
+    const numPages = pdf.numPages;
+
+    const container = pdfContainer.value;
+    container.innerHTML = '';
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+
+      // Получаем канвас для рендеринга страницы
+      const canvas = document.createElement('canvas');
+      container.appendChild(canvas);
+
+      const viewport = page.getViewport({ scale: 1 });
+
+      const canvasWidth = Math.min(viewport.width, window.innerWidth - 32);  // Ограничиваем ширину экрана
+      const canvasHeight = (canvasWidth / viewport.width) * viewport.height;
+
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+
+      const context = canvas.getContext('2d');
+
+      // Рендерим страницу на канвас
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+    }
+
+  } catch (error) {
+    console.error('Ошибка загрузки PDF:', error);
+  }
+  return paragraphTexts;
+}
+
+export const getText = async (text, format, pdfContainer) => {
+  if (!text) return;
+
+  let prepareParagraphs = [];
+
+  switch (format) {
+    case 'fb2':
+      prepareParagraphs = getFB2Paragraphs(text);
+      break;
+    case 'srt':
+      prepareParagraphs = getSRTParagraphs(text);
+      break;
+    case 'epub':
+      prepareParagraphs = await getEpubParagraphs(text);
+      break;
+    case 'pdf':
+      prepareParagraphs = await getPDFParagraphs(text, pdfContainer);
+      break;
+    default:
+      prepareParagraphs = getTXTParagraphs(text)
+  }
+
+  const paragraphsByLines = [];
 
   prepareParagraphs.forEach((p) => {
     paragraphsByLines.push(p.replace(/([.?!])\s*(?=[A-Za-zА-Яа-я])/g, '$1|').split('|'));

@@ -40,7 +40,7 @@ const addTranslate = async () => {
       <div class="flex-grow d-flex flex-column gap-3">
         <div class="d-flex flex-column">
           <p class="text-weight-bold">Оригинал:</p>
-          <p>
+          <p style="white-space: pre-line">
             {{ line }}
           </p>
         </div>

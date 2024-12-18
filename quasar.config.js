@@ -57,7 +57,15 @@ export default defineConfig((/* ctx */) => {
       // polyfillModulePreload: true,
       // distDir
 
-      // extendViteConf (viteConf) {},
+      // extendViteConf (viteConf) {
+      //   return {
+      //     build: {
+      //       optimizeDeps: {
+      //         exclude: ['pdfjs-dist'] // Исключаем pdfjs-dist из оптимизации
+      //       },
+      //     }
+      //   }
+      // },
       // viteVuePluginOptions: {},
 
       // vitePlugins: [

@@ -1,5 +1,5 @@
 <script setup>
-import { inject, computed, ref } from 'vue';
+import { inject, ref, watch } from 'vue';
 import { ref as storageRef, getBytes } from 'firebase/storage';
 import { useFirebaseStorage } from 'vuefire';
 import { getText } from 'src/modules/translator/shared/utils';
@@ -21,11 +21,20 @@ const loadOriginal = async () => {
 
 loadOriginal();
 
-const originalText = computed(() => getText(originalFile.value));
+const originalText = ref([]);
+const pdfContainer = ref(null);
+
+watch([originalFile, entity], async () => {
+  increaseLoadings();
+  originalText.value = await getText(originalFile.value, entity.value.format, pdfContainer).finally(() => {
+    decreaseLoadings();
+  });
+}, { immediate: true })
 </script>
 
 <template>
   <div>
+    <div ref="pdfContainer" class="d-flex flex-column"></div>
     <p
       v-for="(p, indexP) in originalText"
       :key="indexP"

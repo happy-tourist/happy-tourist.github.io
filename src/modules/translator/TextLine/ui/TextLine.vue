@@ -14,6 +14,8 @@ const translate = computed(() => entity.value.text.translates && entity.value.te
 <template>
   <span
     class="text-body1 cursor-pointer q-mr-sm"
+    :class="translate ? '' : 'text-bold'"
+    style="white-space: pre-line"
     @click="showModal = true"
   >
     {{ translate || line }}
