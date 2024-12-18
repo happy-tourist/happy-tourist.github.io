@@ -1,10 +1,10 @@
-import JSZip from 'jszip';
 import * as pdfjsLib from 'pdfjs-dist/webpack';
 import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf';
 GlobalWorkerOptions.workerPort = new Worker(
   new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url),
   { type: 'module' }
 );
+import Epub from 'epubjs';
 
 const getTXTParagraphs = (text) => {
   const decoder = new TextDecoder();
@@ -49,36 +49,20 @@ const getFB2Paragraphs = (text) => {
 }
 
 const getEpubParagraphs = async (text) => {
-  const typedArray = new Uint8Array(text);
-  const zip = await JSZip.loadAsync(typedArray);
+  const book = await Epub(text);
+  await book.ready;
 
-  const containerFile = zip.file('META-INF/container.xml');
-  const containerContent = await containerFile.async('text');
-  const parser = new DOMParser();
-  const containerDoc = parser.parseFromString(containerContent, 'application/xml');
-  const opfFilePath = containerDoc.querySelector('rootfile').getAttribute('full-path');
-  const opfFile = zip.file(opfFilePath);
-  const opfContent = await opfFile.async('text');
-  const opfDoc = parser.parseFromString(opfContent, 'application/xml');
-
-  const items = opfDoc.querySelectorAll('manifest item');
-  const htmlFiles = [];
-
-  items.forEach(item => {
-    const href = item.getAttribute('href');
-    const mediaType = item.getAttribute('media-type');
-    if (mediaType === 'application/xhtml+xml' || mediaType === 'application/xhtml') {
-      htmlFiles.push(href);
-    }
-  });
+  const spine = book.spine;
 
   const paragraphTexts = [];
-  for (const htmlFile of htmlFiles) {
-    const htmlFileContent = await zip.file(htmlFile).async('text');
 
-    const htmlDoc = parser.parseFromString(htmlFileContent, 'text/html');
+  for (let i = 0; i < spine.length; i++) {
+    const currentSection = spine.get(i);
+    const href = currentSection.href;
+    const content = await book.load(href);
 
-    const paragraphs = htmlDoc.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div');
+    const paragraphs = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, div');
+
     paragraphs.forEach(p => {
       const text = p.textContent.trim();
 
