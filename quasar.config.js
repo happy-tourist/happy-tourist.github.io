@@ -14,6 +14,7 @@ export default defineConfig((/* ctx */) => {
     boot: [
       'vuefire',
       'promise-with-resolvers',
+      'gesture',
     ],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#css
