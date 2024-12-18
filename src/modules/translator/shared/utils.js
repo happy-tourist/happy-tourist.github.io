@@ -93,8 +93,17 @@ const getPDFParagraphs = async (text, pdfContainer) => {
 
       const viewport = page.getViewport({ scale: 1 });
 
-      const canvasWidth = Math.min(viewport.width, window.innerWidth - 32);  // Ограничиваем ширину экрана
-      const canvasHeight = (canvasWidth / viewport.width) * viewport.height;
+      const maxWidth = window.innerWidth - 32;
+      const maxHeight = window.innerHeight - 32;
+
+      // Вычисляем новое соотношение сторон
+      const scaleWidth = maxWidth / viewport.width;
+      const scaleHeight = maxHeight / viewport.height;
+
+      const scale = Math.min(scaleWidth, scaleHeight);
+
+      const canvasWidth = viewport.width * scale;
+      const canvasHeight = viewport.height * scale;
 
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
@@ -104,7 +113,7 @@ const getPDFParagraphs = async (text, pdfContainer) => {
       // Рендерим страницу на канвас
       await page.render({
         canvasContext: context,
-        viewport: viewport
+        viewport: page.getViewport({ scale })
       }).promise;
     }
 
