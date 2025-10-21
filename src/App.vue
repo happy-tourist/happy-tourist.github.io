@@ -7,7 +7,7 @@ import { RouterLink, RouterView } from 'vue-router'
     <header>
       <nav style="display: flex; gap: 32px;margin-bottom: 32px;">
         <RouterLink to="/">Глава 1</RouterLink>
-        <RouterLink to="/about">Глава 2</RouterLink>
+        <RouterLink to="/ch2">Глава 2</RouterLink>
       </nav>
     </header>
 
