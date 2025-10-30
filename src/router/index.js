@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Ch1 from '../views/Ch1.vue'
+import Page from '../views/Page.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -7,17 +7,46 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
-      component: Ch1,
+      component: Page,
     },
     {
-      path: '/ch2',
-      name: 'ch2',
-      component: () => import('../views/Ch2.vue'),
+      path: '/uliss',
+      name: 'uliss',
+      component: () => import('../views/uliss/Uliss.vue'),
+      children: [
+        {
+          path: '/ul1',
+          name: 'ul1',
+          component: () => import('../views/uliss/Ul1.vue'),
+        },
+        {
+          path: '/ul2',
+          name: 'ul2',
+          component: () => import('../views/uliss/Ul2.vue'),
+        },
+        {
+          path: '/ul3',
+          name: 'ul3',
+          component: () => import('../views/uliss/Ul3.vue'),
+        }
+      ]
     },
     {
-      path: '/ch3',
-      name: 'ch3',
-      component: () => import('../views/Ch3.vue'),
+      path: '/we',
+      name: 'we',
+      component: () => import('../views/we/We.vue'),
+      children: [
+        {
+          path: '/we1',
+          name: 'we1',
+          component: () => import('../views/we/We1.vue'),
+        },
+        {
+          path: '/we2',
+          name: 'we2',
+          component: () => import('../views/we/We2.vue'),
+        }
+      ]
     },
   ],
 })
