@@ -12,7 +12,7 @@ const router = createRouter({
     {
       path: '/uliss',
       name: 'uliss',
-      component: () => import('../views/uliss/Uliss.vue'),
+      component: () => import('../views/uliss/Ul.vue'),
       children: [
         {
           path: '/ul1',
