@@ -5,9 +5,8 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav style="display: flex; gap: 32px;margin-bottom: 32px;">
-      <RouterLink to="/uliss">Улисс</RouterLink>
-      <RouterLink to="/we">Мы</RouterLink>
       <RouterLink to="/mur">Мурыч</RouterLink>
+      <RouterLink to="/mur1">Оптимизируем сайт ECMA Script</RouterLink>
     </nav>
   </header>
 
