@@ -28,6 +28,16 @@ const router = createRouter({
           path: '/ul3',
           name: 'ul3',
           component: () => import('../views/uliss/Ul3.vue'),
+        },
+        {
+          path: '/ul4',
+          name: 'ul4',
+          component: () => import('../views/uliss/Ul4.vue'),
+        },
+        {
+          path: '/ul5',
+          name: 'ul5',
+          component: () => import('../views/uliss/Ul5.vue'),
         }
       ]
     },

@@ -4,7 +4,7 @@ import { RouterLink, RouterView } from 'vue-router'
 
 <template>
   <header>
-    <nav style="display: flex; gap: 32px;margin-bottom: 32px;">
+    <nav>
       <RouterLink to="/we">Мы</RouterLink>
       <RouterLink to="/we1">Глава 1</RouterLink>
       <RouterLink to="/we2">Глава 2</RouterLink>
@@ -15,3 +15,12 @@ import { RouterLink, RouterView } from 'vue-router'
 
   <RouterView />
 </template>
+
+<style scoped>
+nav{
+  display: flex;
+  gap: 32px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+</style>
