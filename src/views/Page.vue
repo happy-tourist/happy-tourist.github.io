@@ -8,6 +8,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink to="/uliss">Улисс</RouterLink>
       <RouterLink to="/we">Мы</RouterLink>
       <RouterLink to="/mur">Мурыч</RouterLink>
+      <RouterLink to="/vuedush">Душнила вью</RouterLink>
     </nav>
   </header>
 
