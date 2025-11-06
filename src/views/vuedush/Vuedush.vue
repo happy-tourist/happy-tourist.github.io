@@ -6,9 +6,9 @@ import { RouterLink, RouterView } from 'vue-router'
   <header>
     <nav>
       <RouterLink to="/vuedush">Душнила вью</RouterLink>
-      <RouterLink to="/vuedush0">Глава 0</RouterLink>
-      <RouterLink to="/vuedush1`">Глава 1</RouterLink>
-      <RouterLink to="/vuedush2">Глава 2</RouterLink>
+      <RouterLink :to="{ name: 'vuedush0' }">Глава 0</RouterLink>
+      <RouterLink :to="{ name: 'vuedush1' }">Глава 1</RouterLink>
+      <RouterLink :to="{ name: 'vuedush2' }">Глава 2</RouterLink>
     </nav>
   </header>
 
