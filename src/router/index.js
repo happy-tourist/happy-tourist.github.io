@@ -80,6 +80,28 @@ const router = createRouter({
         },
       ]
     },
+    {
+      path: '/vuedush',
+      name: 'vuedush',
+      component: () => import('../views/vuedush/Vuedush.vue'),
+      children: [
+        {
+          path: '/vuedush0',
+          name: 'vuedush0',
+          component: () => import('../views/vuedush/Vuedush0.vue'),
+        },
+        {
+          path: '/vuedush1',
+          name: 'vuedush1',
+          component: () => import('../views/vuedush/Vuedush1.vue'),
+        },
+        {
+          path: '/vuedush2',
+          name: 'vuedush2',
+          component: () => import('../views/vuedush/Vuedush2.vue'),
+        },
+      ]
+    },
   ],
 })
 
