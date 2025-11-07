@@ -5,7 +5,7 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav>
-      <RouterLink to="/shoushenk">Щоушенк</RouterLink>
+      <RouterLink to="/shoushenk">Шоушенк</RouterLink>
       <RouterLink :to="{ name: 'shoushenk1' }">Глава 1</RouterLink>
     </nav>
   </header>

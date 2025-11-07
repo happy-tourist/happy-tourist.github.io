@@ -47,24 +47,34 @@ const router = createRouter({
       component: () => import('../views/we/We.vue'),
       children: [
         {
-          path: '/we1',
+          path: 'we1',
           name: 'we1',
           component: () => import('../views/we/We1.vue'),
         },
         {
-          path: '/we2',
+          path: 'we2',
           name: 'we2',
           component: () => import('../views/we/We2.vue'),
         },
         {
-          path: '/we3',
+          path: 'we3',
           name: 'we3',
           component: () => import('../views/we/We3.vue'),
         },
         {
-          path: '/we4',
+          path: 'we4',
           name: 'we4',
           component: () => import('../views/we/We4.vue'),
+        },
+        {
+          path: 'we5',
+          name: 'we5',
+          component: () => import('../views/we/We5.vue'),
+        },
+        {
+          path: 'we6',
+          name: 'we6',
+          component: () => import('../views/we/We6.vue'),
         }
       ]
     },

@@ -15,3 +15,12 @@ import { RouterLink, RouterView } from 'vue-router'
 
   <RouterView />
 </template>
+
+<style scoped>
+nav{
+  display: flex;
+  gap: 32px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+</style>
