@@ -102,6 +102,18 @@ const router = createRouter({
         },
       ]
     },
+    {
+      path: '/shoushenk',
+      name: 'shoushenk',
+      component: () => import('../views/shoushenk/Shoushenk.vue'),
+      children: [
+        {
+          path: 'shoushenk1',
+          name: 'shoushenk1',
+          component: () => import('../views/shoushenk/Shoushenk1.vue'),
+        },
+      ]
+    },
   ],
 })
 
