@@ -75,6 +75,26 @@ const router = createRouter({
           path: 'we6',
           name: 'we6',
           component: () => import('../views/we/We6.vue'),
+        },
+        {
+          path: 'we7',
+          name: 'we7',
+          component: () => import('../views/we/We7.vue'),
+        },
+        {
+          path: 'we8',
+          name: 'we8',
+          component: () => import('../views/we/We8.vue'),
+        },
+        {
+          path: 'we9',
+          name: 'we9',
+          component: () => import('../views/we/We9.vue'),
+        },
+        {
+          path: 'we10',
+          name: 'we10',
+          component: () => import('../views/we/We10.vue'),
         }
       ]
     },
