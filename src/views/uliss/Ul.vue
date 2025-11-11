@@ -5,12 +5,13 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav>
-      <RouterLink to="/uliss">Улисс</RouterLink>
-      <RouterLink to="/ul1">Глава 1</RouterLink>
-      <RouterLink to="/ul2">Глава 2</RouterLink>
-      <RouterLink to="/ul3">Глава 3</RouterLink>
-      <RouterLink to="/ul4">Глава 4</RouterLink>
-      <RouterLink to="/ul5">Глава 5</RouterLink>
+      <RouterLink :to="{ name: 'ul' }">Улисс</RouterLink>
+      <RouterLink :to="{ name: 'ul1' }">Глава 1</RouterLink>
+      <RouterLink :to="{ name: 'ul2' }">Глава 2</RouterLink>
+      <RouterLink :to="{ name: 'ul3' }">Глава 3</RouterLink>
+      <RouterLink :to="{ name: 'ul4' }">Глава 4</RouterLink>
+      <RouterLink :to="{ name: 'ul5' }">Глава 5</RouterLink>
+      <RouterLink :to="{ name: 'ul6' }">Глава 6</RouterLink>
     </nav>
   </header>
 

@@ -5,7 +5,7 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav>
-      <RouterLink to="/we">Мы</RouterLink>
+      <RouterLink :to="{ name: 'we' }">Мы</RouterLink>
       <RouterLink :to="{ name: 'we1' }">Глава 1</RouterLink>
       <RouterLink :to="{ name: 'we2' }">Глава 2</RouterLink>
       <RouterLink :to="{ name: 'we3' }">Глава 3</RouterLink>
