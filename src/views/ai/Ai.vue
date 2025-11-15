@@ -10,6 +10,10 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'ai2' }">Глава 2</RouterLink>
       <RouterLink :to="{ name: 'ai3' }">Глава 3</RouterLink>
       <RouterLink :to="{ name: 'ai4' }">Глава 4</RouterLink>
+      <RouterLink :to="{ name: 'ai5' }">Глава 5</RouterLink>
+      <RouterLink :to="{ name: 'ai6' }">AI база по программированию</RouterLink>
+      <RouterLink :to="{ name: 'ai7' }">Устройство и работа MCP</RouterLink>
+      <RouterLink :to="{ name: 'ai8' }">Пишем собственный mcp-сервер</RouterLink>
     </nav>
   </header>
 

@@ -22,6 +22,26 @@ export default {
             path: 'ai4',
             name: 'ai4',
             component: () => import('../views/ai/Ai4.vue'),
+        },
+        {
+            path: 'ai5',
+            name: 'ai5',
+            component: () => import('../views/ai/Ai5.vue'),
+        },
+        {
+            path: 'ai6',
+            name: 'ai6',
+            component: () => import('../views/ai/Ai6.vue'),
+        },
+        {
+            path: 'ai7',
+            name: 'ai7',
+            component: () => import('../views/ai/Ai7.vue'),
+        },
+        {
+            path: 'ai8',
+            name: 'ai8',
+            component: () => import('../views/ai/Ai8.vue'),
         }
     ]
 }
