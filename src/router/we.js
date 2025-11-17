@@ -52,6 +52,31 @@ export default {
             path: 'we10',
             name: 'we10',
             component: () => import('../views/we/We10.vue'),
+        },
+        {
+            path: 'we11',
+            name: 'we11',
+            component: () => import('../views/we/We11.vue'),
+        },
+        {
+            path: 'we12',
+            name: 'we12',
+            component: () => import('../views/we/We12.vue'),
+        },
+        {
+            path: 'we13',
+            name: 'we13',
+            component: () => import('../views/we/We13.vue'),
+        },
+        {
+            path: 'we14',
+            name: 'we14',
+            component: () => import('../views/we/We14.vue'),
+        },
+        {
+            path: 'we15',
+            name: 'we15',
+            component: () => import('../views/we/We15.vue'),
         }
     ]
 }
