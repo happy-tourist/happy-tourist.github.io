@@ -14,6 +14,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'ai6' }">AI база по программированию</RouterLink>
       <RouterLink :to="{ name: 'ai7' }">Устройство и работа MCP</RouterLink>
       <RouterLink :to="{ name: 'ai8' }">Пишем собственный mcp-сервер</RouterLink>
+      <RouterLink :to="{ name: 'ch1' }">шахматы</RouterLink>
     </nav>
   </header>
 

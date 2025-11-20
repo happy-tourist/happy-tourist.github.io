@@ -42,6 +42,11 @@ export default {
             path: 'ai8',
             name: 'ai8',
             component: () => import('../views/ai/Ai8.vue'),
+        },
+        {
+            path: 'ch1',
+            name: 'ch1',
+            component: () => import('../views/ai/Ch1.vue'),
         }
     ]
 }
