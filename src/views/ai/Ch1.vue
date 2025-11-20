@@ -37,7 +37,7 @@
     <p class="font-claude-response-body whitespace-normal break-words">И выясняется, что после <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">...Лf1+</code> нашего короля заманивают под вилку. И вместо победы мы что имеем? Мы имеем баранку. То есть наш лишний ферзь пропал, два лишних коня чёрных остались. Всего-то был нарушен принцип «если-то».</p>
     <h2 class="font-claude-response-heading text-text-100 mt-1 -mb-0.5">00:08:35 --- 00:09:06</h2>
     <p class="font-claude-response-body whitespace-normal break-words">Учитесь, пожалуйста, думать правильно. Если у вас есть время — а я советую всем учиться играть в шахматы всё-таки либо в классику, либо в рапид, к блицу переходить тогда, когда вы уже себя в рапиде чувствуете относительно уверенно — если у вас есть время, старайтесь примерно просчитывать варианты строго по принципу: если я хожу так, то как пойдёт соперник? «Если-то»! Ни в коем случае не «хожу так и так».</p>
-    <p class="font-claude-response-body whitespace-normal break-words">Это вот как раз главная ошибка, которая отделяет вас от сильной и успешной игры.</p></div></div>
+    <p class="font-claude-response-body whitespace-normal break-words">Это вот как раз главная ошибка, которая отделяет вас от сильной и успешной игры.</p></div></div>.
 </template>
 <script setup lang="ts">
 import image1 from '@/assets/1.png'
