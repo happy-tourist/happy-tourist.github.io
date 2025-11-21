@@ -25,6 +25,11 @@ const router = createRouter({
           name: 'mur1',
           component: () => import('../views/murych/Mur1.vue'),
         },
+        {
+          path: '/mur2',
+          name: 'mur2',
+          component: () => import('../views/murych/Mur2.vue'),
+        },
       ]
     },
     {

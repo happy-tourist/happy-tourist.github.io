@@ -7,6 +7,7 @@ import { RouterLink, RouterView } from 'vue-router'
     <nav>
       <RouterLink to="/mur">Мурыч</RouterLink>
       <RouterLink to="/mur1">Оптимизируем сайт ECMA Script</RouterLink>
+      <RouterLink to="/mur2">Вторая часть про Зюзьку с перезаписью куска про Array</RouterLink>
     </nav>
   </header>
 
