@@ -40,5 +40,5 @@
     <p class="font-claude-response-body whitespace-normal break-words">Это вот как раз главная ошибка, которая отделяет вас от сильной и успешной игры.</p></div></div>.
 </template>
 <script setup lang="ts">
-import img1 from '@/assets/1.png';
+import img1 from '@/assets/1.PNG';
 </script>
