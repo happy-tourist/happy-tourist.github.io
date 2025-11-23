@@ -77,6 +77,16 @@ export default {
             path: 'we15',
             name: 'we15',
             component: () => import('../views/we/We15.vue'),
+        },
+        {
+            path: 'we16',
+            name: 'we16',
+            component: () => import('../views/we/We16.vue'),
+        },
+        {
+            path: 'we17',
+            name: 'we17',
+            component: () => import('../views/we/We17.vue'),
         }
     ]
 }
