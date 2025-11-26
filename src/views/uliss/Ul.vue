@@ -13,6 +13,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'ul5' }">Глава 5</RouterLink>
       <RouterLink :to="{ name: 'ul6' }">Глава 6</RouterLink>
       <RouterLink :to="{ name: 'ul7' }">Глава 7</RouterLink>
+      <RouterLink :to="{ name: 'ul8' }">Глава 8</RouterLink>
     </nav>
   </header>
 

@@ -87,6 +87,46 @@ export default {
             path: 'we17',
             name: 'we17',
             component: () => import('../views/we/We17.vue'),
+        },
+        {
+            path: 'we18',
+            name: 'we18',
+            component: () => import('../views/we/We18.vue'),
+        },
+        {
+            path: 'we19',
+            name: 'we19',
+            component: () => import('../views/we/We19.vue'),
+        },
+        {
+            path: 'we20',
+            name: 'we20',
+            component: () => import('../views/we/We20.vue'),
+        },
+        {
+            path: 'we21',
+            name: 'we21',
+            component: () => import('../views/we/We21.vue'),
+        },
+        {
+            path: 'we22',
+            name: 'we22',
+            component: () => import('../views/we/We22.vue'),
+        },
+        {
+            path: 'we23',
+            name: 'we23',
+            component: () => import('../views/we/We23.vue'),
+        },
+        {
+            path: 'we24',
+            name: 'we24',
+            component: () => import('../views/we/We24.vue'),
+        },
+        {
+            path: 'we25',
+            name: 'we25',
+            component: () => import('../views/we/We25.vue'),
         }
     ]
 }
