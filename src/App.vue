@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useWindowScroll, useLocalStorage, useDebounceFn } from '@vueuse/core'
-import { watch, onMounted } from 'vue';
+import { watch } from 'vue';
 
 const route = useRoute();
 
@@ -14,12 +14,14 @@ const savePosition = useDebounceFn((position) => {
 
 watch(y, savePosition)
 
-onMounted(() => {
+watch(route, () => {
   setTimeout(() => {
     const savedPosition = scrollPositions.value[route.name]
 
     y.value = savedPosition || 0;
-  }, 100)
+  }, 150)
+}, {
+  immediate: true,
 })
 
 </script>
