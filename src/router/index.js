@@ -3,6 +3,7 @@ import Page from '../views/Page.vue'
 import uliss from './uliss.js';
 import we from './we.js';
 import ai from './ai.js';
+import history from './history.js';
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -15,6 +16,7 @@ const router = createRouter({
     uliss,
     we,
     ai,
+    history,
     {
       path: '/mur',
       name: 'mur',
