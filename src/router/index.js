@@ -4,6 +4,7 @@ import uliss from './uliss.js';
 import we from './we.js';
 import ai from './ai.js';
 import history from './history.js';
+import hobbit from './hobbit.js';
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -17,6 +18,7 @@ const router = createRouter({
     we,
     ai,
     history,
+    hobbit,
     {
       path: '/mur',
       name: 'mur',

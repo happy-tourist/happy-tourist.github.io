@@ -12,6 +12,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink to="/shoushenk">Шоушенк</RouterLink>
       <RouterLink :to="{ name: 'ai' }">Ai</RouterLink>
       <RouterLink :to="{ name: 'history' }">История</RouterLink>
+      <RouterLink :to="{ name: 'hobbit' }">Хоббит</RouterLink>
     </nav>
   </header>
 
