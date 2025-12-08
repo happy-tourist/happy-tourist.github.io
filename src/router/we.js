@@ -127,6 +127,26 @@ export default {
             path: 'we25',
             name: 'we25',
             component: () => import('../views/we/We25.vue'),
+        },
+        {
+            path: 'we26',
+            name: 'we26',
+            component: () => import('../views/we/We26.vue'),
+        },
+        {
+            path: 'we27',
+            name: 'we27',
+            component: () => import('../views/we/We27.vue'),
+        },
+        {
+            path: 'we28',
+            name: 'we28',
+            component: () => import('../views/we/We28.vue'),
+        },
+        {
+            path: 'we29',
+            name: 'we29',
+            component: () => import('../views/we/We29.vue'),
         }
     ]
 }
