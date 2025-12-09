@@ -1,6 +1,6 @@
 <script setup>
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { useWindowScroll, useLocalStorage, useDebounceFn } from '@vueuse/core'
+import { useWindowScroll, useLocalStorage, useDebounceFn, useThrottleFn } from '@vueuse/core'
 import { watch } from 'vue';
 
 const route = useRoute();
@@ -14,11 +14,30 @@ const savePosition = useDebounceFn((position) => {
 
 watch(y, savePosition)
 
+const waitForImages = useThrottleFn(() => {
+  const images = Array.from(document.images);
+
+  return Promise.all(
+      images.map(img => {
+        if (img.complete && img.naturalHeight !== 0) {
+          return Promise.resolve(); // уже загружена
+        }
+
+        return new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true }); // чтобы не зависать
+        });
+      })
+  );
+}, 150);
+
 watch(route, () => {
   setTimeout(() => {
     const savedPosition = scrollPositions.value[route.name]
 
-    y.value = savedPosition || 0;
+    waitForImages().then(() => {
+      y.value = savedPosition || 0;
+    });
   }, 150)
 }, {
   immediate: true,
