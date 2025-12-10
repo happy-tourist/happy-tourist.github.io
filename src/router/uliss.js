@@ -47,6 +47,11 @@ export default {
             path: 'ul9',
             name: 'ul9',
             component: () => import('../views/uliss/Ul9.vue'),
+        },
+        {
+            path: 'ul10',
+            name: 'ul10',
+            component: () => import('../views/uliss/Ul10.vue'),
         }
     ]
 }
