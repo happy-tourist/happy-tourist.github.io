@@ -9,6 +9,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'history1' }">Великая французская революция</RouterLink>
       <RouterLink :to="{ name: 'history2' }">США в 1960е Великое общество Контркультура Вьетнам</RouterLink>
       <RouterLink :to="{ name: 'history3' }">Эпоха великих географических открытий Часть первая</RouterLink>
+      <RouterLink :to="{ name: 'history4' }">Эпоха великих географических открытий Часть вторая</RouterLink>
     </nav>
   </header>
 
