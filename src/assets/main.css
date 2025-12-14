@@ -45,7 +45,7 @@ body{
   background-color: rgb(38, 38, 36);
 }
 
-p {
+p, li {
   --tw-text-opacity: 1;
   color: hsl(var(--text-100) / var(--tw-text-opacity));
 }
