@@ -5,7 +5,7 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav>
-      <RouterLink :to="{ name: 'we' }">Мы</RouterLink>
+      Мы
       <RouterLink :to="{ name: 'we1' }">Глава 1</RouterLink>
       <RouterLink :to="{ name: 'we2' }">Глава 2</RouterLink>
       <RouterLink :to="{ name: 'we3' }">Глава 3</RouterLink>
@@ -36,6 +36,11 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'we28' }">Глава 28</RouterLink>
       <RouterLink :to="{ name: 'we29' }">Глава 29</RouterLink>
       <RouterLink :to="{ name: 'we30' }">Глава 30</RouterLink>
+      <RouterLink :to="{ name: 'we31' }">Глава 31</RouterLink>
+      <RouterLink :to="{ name: 'we32' }">Глава 32</RouterLink>
+      <RouterLink :to="{ name: 'we33' }">Глава 33</RouterLink>
+      <RouterLink :to="{ name: 'we34' }">Глава 34</RouterLink>
+      <RouterLink :to="{ name: 'we35' }">Глава 35</RouterLink>
     </nav>
   </header>
 
@@ -48,5 +53,6 @@ nav{
   gap: 32px;
   margin-bottom: 32px;
   flex-wrap: wrap;
+  color: #fff;
 }
 </style>

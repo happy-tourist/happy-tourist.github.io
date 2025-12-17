@@ -152,6 +152,31 @@ export default {
             path: 'we30',
             name: 'we30',
             component: () => import('../views/we/We30.vue'),
+        },
+        {
+            path: 'we31',
+            name: 'we31',
+            component: () => import('../views/we/We31.vue'),
+        },
+        {
+            path: 'we32',
+            name: 'we32',
+            component: () => import('../views/we/We32.vue'),
+        },
+        {
+            path: 'we33',
+            name: 'we33',
+            component: () => import('../views/we/We33.vue'),
+        },
+        {
+            path: 'we34',
+            name: 'we34',
+            component: () => import('../views/we/We34.vue'),
+        },
+        {
+            path: 'we35',
+            name: 'we35',
+            component: () => import('../views/we/We35.vue'),
         }
     ]
 }

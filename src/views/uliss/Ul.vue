@@ -5,7 +5,7 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <header>
     <nav>
-      <RouterLink :to="{ name: 'ul' }">Улисс</RouterLink>
+      Улисс
       <RouterLink :to="{ name: 'ul1' }">Глава 1</RouterLink>
       <RouterLink :to="{ name: 'ul2' }">Глава 2</RouterLink>
       <RouterLink :to="{ name: 'ul3' }">Глава 3</RouterLink>
@@ -16,6 +16,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'ul8' }">Глава 8</RouterLink>
       <RouterLink :to="{ name: 'ul9' }">Глава 9</RouterLink>
       <RouterLink :to="{ name: 'ul10' }">Глава 10</RouterLink>
+      <RouterLink :to="{ name: 'ul11' }">Глава 11</RouterLink>
     </nav>
   </header>
 
@@ -28,5 +29,6 @@ nav{
   gap: 32px;
   margin-bottom: 32px;
   flex-wrap: wrap;
+  color: #fff;
 }
 </style>
