@@ -12,6 +12,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'history4' }">Эпоха великих географических открытий Часть вторая</RouterLink>
       <RouterLink :to="{ name: 'history5' }">Первые цивилизации Америки</RouterLink>
       <RouterLink :to="{ name: 'history6' }">Цивилизационный процесс в постклассический период</RouterLink>
+      <RouterLink :to="{ name: 'history7' }">Изобретение цивилизации и начало исторического времени</RouterLink>
     </nav>
   </header>
 
