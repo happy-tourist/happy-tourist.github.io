@@ -45,6 +45,10 @@ body{
   background-color: rgb(38, 38, 36);
 }
 
+img{
+  max-width: 100%;
+}
+
 p, li {
   --tw-text-opacity: 1;
   color: hsl(var(--text-100) / var(--tw-text-opacity));
