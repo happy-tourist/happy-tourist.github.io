@@ -177,6 +177,31 @@ export default {
             path: 'we35',
             name: 'we35',
             component: () => import('../views/we/We35.vue'),
+        },
+        {
+            path: 'we36',
+            name: 'we36',
+            component: () => import('../views/we/We36.vue'),
+        },
+        {
+            path: 'we37',
+            name: 'we37',
+            component: () => import('../views/we/We37.vue'),
+        },
+        {
+            path: 'we38',
+            name: 'we38',
+            component: () => import('../views/we/We38.vue'),
+        },
+        {
+            path: 'we39',
+            name: 'we39',
+            component: () => import('../views/we/We39.vue'),
+        },
+        {
+            path: 'we40',
+            name: 'we40',
+            component: () => import('../views/we/We40.vue'),
         }
     ]
 }
