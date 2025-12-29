@@ -10,10 +10,10 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink to="/vuedush">Душнила вью</RouterLink>
       <RouterLink to="/shoushenk">Шоушенк</RouterLink>
       <RouterLink :to="{ name: 'ai' }">Ai</RouterLink>
-      <RouterLink :to="{ name: 'history' }">История</RouterLink>
       <RouterLink :to="{ name: 'hobbit' }">Хоббит</RouterLink>-->
       <RouterLink :to="{ name: 'ul' }">Улисс</RouterLink>
       <RouterLink :to="{ name: 'we' }">Мы</RouterLink>
+      <RouterLink :to="{ name: 'history' }">История</RouterLink>
       <RouterLink :to="{ name: 'china' }">Китай</RouterLink>
     </nav>
   </header>
