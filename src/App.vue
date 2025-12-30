@@ -1,7 +1,8 @@
 <script setup>
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { useWindowScroll, useLocalStorage, useDebounceFn, useThrottleFn } from '@vueuse/core'
-import { watch } from 'vue';
+import { watch, ref } from 'vue';
+import Loading from './components/Loading.vue';
 
 const route = useRoute();
 
@@ -13,6 +14,8 @@ const savePosition = useDebounceFn((position) => {
 }, 300)
 
 watch(y, savePosition)
+
+const _loading = ref(false);
 
 const waitForImages = useThrottleFn(() => {
   const images = Array.from(document.images);
@@ -32,11 +35,13 @@ const waitForImages = useThrottleFn(() => {
 }, 150);
 
 watch(route, () => {
+  _loading.value = true;
   setTimeout(() => {
     const savedPosition = scrollPositions.value[route.name]
 
     waitForImages().then(() => {
       y.value = savedPosition || 0;
+      _loading.value = false;
     });
   }, 150)
 }, {
@@ -46,6 +51,7 @@ watch(route, () => {
 </script>
 
 <template>
+  <Loading v-if="_loading" />
   <div class="bg-bg-100">
     <header>
       <nav style="display: flex; gap: 32px;margin-bottom: 32px;">
