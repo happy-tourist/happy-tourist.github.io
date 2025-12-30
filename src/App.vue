@@ -36,12 +36,14 @@ const waitForImages = useThrottleFn(() => {
 
 watch(route, () => {
   _loading.value = true;
+  document.body.classList.add('no-scroll');
   setTimeout(() => {
     const savedPosition = scrollPositions.value[route.name]
 
     waitForImages().then(() => {
       y.value = savedPosition || 0;
       _loading.value = false;
+      document.body.classList.remove('no-scroll');
     });
   }, 150)
 }, {
