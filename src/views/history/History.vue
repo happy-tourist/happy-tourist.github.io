@@ -7,6 +7,7 @@ import { RouterLink, RouterView } from 'vue-router'
     <nav>
       История
       <RouterLink :to="{ name: 'history1' }">Изобретение цивилизации и начало исторического времени</RouterLink>
+      <RouterLink :to="{ name: 'history2' }">Доктор Лао цзы</RouterLink>
     </nav>
   </header>
 
