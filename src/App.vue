@@ -35,8 +35,6 @@ const waitForImages = useThrottleFn(() => {
 }, 150);
 
 watch(route, () => {
-  if (document.querySelectorAll('img').length === 0) return;
-  
   _loading.value = true;
   document.body.classList.add('no-scroll');
   setTimeout(() => {
