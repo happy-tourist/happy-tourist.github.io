@@ -13,5 +13,10 @@ export default {
             name: 'history2',
             component: () => import('../views/history/History2.vue'),
         },
+        {
+            path: 'history3',
+            name: 'history3',
+            component: () => import('../views/history/History3.vue'),
+        },
     ]
 }
