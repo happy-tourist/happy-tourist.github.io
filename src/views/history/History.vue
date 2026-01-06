@@ -9,6 +9,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'history1' }">Изобретение цивилизации и начало исторического времени</RouterLink>
       <RouterLink :to="{ name: 'history2' }">Доктор Лао цзы</RouterLink>
       <RouterLink :to="{ name: 'history3' }">Североамериканские колонии до обретения независимости</RouterLink>
+      <RouterLink :to="{ name: 'history4' }">Докитайская история Китая</RouterLink>
     </nav>
   </header>
 
