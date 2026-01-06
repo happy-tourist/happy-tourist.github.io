@@ -6,6 +6,7 @@ import ai from './ai.js';
 import history from './history.js';
 import hobbit from './hobbit.js';
 import china from './china.js';
+import node from './node.js';
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,7 @@ const router = createRouter({
     uliss,
     we,
     ai,
+    node,
     history,
     hobbit,
     china,

@@ -14,6 +14,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'ul' }">Улисс</RouterLink>
       <RouterLink :to="{ name: 'we' }">Мы</RouterLink>
       <RouterLink :to="{ name: 'history' }">История</RouterLink>
+      <RouterLink :to="{ name: 'node' }">Лаврик Нода</RouterLink>
       <RouterLink :to="{ name: 'china' }">Китай</RouterLink>
     </nav>
   </header>
