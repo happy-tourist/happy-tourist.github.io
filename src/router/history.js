@@ -28,5 +28,10 @@ export default {
             name: 'history5',
             component: () => import('../views/history/History5.vue'),
         },
+        {
+            path: 'history6',
+            name: 'history6',
+            component: () => import('../views/history/History6.vue'),
+        },
     ]
 }

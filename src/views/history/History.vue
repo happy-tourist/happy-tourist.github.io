@@ -11,6 +11,7 @@ import { RouterLink, RouterView } from 'vue-router'
       <RouterLink :to="{ name: 'history3' }">Североамериканские колонии до обретения независимости</RouterLink>
       <RouterLink :to="{ name: 'history4' }">Докитайская история Китая</RouterLink>
       <RouterLink :to="{ name: 'history5' }">Любовь, смерть и клинопись в Месопотамии</RouterLink>
+      <RouterLink :to="{ name: 'history6' }">Американская революция</RouterLink>
     </nav>
   </header>
 
