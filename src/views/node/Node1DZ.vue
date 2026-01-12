@@ -183,16 +183,16 @@
 </template>
 
 <script setup>
-import screenshot_0002 from '@/assets/xxx/screenshot_0002.jpg';
-import screenshot_0055 from '@/assets/xxx/screenshot_0055.jpg';
-import screenshot_0127 from '@/assets/xxx/screenshot_0127.jpg';
-import screenshot_0129 from '@/assets/xxx/screenshot_0129.jpg';
-import screenshot_0146 from '@/assets/xxx/screenshot_0146.jpg';
-import screenshot_0150 from '@/assets/xxx/screenshot_0150.jpg';
-import screenshot_0155 from '@/assets/xxx/screenshot_0155.jpg';
-import screenshot_0242 from '@/assets/xxx/screenshot_0242.jpg';
-import screenshot_0411 from '@/assets/xxx/screenshot_0411.jpg';
-import screenshot_0413 from '@/assets/xxx/screenshot_0413.jpg';
-import screenshot_0535 from '@/assets/xxx/screenshot_0535.jpg';
-import screenshot_0537 from '@/assets/xxx/screenshot_0537.jpg';
+import screenshot_0002 from '@/assets/node/node1dz/screenshot_0002.jpg';
+import screenshot_0055 from '@/assets/node/node1dz/screenshot_0055.jpg';
+import screenshot_0127 from '@/assets/node/node1dz/screenshot_0127.jpg';
+import screenshot_0129 from '@/assets/node/node1dz/screenshot_0129.jpg';
+import screenshot_0146 from '@/assets/node/node1dz/screenshot_0146.jpg';
+import screenshot_0150 from '@/assets/node/node1dz/screenshot_0150.jpg';
+import screenshot_0155 from '@/assets/node/node1dz/screenshot_0155.jpg';
+import screenshot_0242 from '@/assets/node/node1dz/screenshot_0242.jpg';
+import screenshot_0411 from '@/assets/node/node1dz/screenshot_0411.jpg';
+import screenshot_0413 from '@/assets/node/node1dz/screenshot_0413.jpg';
+import screenshot_0535 from '@/assets/node/node1dz/screenshot_0535.jpg';
+import screenshot_0537 from '@/assets/node/node1dz/screenshot_0537.jpg';
 </script>
