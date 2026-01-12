@@ -7,6 +7,7 @@ import { RouterLink, RouterView } from 'vue-router'
     <nav>
       Нода Лаврик
       <RouterLink :to="{ name: 'node1' }">Урок 1</RouterLink>
+      <RouterLink :to="{ name: 'node1dz' }">Урок 1. ДЗ</RouterLink>
     </nav>
   </header>
 
