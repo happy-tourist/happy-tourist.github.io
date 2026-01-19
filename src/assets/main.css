@@ -49,6 +49,13 @@ body.no-scroll {
   overflow: hidden;
 }
 
+code {
+    white-space: nowrap!important;
+    overflow-x: auto;
+    display: inline-block;
+    max-width: 100%;
+}
+
 img{
   max-width: 100%;
 }
