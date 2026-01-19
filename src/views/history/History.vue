@@ -6,6 +6,7 @@ import { RouterLink, RouterView } from 'vue-router'
   <header>
     <nav>
       <RouterLink :to="{ name: 'history1' }">Результат исследования</RouterLink>
+      <RouterLink :to="{ name: 'history2' }">Критика исследования монахов</RouterLink>
     </nav>
   </header>
 
