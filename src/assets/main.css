@@ -60,7 +60,7 @@ img{
   max-width: 100%;
 }
 
-p, li {
+p, li, table {
   --tw-text-opacity: 1;
   color: hsl(var(--text-100) / var(--tw-text-opacity));
 }
