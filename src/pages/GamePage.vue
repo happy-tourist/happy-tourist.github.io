@@ -47,7 +47,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useGameStore, type CellValue } from '@/stores/game';
 
 const game = useGameStore();
-const route = useRoute();
+const route = useRoute('game');
 const router = useRouter();
 
 const selected = ref<{ row: number; col: number } | null>(null);

@@ -17,19 +17,33 @@ export interface GameRoomMeta {
 }
 
 function emptyBoard(): Board {
-  return Array.from({ length: 8 }, () => Array.from({ length: 8 }, () => 0 as CellValue));
+  return Array.from({ length: 8 }, () =>
+    Array.from({ length: 8 }, (): CellValue => 0),
+  );
 }
 
+type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
+
 export const useGameStore = defineStore('game', {
-  state: () => ({
-    rooms: [] as RoomAvailable<GameRoomMeta>[],
-    room: null as Room | null,
-    roomId: null as string | null,
+  state: (): {
+    rooms: RoomAvailable<GameRoomMeta>[];
+    room: Room | null;
+    roomId: string | null;
+    board: Board;
+    myColor: 'white' | 'black' | null;
+    currentTurn: 'white' | 'black' | null;
+    status: GameStatus;
+    error: string | null;
+    listing: boolean;
+  } => ({
+    rooms: [],
+    room: null,
+    roomId: null,
     board: emptyBoard(),
-    myColor: null as 'white' | 'black' | null,
-    currentTurn: null as 'white' | 'black' | null,
-    status: 'idle' as 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished',
-    error: null as string | null,
+    myColor: null,
+    currentTurn: null,
+    status: 'idle',
+    error: null,
     listing: false,
   }),
 

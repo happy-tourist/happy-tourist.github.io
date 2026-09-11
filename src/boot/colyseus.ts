@@ -1,10 +1,8 @@
-import { boot } from 'quasar/wrappers';
+import { defineBoot } from '#q-app';
 import { Client } from '@colyseus/sdk';
 
-const url = import.meta.env.VITE_COLYSEUS_URL as string;
+export const client = new Client(import.meta.env.VITE_COLYSEUS_URL);
 
-export const client = new Client(url);
-
-export default boot(({ app }) => {
+export default defineBoot(({ app }) => {
   app.config.globalProperties.$colyseus = client;
 });
