@@ -7,7 +7,6 @@
       </div>
 
       <div class="q-gutter-sm">
-        <q-btn flat icon="refresh" :loading="game.listing" @click="game.refreshRooms()" />
         <q-btn flat icon="logout" label="Выйти" @click="onLogout" />
       </div>
     </div>
@@ -41,28 +40,40 @@
     <q-list bordered separator class="rounded-borders">
       <q-item-label header>Доступные игры</q-item-label>
 
-      <q-item v-if="!game.rooms.length && !game.listing">
-        <q-item-section class="text-grey-7">Пока нет открытых комнат</q-item-section>
-      </q-item>
+      <template v-if="game.listing">
+        <q-item>
+          <q-item-section class="text-grey-7">Загрузка списка комнат…</q-item-section>
+        </q-item>
+      </template>
 
-      <q-item
-        v-for="room in game.rooms"
-        :key="room.roomId"
-        clickable
-        v-ripple
-        @click="onJoin(room.roomId)"
-      >
-        <q-item-section>
-          <q-item-label>{{ room.metadata?.title || `Комната ${room.roomId.slice(0, 6)}` }}</q-item-label>
-          <q-item-label caption>
-            {{ room.clients }}/{{ room.maxClients }} игроков
-            <span v-if="room.metadata?.status"> · {{ room.metadata.status }}</span>
-          </q-item-label>
-        </q-item-section>
-        <q-item-section side>
-          <q-btn flat dense color="primary" label="Войти" />
-        </q-item-section>
-      </q-item>
+      <template v-else-if="!game.rooms.length">
+        <q-item>
+          <q-item-section class="text-grey-7">Пока нет открытых комнат</q-item-section>
+        </q-item>
+      </template>
+
+      <template v-else>
+        <q-item
+          v-for="room in game.rooms"
+          :key="room.roomId"
+          clickable
+          v-ripple
+          @click="onJoin(room.roomId)"
+        >
+          <q-item-section>
+            <q-item-label>{{
+              room.metadata?.title || `Комната ${room.roomId.slice(0, 6)}`
+            }}</q-item-label>
+            <q-item-label caption>
+              {{ room.clients }}/{{ room.maxClients }} игроков
+              <span v-if="room.metadata?.status"> · {{ room.metadata.status }}</span>
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-btn flat dense color="primary" label="Войти" />
+          </q-item-section>
+        </q-item>
+      </template>
     </q-list>
   </q-page>
 </template>
@@ -80,17 +91,13 @@ const router = useRouter();
 
 const creating = ref(false);
 const joining = ref(false);
-let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 onMounted(() => {
-  void game.refreshRooms();
-  pollTimer = setInterval(() => void game.refreshRooms(), 5000);
+  void game.subscribeLobby();
 });
 
 onUnmounted(() => {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-  }
+  void game.unsubscribeLobby();
 });
 
 /** joinOrCreate(CHECKERS_ROOM) → room в Pinia → /game/:roomId */

@@ -3,10 +3,10 @@
 Карта внешних корней для AI-агентов и docs. Не путать с каноном экосистемы
 `happy-tourist-meta/docs/projects-map.md` (сервис → путь внутри meta).
 
-| Key | Relative path (from this repo root) | Notes |
-|-----|-------------------------------------|--------|
-| happy-tourist-meta | .. | Sibling layout: `happy-tourist.github.io` рядом с `happy-tourist-meta` |
-| happy-tourist-server | ../happy-tourist-server | Colyseus multiplayer backend |
+| Key                  | Relative path (from this repo root) | Notes                                                                  |
+| -------------------- | ----------------------------------- | ---------------------------------------------------------------------- |
+| happy-tourist-meta   | ..                                  | Sibling layout: `happy-tourist.github.io` рядом с `happy-tourist-meta` |
+| happy-tourist-server | ../happy-tourist-server             | Colyseus multiplayer backend                                           |
 
 ## Resolution
 

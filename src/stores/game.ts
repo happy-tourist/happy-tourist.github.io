@@ -6,6 +6,9 @@ import { client } from '@/boot/colyseus';
 /** Room name registered on the Colyseus server. */
 export const CHECKERS_ROOM = 'checkers';
 
+/** Built-in Colyseus LobbyRoom name. */
+export const LOBBY_ROOM = 'lobby';
+
 export type CellValue = 0 | 1 | 2 | 3 | 4;
 /** 0 empty, 1 white, 2 black, 3 white king, 4 black king */
 export type Board = CellValue[][];
@@ -17,9 +20,7 @@ export interface GameRoomMeta {
 }
 
 function emptyBoard(): Board {
-  return Array.from({ length: 8 }, () =>
-    Array.from({ length: 8 }, (): CellValue => 0),
-  );
+  return Array.from({ length: 8 }, () => Array.from({ length: 8 }, (): CellValue => 0));
 }
 
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
@@ -27,6 +28,7 @@ type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
 export const useGameStore = defineStore('game', {
   state: (): {
     rooms: RoomAvailable<GameRoomMeta>[];
+    lobbyRoom: Room | null;
     room: Room | null;
     roomId: string | null;
     board: Board;
@@ -37,6 +39,7 @@ export const useGameStore = defineStore('game', {
     listing: boolean;
   } => ({
     rooms: [],
+    lobbyRoom: null,
     room: null,
     roomId: null,
     board: emptyBoard(),
@@ -54,6 +57,7 @@ export const useGameStore = defineStore('game', {
   },
 
   actions: {
+    /** HTTP fallback listing — unused by LobbyPage (live LobbyRoom subscribe). */
     async refreshRooms() {
       this.listing = true;
       this.error = null;
@@ -70,6 +74,65 @@ export const useGameStore = defineStore('game', {
       }
     },
 
+    async subscribeLobby() {
+      await this.unsubscribeLobby();
+      this.listing = true;
+      this.error = null;
+
+      try {
+        const lobby = await client.joinOrCreate(LOBBY_ROOM, {
+          filter: { name: CHECKERS_ROOM },
+        });
+        this.lobbyRoom = lobby;
+
+        lobby.onMessage('rooms', (rooms: RoomAvailable<GameRoomMeta>[]) => {
+          this.rooms = rooms ?? [];
+        });
+
+        lobby.onMessage('+', ([roomId, room]: [string, RoomAvailable<GameRoomMeta>]) => {
+          const idx = this.rooms.findIndex((r) => r.roomId === roomId);
+          if (idx === -1) {
+            this.rooms.push(room);
+          } else {
+            this.rooms.splice(idx, 1, room);
+          }
+        });
+
+        lobby.onMessage('-', (roomId: string) => {
+          this.rooms = this.rooms.filter((r) => r.roomId !== roomId);
+        });
+
+        lobby.onError((_code, message) => {
+          this.error = message || 'Lobby error';
+        });
+
+        lobby.onLeave(() => {
+          if (this.lobbyRoom === lobby) {
+            this.lobbyRoom = null;
+          }
+        });
+      } catch (e) {
+        this.error = e instanceof Error ? e.message : String(e);
+        this.rooms = [];
+        this.lobbyRoom = null;
+      } finally {
+        this.listing = false;
+      }
+    },
+
+    async unsubscribeLobby() {
+      const lobby = this.lobbyRoom;
+      this.lobbyRoom = null;
+
+      if (lobby) {
+        try {
+          await lobby.leave();
+        } catch {
+          // lobby may already be closed
+        }
+      }
+    },
+
     async createGame(options: Record<string, unknown> = {}) {
       return this._enterRoom(() => client.create(CHECKERS_ROOM, options));
     },
@@ -82,6 +145,9 @@ export const useGameStore = defineStore('game', {
     },
 
     async leaveGame() {
+      // logout / leave screen: drop lobby subscription with any session reset
+      await this.unsubscribeLobby();
+
       const room = this.room;
       this._resetRoomState();
 
@@ -101,13 +167,37 @@ export const useGameStore = defineStore('game', {
       this.room.send('move', { from, to });
     },
 
+    /**
+     * Detach a prior checkers room without touching the lobby subscription.
+     * Lobby stays live until enter succeeds (SC-LOBBY-01 / SC-LOBBY-05).
+     */
+    async _leaveCheckersRoom() {
+      const room = this.room;
+      this.room = null;
+      this.roomId = null;
+      this.board = emptyBoard();
+      this.myColor = null;
+      this.currentTurn = null;
+
+      if (room) {
+        try {
+          await room.leave();
+        } catch {
+          // room may already be closed
+        }
+      }
+    },
+
     async _enterRoom(connect: () => Promise<Room>) {
       this.status = 'connecting';
       this.error = null;
 
       try {
-        await this.leaveGame();
+        // Keep lobby WS during the attempt so a failed enter leaves the list live.
+        // Unsubscribe only after checkers connect succeeds (SC-LOBBY-05 / design D2).
+        await this._leaveCheckersRoom();
         const room = await connect();
+        await this.unsubscribeLobby();
         this._attachRoom(room);
         return room;
       } catch (e) {
