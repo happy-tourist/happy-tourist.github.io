@@ -49,7 +49,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 
 - Quasar components (`q-page`, `q-card`, `q-btn`, `q-list`, …) with Material Icons + Roboto extras.
 - Quasar `Dark` plugin for chrome light/dark; Sass variables in `src/css/quasar.variables.scss`; global styles in `src/css/app.scss` (includes `.text-muted` for dark-friendly secondary text).
-- Shared `q-header` theme toggle in `App.vue` (all pages). Guest preference → `localStorage` (`ht-theme`); registered → userdata `theme` + `POST /api/theme`. Checkers board scoped CSS is independent of chrome Dark.
+- Shared `q-header` theme toggle in `App.vue` (all pages). Guest preference → `localStorage` (`ht-theme`); registered → `GET /api/theme` restore (not JWT-only) + `POST /api/theme` on toggle. Checkers board scoped CSS is independent of chrome Dark.
 - Route pages under `src/pages/` (`LoginPage`, `LobbyPage`, `GamePage`).
 - Scaffold leftovers may remain (`EssentialLink.vue`, `example-store.ts`, unused `pages/index*`) — prefer the login/lobby/game flow above.
 
@@ -87,7 +87,7 @@ Typical order conceptually:
 3. Boot `i18n` — `createI18n` + `app.use(i18n)`.
 4. Boot `colyseus` — exports `client`, sets `app.config.globalProperties.$colyseus`.
 5. Router `beforeEach` awaits `useAuthStore().whenReady()`, then enforces `requiresAuth` / `guest` meta.
-6. Root `App.vue` mounts `q-layout` → shared `q-header` (theme toggle) → `router-view`; syncs theme from `auth.user` when ready.
+6. Root `App.vue` mounts `q-layout` → shared `q-header` (theme toggle) → `router-view`; on `auth.ready` / identity change restores theme via `GET /api/theme` (registered) or `localStorage` (guest).
 
 ## What Is Connected Globally
 
@@ -161,7 +161,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 ## Pinia Stores
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
-- **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered apply from userdata + `client.http.post('/api/theme')` on toggle (`error` + App `q-banner` on save fail). Wired from `App.vue`.
+- **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone) + `post('/api/theme')` on toggle (`error` + App `q-banner` on fail). Wired from `App.vue`.
 - **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `room`, `roomId`, `board`, `myColor`, `currentTurn`, `status`, `error`, `listing`; getters `isInRoom`, `canMove`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `leaveGame`, `sendMove` (`refreshRooms` HTTP unused by LobbyPage).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
@@ -197,24 +197,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                  |
-| ----------------------------- | -------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (not axios/BFF)            |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit    |
-| `client-locate-change-points` | Where to edit/add without changing code                  |
-| `client-verify-code`          | Branch diff vs all client code skills                    |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                  |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError` |
+| Skill                         | Use for                                                          |
+| ----------------------------- | ---------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                    |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit            |
+| `client-locate-change-points` | Where to edit/add without changing code                          |
+| `client-verify-code`          | Branch diff vs all client code skills                            |
+| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                          |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`   |
 | `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell) |
-| `work-with-forms`             | LoginPage `q-form` / rules                               |
-| `work-with-pages`             | Routes + guards; App theme header                        |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game`                          |
-| `work-with-styles`            | Quasar Dark + header, variables, muted chrome, board CSS |
-| `work-with-localization`      | vue-i18n boot (thin)                                     |
-| `work-with-lobby`             | Live LobbyRoom list, leave policy, create / join         |
-| `work-with-rooms`             | Room lifecycle, `onStateChange` / `onLeave`              |
-| `work-with-game-board`        | Board, `send('move')`, highlights, `canMove`             |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                      |
+| `work-with-forms`             | LoginPage `q-form` / rules                                       |
+| `work-with-pages`             | Routes + guards; App theme header                                |
+| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                  |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board |
+| `work-with-localization`      | vue-i18n boot (thin)                                             |
+| `work-with-lobby`             | Live LobbyRoom list, leave policy, create / join                 |
+| `work-with-rooms`             | Room lifecycle, `onStateChange` / `onLeave`                      |
+| `work-with-game-board`        | Board, `send('move')`, highlights, `canMove`                     |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                              |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 

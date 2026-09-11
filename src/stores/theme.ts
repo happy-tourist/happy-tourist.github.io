@@ -5,6 +5,7 @@ import { Dark } from 'quasar';
 import { client } from '@/boot/colyseus';
 import {
   applyQuasarTheme,
+  clearStoredTheme,
   readStoredTheme,
   writeStoredTheme,
   type StoredTheme,
@@ -13,34 +14,64 @@ import { useAuthStore, type AuthUser } from '@/stores/auth';
 
 /**
  * UI theme preference (Quasar Dark).
- * Guest → localStorage; registered → POST /api/theme + apply from userdata on login.
+ * Guest → localStorage; registered → POST save + GET restore from profile (not JWT-only).
  */
 export const useThemeStore = defineStore('theme', () => {
   const preference = ref<StoredTheme | null>(readStoredTheme());
   const error = ref<string | null>(null);
+
+  /** Ignores stale GET responses when auth user changes mid-flight. */
+  let restoreGeneration = 0;
 
   function apply(theme: StoredTheme | null) {
     preference.value = theme;
     applyQuasarTheme(theme);
   }
 
+  function themeFromPayload(value: unknown): StoredTheme | null {
+    return value === 'light' || value === 'dark' ? value : null;
+  }
+
   /**
-   * Registered user with theme in userdata → apply it (SC-THEME-06).
-   * Registered with unset theme → device auto (SC-THEME-01).
    * Guest / signed out → localStorage or auto (SC-THEME-03).
+   * Registered → GET /api/theme from profile (SC-THEME-08/09); do not use JWT
+   * `user.theme` alone after reload. Login userdata may still match GET after a
+   * fresh sign-in (SC-THEME-06).
    */
-  function syncFromAuthUser(user: AuthUser | null) {
-    if (user && !user.anonymous) {
-      const theme = user.theme;
-      if (theme === 'light' || theme === 'dark') {
-        apply(theme);
-        return;
-      }
-      apply(null);
+  async function syncFromAuthUser(user: AuthUser | null) {
+    const generation = ++restoreGeneration;
+
+    if (!user || user.anonymous) {
+      apply(readStoredTheme());
       return;
     }
 
-    apply(readStoredTheme());
+    error.value = null;
+    try {
+      const { data } = await client.http.get<{ theme?: string | null }>('/api/theme');
+      if (generation !== restoreGeneration) {
+        return;
+      }
+      const theme = themeFromPayload(data?.theme);
+      apply(theme);
+      // Keep device copy aligned with profile (or clear when unset → auto).
+      if (theme) {
+        writeStoredTheme(theme);
+      } else {
+        clearStoredTheme();
+      }
+      // Patch in-memory userdata for display; not a substitute for GET on reload.
+      const auth = useAuthStore();
+      if (auth.user && !auth.user.anonymous) {
+        auth.user = { ...auth.user, theme };
+      }
+    } catch (e) {
+      if (generation !== restoreGeneration) {
+        return;
+      }
+      error.value = e instanceof Error ? e.message : String(e);
+      // Keep early localStorage / boot apply; do not fall back to stale JWT alone.
+    }
   }
 
   /** Explicit light ↔ dark toggle; persists guest locally / registered via HTTP. */

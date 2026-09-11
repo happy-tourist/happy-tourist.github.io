@@ -19,6 +19,15 @@ export function writeStoredTheme(theme: StoredTheme): void {
   localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
+/** Drop device copy when profile theme is unset (registered restore → auto). */
+export function clearStoredTheme(): void {
+  try {
+    localStorage.removeItem(THEME_STORAGE_KEY);
+  } catch {
+    // ignore quota / private-mode failures
+  }
+}
+
 /** Apply Quasar Dark: explicit light/dark, or `auto` when unset (SC-THEME-01). */
 export function applyQuasarTheme(theme: StoredTheme | null): void {
   if (theme === 'light') {

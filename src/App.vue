@@ -35,14 +35,15 @@ import { useThemeStore } from '@/stores/theme';
 const auth = useAuthStore();
 const theme = useThemeStore();
 
+// Restore on ready / identity change — not on in-memory `user.theme` patches after POST.
 watch(
-  () => [auth.ready, auth.user] as const,
+  () => [auth.ready, auth.user?.id, auth.user?.anonymous] as const,
   () => {
     if (auth.ready) {
-      theme.syncFromAuthUser(auth.user);
+      void theme.syncFromAuthUser(auth.user);
     }
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 );
 
 function onToggleTheme() {
