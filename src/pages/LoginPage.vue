@@ -63,6 +63,14 @@
 
       <q-card-actions vertical class="q-gutter-sm q-px-md q-pb-md">
         <q-btn
+          outline
+          color="primary"
+          class="full-width"
+          :label="$t('login.google')"
+          :loading="auth.loading"
+          @click="onGoogle"
+        />
+        <q-btn
           flat
           color="primary"
           :label="isRegister ? 'Уже есть аккаунт' : 'Создать аккаунт'"
@@ -124,6 +132,15 @@ async function onAnonymous() {
   try {
     const options = displayName.value ? { name: displayName.value } : {};
     await auth.loginAnonymously(options);
+    await goAfterLogin();
+  } catch {
+    // error already in store
+  }
+}
+
+async function onGoogle() {
+  try {
+    await auth.loginWithGoogle();
     await goAfterLogin();
   } catch {
     // error already in store

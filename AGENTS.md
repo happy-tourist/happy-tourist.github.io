@@ -24,7 +24,7 @@ Main scenarios:
 Main users:
 
 - Casual players who want a short online checkers match in the browser.
-- Guests (anonymous Colyseus auth) and registered users (email/password).
+- Guests (anonymous Colyseus auth), registered users (email/password), and Google one-click (`loginWithGoogle` / `signInWithProvider('google')`).
 
 There is no admin cabinet or content CMS in this app.
 
@@ -60,7 +60,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 
 ## Specific Tasks
 
-- Colyseus Auth — register, email/password login, anonymous login, logout via `stores/auth`.
+- Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
 - Checkers room name constant `CHECKERS_ROOM = 'checkers'` in `stores/game`.
 - Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'checkers' } })`); HTTP `GET /rooms/checkers` remains unused fallback.
 - Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `send('move')`, `leave`.

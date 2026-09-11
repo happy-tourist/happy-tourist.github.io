@@ -18,6 +18,7 @@ export interface AuthUser {
  * - client.auth.registerWithEmailAndPassword(email, password, options?)
  * - client.auth.signInWithEmailAndPassword(email, password)
  * - client.auth.signInAnonymously(options?)
+ * - client.auth.signInWithProvider('google')
  * - client.auth.signOut()
  * - client.auth.token / onChange — token persisted under "colyseus-auth-token"
  */
@@ -90,6 +91,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function loginWithGoogle() {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      await client.auth.signInWithProvider('google');
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function logout() {
     loading.value = true;
     error.value = null;
@@ -122,6 +137,7 @@ export const useAuthStore = defineStore('auth', () => {
     register,
     login,
     loginAnonymously,
+    loginWithGoogle,
     logout,
     whenReady,
   };
