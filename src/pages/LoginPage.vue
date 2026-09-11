@@ -3,7 +3,7 @@
     <q-card class="login-card q-pa-md" flat bordered>
       <q-card-section>
         <div class="text-h5 text-center">Шашки</div>
-        <div class="text-subtitle2 text-center text-grey-7 q-mt-xs">
+        <div class="text-subtitle2 text-center text-muted q-mt-xs">
           {{ isRegister ? 'Регистрация' : 'Вход' }}
         </div>
       </q-card-section>
@@ -78,7 +78,7 @@
         />
         <q-btn
           flat
-          color="grey-8"
+          color="grey"
           label="Войти как гость"
           :loading="auth.loading"
           @click="onAnonymous"

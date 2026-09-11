@@ -4,9 +4,9 @@
       <q-btn flat icon="arrow_back" label="Лобби" @click="onLeave" />
       <div class="text-center">
         <div class="text-subtitle1">{{ statusLabel }}</div>
-        <div class="text-caption text-grey-7">{{ turnLabel }}</div>
+        <div class="text-caption text-muted">{{ turnLabel }}</div>
       </div>
-      <div class="text-caption text-grey-7">{{ game.roomId?.slice(0, 8) }}</div>
+      <div class="text-caption text-muted">{{ game.roomId?.slice(0, 8) }}</div>
     </div>
 
     <q-banner

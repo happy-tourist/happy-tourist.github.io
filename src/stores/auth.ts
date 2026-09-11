@@ -8,6 +8,8 @@ export interface AuthUser {
   email?: string;
   name?: string;
   anonymous?: boolean;
+  /** Registered-user UI theme from userdata (`light` | `dark`); unset when null/absent. */
+  theme?: string | null;
   [key: string]: unknown;
 }
 

@@ -1,1 +1,10 @@
 // app global css
+
+/* Secondary/muted text readable in both light and dark chrome */
+.text-muted {
+  color: rgba(0, 0, 0, 0.54);
+}
+
+.body--dark .text-muted {
+  color: rgba(255, 255, 255, 0.7);
+}

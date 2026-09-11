@@ -3,7 +3,7 @@
     <div class="row items-center justify-between q-mb-md">
       <div>
         <div class="text-h5">Лобби</div>
-        <div class="text-subtitle2 text-grey-7">Привет, {{ auth.displayName }}</div>
+        <div class="text-subtitle2 text-muted">Привет, {{ auth.displayName }}</div>
       </div>
 
       <div class="q-gutter-sm">
@@ -42,13 +42,13 @@
 
       <template v-if="game.listing">
         <q-item>
-          <q-item-section class="text-grey-7">Загрузка списка комнат…</q-item-section>
+          <q-item-section class="text-muted">Загрузка списка комнат…</q-item-section>
         </q-item>
       </template>
 
       <template v-else-if="!game.rooms.length">
         <q-item>
-          <q-item-section class="text-grey-7">Пока нет открытых комнат</q-item-section>
+          <q-item-section class="text-muted">Пока нет открытых комнат</q-item-section>
         </q-item>
       </template>
 
