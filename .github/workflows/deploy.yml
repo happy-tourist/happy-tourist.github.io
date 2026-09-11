@@ -29,6 +29,9 @@ jobs:
         run: npm ci
 
       - name: Build Quasar SPA
+        env:
+          VITE_COLYSEUS_URL: ${{ vars.VITE_COLYSEUS_URL }}
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
         run: npx quasar build -m spa
 
       - name: Prepare artifact
