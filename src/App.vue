@@ -36,8 +36,10 @@ const auth = useAuthStore();
 const theme = useThemeStore();
 
 // Restore on ready / identity change — not on in-memory `user.theme` patches after POST.
+// Source must be a stable multi-source array (not a getter that allocates a new [] each run),
+// otherwise any invalidate (e.g. replacing auth.user) re-fires even when primitives are unchanged.
 watch(
-  () => [auth.ready, auth.user?.id, auth.user?.anonymous] as const,
+  [() => auth.ready, () => auth.user?.id, () => auth.user?.anonymous],
   () => {
     if (auth.ready) {
       void theme.syncFromAuthUser(auth.user);

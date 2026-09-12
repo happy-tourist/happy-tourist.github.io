@@ -55,15 +55,11 @@ export const useThemeStore = defineStore('theme', () => {
       const theme = themeFromPayload(data?.theme);
       apply(theme);
       // Keep device copy aligned with profile (or clear when unset → auto).
+      // Theme lives in this store after GET — do not replace auth.user (SC-THEME-10 / D9).
       if (theme) {
         writeStoredTheme(theme);
       } else {
         clearStoredTheme();
-      }
-      // Patch in-memory userdata for display; not a substitute for GET on reload.
-      const auth = useAuthStore();
-      if (auth.user && !auth.user.anonymous) {
-        auth.user = { ...auth.user, theme };
       }
     } catch (e) {
       if (generation !== restoreGeneration) {

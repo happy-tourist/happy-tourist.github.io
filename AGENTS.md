@@ -87,7 +87,7 @@ Typical order conceptually:
 3. Boot `i18n` — `createI18n` + `app.use(i18n)`.
 4. Boot `colyseus` — exports `client`, sets `app.config.globalProperties.$colyseus`.
 5. Router `beforeEach` awaits `useAuthStore().whenReady()`, then enforces `requiresAuth` / `guest` meta.
-6. Root `App.vue` mounts `q-layout` → shared `q-header` (theme toggle) → `router-view`; on `auth.ready` / identity change restores theme via `GET /api/theme` (registered) or `localStorage` (guest).
+6. Root `App.vue` mounts `q-layout` → shared `q-header` (theme toggle) → `router-view`; stable `watch` on `auth.ready` / user id / anonymous restores theme via `GET /api/theme` (registered) or `localStorage` (guest) — do not replace `auth.user` after GET (avoids restore request storm).
 
 ## What Is Connected Globally
 
@@ -161,7 +161,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 ## Pinia Stores
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
-- **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone) + `post('/api/theme')` on toggle (`error` + App `q-banner` on fail). Wired from `App.vue`.
+- **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
 - **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `room`, `roomId`, `board`, `myColor`, `currentTurn`, `status`, `error`, `listing`; getters `isInRoom`, `canMove`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `leaveGame`, `sendMove` (`refreshRooms` HTTP unused by LobbyPage).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
