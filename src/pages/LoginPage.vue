@@ -2,7 +2,7 @@
   <q-page class="flex flex-center q-pa-md">
     <q-card class="login-card q-pa-md" flat bordered>
       <q-card-section>
-        <div class="text-h5 text-center">Шашки</div>
+        <div class="text-h5 text-center">Счастливый турист</div>
         <div class="text-subtitle2 text-center text-muted q-mt-xs">
           {{ isRegister ? 'Регистрация' : 'Вход' }}
         </div>

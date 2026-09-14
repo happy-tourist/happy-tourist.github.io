@@ -4,7 +4,7 @@ Skills and OpenSpec live in **happy-tourist-meta**. Before choosing a skill: [`h
 
 ## What This Application Is
 
-`happy-tourist-client` (`happy-tourist-client-2` in `package.json`) is the browser SPA for online checkers (шашки). Players authenticate, join a lobby, create or enter a Colyseus room, and play a realtime game against another player.
+`happy-tourist-client` (`happy-tourist-client-2` in `package.json`) is the browser SPA for online board game «Счастливый турист». Players authenticate, join a lobby, create or enter a Colyseus room, and play a realtime game against another player.
 
 This repository (`happy-tourist.github.io`) is the client-only frontend. The sibling Colyseus server lives in [`../happy-tourist-server`](../happy-tourist-server) and is reached via WebSocket / HTTP URLs from env (`VITE_COLYSEUS_URL`, `VITE_API_URL`).
 
@@ -14,23 +14,23 @@ Main scenarios:
 
 - Register / sign in with email and password (Colyseus Auth).
 - Sign in anonymously as a guest.
-- Browse available checkers rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `checkers`).
+- Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Play russian checkers on an 8×8 board with live state sync from the room.
+- Open Game and view the static tourist board after joining a `tourist` room (rules later).
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
 
 Main users:
 
-- Casual players who want a short online checkers match in the browser.
+- Casual players who want a short online board game «Счастливый турист» match in the browser.
 - Guests (anonymous Colyseus auth), registered users (email/password), and Google one-click (`loginWithGoogle` / `signInWithProvider('google')`).
 
 There is no admin cabinet or content CMS in this app.
 
 ## Important
 
-This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Game rules and board truth live on the server; the client only renders state and sends `move` messages (local move highlights in `GamePage` are UI hints only).
+This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Game rules (later) live on the server; today Game shows a static tourist board with no move UX.
 
 Deploy target: GitHub Pages (user/org site at domain root). Router mode is **hash** so deep links work without a history fallback (CI also copies `index.html` → `404.html`).
 
@@ -49,7 +49,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 
 - Quasar components (`q-page`, `q-card`, `q-btn`, `q-list`, …) with Material Icons + Roboto extras.
 - Quasar `Dark` plugin for chrome light/dark; Sass variables in `src/css/quasar.variables.scss`; global styles in `src/css/app.scss` (includes `.text-muted` for dark-friendly secondary text).
-- Shared `q-header` theme toggle in `App.vue` (all pages). Guest preference → `localStorage` (`ht-theme`); registered → `GET /api/theme` restore (not JWT-only) + `POST /api/theme` on toggle. Checkers board scoped CSS is independent of chrome Dark.
+- Shared `q-header` theme toggle in `App.vue` (all pages). Guest preference → `localStorage` (`ht-theme`); registered → `GET /api/theme` restore (not JWT-only) + `POST /api/theme` on toggle. Tourist board scoped CSS is independent of chrome Dark.
 - Route pages under `src/pages/` (`LoginPage`, `LobbyPage`, `GamePage`).
 - Scaffold leftovers may remain (`EssentialLink.vue`, `example-store.ts`, unused `pages/index*`) — prefer the login/lobby/game flow above.
 
@@ -62,9 +62,9 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 ## Specific Tasks
 
 - Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
-- Checkers room name constant `CHECKERS_ROOM = 'checkers'` in `stores/game`.
-- Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'checkers' } })`); HTTP `GET /rooms/checkers` remains unused fallback.
-- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `send('move')`, `leave`.
+- Tourist room name constant `TOURIST_ROOM = 'tourist'` in `stores/game`.
+- Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'tourist' } })`); HTTP `GET /rooms/tourist` remains unused fallback.
+- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave` (game messages when rules land).
 - GitHub Pages deploy — `.github/workflows/deploy.yml` (`quasar build -m spa`).
 
 ## Development Tools
@@ -140,9 +140,9 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 ## Business Entities And Areas
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
-- **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `checkers`); leave lobby before enter game.
-- **Game session** - `stores/game` room attach + `pages/GamePage`. Messages: `move` `{ from, to }`. State fields expected from server: `board`, `currentTurn`, `status`, `players[sessionId].color`.
-- **Board cell values** - `0` empty, `1` white, `2` black, `3` white king, `4` black king.
+- **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); leave lobby before enter game.
+- **Game session** - `stores/game` room attach + `pages/GamePage` static tourist board. Synced rules/messages — later.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); non-interactive.
 
 ## Pages (routes)
 
@@ -153,7 +153,7 @@ From `src/router/routes.ts`:
 | `/` → `/lobby`    | —       | redirect                                       |
 | `/login`          | `login` | auth; `meta.guest`                             |
 | `/lobby`          | `lobby` | room list / create / join; `meta.requiresAuth` |
-| `/game/:roomId`   | `game`  | checkers board; `meta.requiresAuth`            |
+| `/game/:roomId`   | `game`  | tourist board; `meta.requiresAuth`             |
 | `/:catchAll(.*)*` | —       | redirect to `/lobby`                           |
 
 Router mode: hash (`/#/lobby`, `/#/game/...`).
@@ -162,7 +162,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
-- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `room`, `roomId`, `board`, `myColor`, `currentTurn`, `status`, `error`, `listing`; getters `isInRoom`, `canMove`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `leaveGame`, `sendMove` (`refreshRooms` HTTP unused by LobbyPage).
+- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `room`, `roomId`, `status`, `error`, `listing`; getter `isInRoom`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `leaveGame` (`refreshRooms` HTTP unused by LobbyPage).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
 ## Realtime / HTTP Layer
@@ -213,7 +213,7 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `work-with-localization`      | vue-i18n boot (thin)                                             |
 | `work-with-lobby`             | Live LobbyRoom list, leave policy, create / join                 |
 | `work-with-rooms`             | Room lifecycle, `onStateChange` / `onLeave`                      |
-| `work-with-game-board`        | Board, `send('move')`, highlights, `canMove`                     |
+| `work-with-game-board`        | Static tourist board (no move UX)                                |
 | `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                              |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
@@ -222,4 +222,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `checkers` and the board/turn/status shape described above.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist` and a static Game board until rules land.

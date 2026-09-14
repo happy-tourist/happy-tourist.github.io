@@ -100,7 +100,7 @@ onUnmounted(() => {
   void game.unsubscribeLobby();
 });
 
-/** joinOrCreate(CHECKERS_ROOM) → room в Pinia → /game/:roomId */
+/** joinOrCreate(TOURIST_ROOM) → room в Pinia → /game/:roomId */
 async function onPlay() {
   joining.value = true;
   try {
