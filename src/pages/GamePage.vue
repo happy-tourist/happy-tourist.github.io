@@ -725,17 +725,16 @@ async function onLeave() {
   background: #ffeb3b;
 }
 
-/* Local move chrome — current-turn client only (SC-MOVE-11/12). */
+/* Local move chrome — current-turn client only (SC-MOVE-11/12).
+   Keep tile outlines under pieces so selection does not hide the tourist PNG. */
 .tile--selected {
   outline: 3px solid #ffffff;
   outline-offset: -2px;
-  z-index: 2;
 }
 
 .tile--target {
   outline: 3px solid #f44336;
   outline-offset: -2px;
-  z-index: 2;
 }
 
 .piece {
@@ -747,7 +746,7 @@ async function onLeave() {
   top: calc(var(--prow) * (var(--cell) + var(--gap)));
   object-fit: contain;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
   padding: 2px;
   box-sizing: border-box;
   transition:
