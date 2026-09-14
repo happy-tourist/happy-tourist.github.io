@@ -146,15 +146,16 @@ async function onLeave() {
 
 .tourist-board {
   --gap: 6px;
-  --tile: min(60px, calc((100% - 9 * var(--gap)) / 10));
   --radius: 12px;
 
+  /* Height from aspect-ratio: % in grid-template-rows against auto height collapses to 0 */
   display: grid;
-  grid-template-columns: repeat(10, var(--tile));
-  grid-template-rows: repeat(10, var(--tile));
+  grid-template-columns: repeat(10, 1fr);
+  grid-template-rows: repeat(10, 1fr);
   gap: var(--gap);
   width: 100%;
   max-width: calc(10 * 60px + 9 * 6px);
+  aspect-ratio: 1;
   /* Holes show page background — no board chrome fill */
   background: transparent;
 }
