@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the static tourist board after joining a `tourist` room (rules later).
+- Open Game and view the tourist board with synced seat pieces (and personal strip if seated) after joining a `tourist` room (move rules later).
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
@@ -30,7 +30,7 @@ There is no admin cabinet or content CMS in this app.
 
 ## Important
 
-This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Game rules (later) live on the server; today Game shows a static tourist board with no move UX.
+This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/move rules live on the server; Game mirrors synced seats onto a local tourist board with no move UX yet.
 
 Deploy target: GitHub Pages (user/org site at domain root). Router mode is **hash** so deep links work without a history fallback (CI also copies `index.html` → `404.html`).
 
@@ -141,8 +141,8 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); leave lobby before enter game.
-- **Game session** - `stores/game` room attach + `pages/GamePage` static tourist board. Synced rules/messages — later.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles); non-interactive.
+- **Game session** - `stores/game` room attach (mirror `seats` / `started` / `sessionId`) + `pages/GamePage` tourist board with pieces + seated strip. Move messages — later.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); pieces from sync; non-interactive.
 
 ## Pages (routes)
 
@@ -222,4 +222,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist` and a static Game board until rules land.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats/`started`, and renders pieces on a local Game board until move rules land.

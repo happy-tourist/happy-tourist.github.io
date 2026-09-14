@@ -15,7 +15,30 @@ export interface GameRoomMeta {
   [key: string]: unknown;
 }
 
+/** Mirrored seat from synced MyRoomState.seats (keyed by sessionId on server). */
+export interface GameSeat {
+  sessionId: string;
+  touristId: number;
+  side: string;
+  row: number;
+  col: number;
+}
+
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
+
+type SeatSync = {
+  touristId: number;
+  side: string;
+  row: number;
+  col: number;
+};
+
+type TouristRoomState = {
+  started?: boolean;
+  seats?: {
+    forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
+  };
+};
 
 export const useGameStore = defineStore('game', {
   state: (): {
@@ -23,6 +46,9 @@ export const useGameStore = defineStore('game', {
     lobbyRoom: Room | null;
     room: Room | null;
     roomId: string | null;
+    sessionId: string | null;
+    started: boolean;
+    seats: GameSeat[];
     status: GameStatus;
     error: string | null;
     listing: boolean;
@@ -31,6 +57,9 @@ export const useGameStore = defineStore('game', {
     lobbyRoom: null,
     room: null,
     roomId: null,
+    sessionId: null,
+    started: false,
+    seats: [],
     status: 'idle',
     error: null,
     listing: false,
@@ -38,6 +67,10 @@ export const useGameStore = defineStore('game', {
 
   getters: {
     isInRoom: (state) => Boolean(state.room),
+    mySeat: (state): GameSeat | null =>
+      state.seats.find((s) => s.sessionId === state.sessionId) ?? null,
+    isSeated: (state) =>
+      Boolean(state.sessionId && state.seats.some((s) => s.sessionId === state.sessionId)),
   },
 
   actions: {
@@ -152,6 +185,9 @@ export const useGameStore = defineStore('game', {
       const room = this.room;
       this.room = null;
       this.roomId = null;
+      this.sessionId = null;
+      this.started = false;
+      this.seats = [];
 
       if (room) {
         try {
@@ -184,16 +220,28 @@ export const useGameStore = defineStore('game', {
     _attachRoom(room: Room) {
       this.room = room;
       this.roomId = room.roomId;
+      this.sessionId = room.sessionId;
       this.status = 'waiting';
 
       room.onStateChange((state) => {
-        const s = state as {
-          status?: 'waiting' | 'playing' | 'finished';
-        };
+        const s = state as TouristRoomState;
 
-        if (s.status) {
-          this.status = s.status;
-        }
+        this.sessionId = room.sessionId;
+        this.started = Boolean(s.started);
+
+        const next: GameSeat[] = [];
+        s.seats?.forEach((seat, sessionId) => {
+          next.push({
+            sessionId,
+            touristId: Number(seat.touristId),
+            side: String(seat.side),
+            row: Number(seat.row),
+            col: Number(seat.col),
+          });
+        });
+        this.seats = next;
+
+        this.status = this.started ? 'playing' : 'waiting';
       });
 
       room.onError((_code, message) => {
@@ -208,6 +256,9 @@ export const useGameStore = defineStore('game', {
     _resetRoomState() {
       this.room = null;
       this.roomId = null;
+      this.sessionId = null;
+      this.started = false;
+      this.seats = [];
       this.status = 'idle';
     },
   },

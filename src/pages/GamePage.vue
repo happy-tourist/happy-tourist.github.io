@@ -21,11 +21,27 @@
     <div class="tourist-board" aria-hidden="true">
       <div
         v-for="(tile, i) in boardTiles"
-        :key="i"
+        :key="`tile-${i}`"
         class="tile"
         :class="`tile-${tile.kind}`"
         :style="tile.style"
       />
+      <img
+        v-for="seat in game.seats"
+        :key="`piece-${seat.sessionId}`"
+        class="piece"
+        :src="touristSrc(seat.touristId)"
+        alt=""
+        :style="{
+          gridColumn: String(seat.col + 1),
+          gridRow: String(seat.row + 1),
+        }"
+      />
+    </div>
+
+    <div v-if="mySeat" class="my-tourist-strip q-mt-md">
+      <div class="text-caption text-muted">Мой турист</div>
+      <img class="my-tourist-img" :src="touristSrc(mySeat.touristId)" alt="Мой турист" />
     </div>
   </q-page>
 </template>
@@ -33,7 +49,12 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { storeToRefs } from 'pinia';
 
+import tourist1 from '@/assets/tourists/tourist1.png';
+import tourist2 from '@/assets/tourists/tourist2.png';
+import tourist3 from '@/assets/tourists/tourist3.png';
+import tourist4 from '@/assets/tourists/tourist4.png';
 import { useGameStore } from '@/stores/game';
 
 /** 10×10 sparse layout: `.` hole, `1` start, `*` task, `7` center (solid 2×2). */
@@ -49,6 +70,13 @@ const LAYOUT = [
   '...****...',
   '...1111...',
 ] as const;
+
+const TOURIST_SRC: Record<number, string> = {
+  1: tourist1,
+  2: tourist2,
+  3: tourist3,
+  4: tourist4,
+};
 
 type TileKind = 'start' | 'task' | 'center';
 
@@ -95,9 +123,14 @@ function buildBoardTiles(): BoardTile[] {
   return tiles;
 }
 
+function touristSrc(touristId: number): string {
+  return TOURIST_SRC[touristId] ?? tourist1;
+}
+
 const boardTiles = buildBoardTiles();
 
 const game = useGameStore();
+const { mySeat } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
 
@@ -175,5 +208,30 @@ async function onLeave() {
 
 .tile-center {
   background: #ffeb3b;
+}
+
+.piece {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 1;
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+.my-tourist-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.my-tourist-img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  pointer-events: none;
 }
 </style>
