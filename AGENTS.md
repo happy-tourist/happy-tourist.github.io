@@ -143,7 +143,7 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game.
 - **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` + `connected` / `reconnectUntil` / `started` / `sessionId`) + `pages/GamePage` tourist board (all pieces) + presence + strip×4 if seated. Move messages — later.
 - **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; occupied presence around the board; non-interactive.
-- **Tourist reconnect** - `sessionStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
+- **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 
 ## Pages (routes)
 
@@ -163,7 +163,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
-- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity), `started`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `rejoinGame`, `leaveGame` (`refreshRooms` HTTP unused by LobbyPage).
+- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity), `started`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `rejoinGame`, `leaveGame` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
 ## Realtime / HTTP Layer
@@ -178,7 +178,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 - Auth/game actions catch errors into store `error` string; pages show `q-banner`.
 - Router blocks navigation until auth `ready`.
 - Leaving a closed room is swallowed in `leaveGame`.
-- `GamePage` calls `rejoinGame(roomId)` if Pinia lost the room (F5 / soft-fail): prefer `sessionStorage` reconnection token, then `joinById`; failed rejoin → lobby. Consented leave clears the token.
+- `GamePage` calls `rejoinGame(roomId)` if Pinia lost the room (F5 / soft-fail / browser reopen): prefer `localStorage` reconnection token, then `joinById`; failed reconnect clears stale token; failed rejoin → lobby. Consented leave clears the token.
 
 ## OpenSpec / Skills
 
@@ -198,24 +198,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                          |
-| ----------------------------- | ---------------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                    |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit            |
-| `client-locate-change-points` | Where to edit/add without changing code                          |
-| `client-verify-code`          | Branch diff vs all client code skills                            |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                          |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`   |
-| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell) |
-| `work-with-forms`             | LoginPage `q-form` / rules                                       |
-| `work-with-pages`             | Routes + guards; App theme header                                |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                  |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board |
-| `work-with-localization`      | vue-i18n boot (thin)                                             |
-| `work-with-lobby`             | Live LobbyRoom list, quiet resubscribe, leave policy, create / join |
+| Skill                         | Use for                                                              |
+| ----------------------------- | -------------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                        |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit                |
+| `client-locate-change-points` | Where to edit/add without changing code                              |
+| `client-verify-code`          | Branch diff vs all client code skills                                |
+| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                              |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`       |
+| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell)     |
+| `work-with-forms`             | LoginPage `q-form` / rules                                           |
+| `work-with-pages`             | Routes + guards; App theme header                                    |
+| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                      |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board     |
+| `work-with-localization`      | vue-i18n boot (thin)                                                 |
+| `work-with-lobby`             | Live LobbyRoom list, quiet resubscribe, leave policy, create / join  |
 | `work-with-rooms`             | Room lifecycle, tourist reconnect token, `onStateChange` / `onLeave` |
-| `work-with-game-board`        | Tourist board + presence + strip×4 (no move UX) |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                              |
+| `work-with-game-board`        | Tourist board + presence + strip×4 (no move UX)                      |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                  |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 

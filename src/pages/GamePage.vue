@@ -330,7 +330,7 @@ onMounted(async () => {
 });
 
 // Soft drop: SDK may give up and fire onLeave → Pinia room null while still on Game.
-// Retry sessionStorage reconnect within server grace (design D3).
+// Retry localStorage reconnect within server grace (design D3).
 watch(
   () => game.room,
   async (room, prev) => {

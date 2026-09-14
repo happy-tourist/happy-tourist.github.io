@@ -9,7 +9,7 @@ export const TOURIST_ROOM = 'tourist';
 /** Built-in Colyseus LobbyRoom name. */
 export const LOBBY_ROOM = 'lobby';
 
-/** sessionStorage key for tourist reconnection (D3) — never used for lobby. */
+/** localStorage key for tourist reconnection (D3) — never used for lobby. */
 const TOURIST_RECONNECT_KEY = 'ht-tourist-reconnect';
 
 export interface GameRoomMeta {
@@ -78,7 +78,19 @@ function isLobbyReconnectNoise(message: string): boolean {
 
 function loadTouristReconnect(): StoredTouristReconnect | null {
   try {
-    const raw = sessionStorage.getItem(TOURIST_RECONNECT_KEY);
+    let raw = localStorage.getItem(TOURIST_RECONNECT_KEY);
+    // One-shot migrate from pre-D3-revision sessionStorage (same key/format).
+    if (!raw) {
+      try {
+        raw = sessionStorage.getItem(TOURIST_RECONNECT_KEY);
+        if (raw) {
+          localStorage.setItem(TOURIST_RECONNECT_KEY, raw);
+          sessionStorage.removeItem(TOURIST_RECONNECT_KEY);
+        }
+      } catch {
+        // private mode / quota — fall through with session raw if any
+      }
+    }
     if (!raw) {
       return null;
     }
@@ -103,20 +115,25 @@ function saveTouristReconnect(room: Room) {
     return;
   }
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       TOURIST_RECONNECT_KEY,
       JSON.stringify({ roomId: room.roomId, token } satisfies StoredTouristReconnect),
     );
   } catch {
-    // private mode / quota — reconnect on F5 may fail; soft reconnect still works
+    // private mode / quota — reconnect after browser restart may fail; soft reconnect still works
   }
 }
 
 function clearTouristReconnect() {
   try {
-    sessionStorage.removeItem(TOURIST_RECONNECT_KEY);
+    localStorage.removeItem(TOURIST_RECONNECT_KEY);
   } catch {
     // ignore
+  }
+  try {
+    sessionStorage.removeItem(TOURIST_RECONNECT_KEY);
+  } catch {
+    // ignore legacy key
   }
 }
 
@@ -236,7 +253,8 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Game mount rejoin (D3): prefer sessionStorage reconnectionToken, then joinById.
+     * Game mount rejoin (D3): prefer localStorage reconnectionToken, then joinById.
+     * Missing/invalid token = fresh join (SC-PIECE-18). Cross-tab steal OK.
      */
     async rejoinGame(roomId: string, options: Record<string, unknown> = {}) {
       const saved = loadTouristReconnect();
@@ -244,7 +262,8 @@ export const useGameStore = defineStore('game', {
         try {
           return await this._enterRoom(() => client.reconnect(saved.token));
         } catch {
-          // grace expired / token invalid — fall through to joinById (spectator / new seat)
+          // grace expired / token invalid — clear stale, then fresh joinById
+          clearTouristReconnect();
         }
       }
       return this._enterRoom(() => client.joinById(roomId, options));
@@ -419,7 +438,7 @@ export const useGameStore = defineStore('game', {
 
       this.status = this.started ? 'playing' : 'waiting';
 
-      // Keep sessionStorage token fresh after soft reconnect (token may rotate).
+      // Keep localStorage token fresh after soft reconnect (token may rotate).
       saveTouristReconnect(room);
     },
 
@@ -446,7 +465,7 @@ export const useGameStore = defineStore('game', {
       });
 
       room.onLeave(() => {
-        // Unexpected drop: keep sessionStorage token for F5 / remount reconnect (D3).
+        // Unexpected drop: keep localStorage token for F5 / remount / browser reopen (D3).
         this._resetRoomState();
       });
     },
