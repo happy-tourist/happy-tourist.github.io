@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the tourist board with synced seat pieces (and personal strip if seated) after joining a `tourist` room (move rules later).
+- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мой турист» if seated after joining a `tourist` room (move rules later).
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
@@ -141,8 +141,8 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); leave lobby before enter game.
-- **Game session** - `stores/game` room attach (mirror `seats` / `started` / `sessionId`) + `pages/GamePage` tourist board with pieces + seated strip. Move messages — later.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles); pieces from sync; non-interactive.
+- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` / `started` / `sessionId`) + `pages/GamePage` tourist board (all pieces) + strip×4 if seated. Move messages — later.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; non-interactive.
 
 ## Pages (routes)
 
@@ -222,4 +222,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats/`started`, and renders pieces on a local Game board until move rules land.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + four `pieces`) / `started`, and renders all pieces + strip×4 on a local Game board until move rules land.

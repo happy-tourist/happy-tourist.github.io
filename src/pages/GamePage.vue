@@ -27,21 +27,29 @@
         :style="tile.style"
       />
       <img
-        v-for="seat in game.seats"
-        :key="`piece-${seat.sessionId}`"
+        v-for="piece in boardPieces"
+        :key="`piece-${piece.sessionId}-${piece.side}`"
         class="piece"
-        :src="touristSrc(seat.touristId)"
+        :src="touristSrc(piece.touristId)"
         alt=""
         :style="{
-          gridColumn: String(seat.col + 1),
-          gridRow: String(seat.row + 1),
+          gridColumn: String(piece.col + 1),
+          gridRow: String(piece.row + 1),
         }"
       />
     </div>
 
     <div v-if="mySeat" class="my-tourist-strip q-mt-md">
       <div class="text-caption text-muted">Мой турист</div>
-      <img class="my-tourist-img" :src="touristSrc(mySeat.touristId)" alt="Мой турист" />
+      <div class="my-tourist-slots">
+        <img
+          v-for="side in STRIP_SIDES"
+          :key="`strip-${side}`"
+          class="my-tourist-img"
+          :src="touristSrc(mySeat.touristId)"
+          :alt="`Мой турист ${side}`"
+        />
+      </div>
     </div>
   </q-page>
 </template>
@@ -71,6 +79,9 @@ const LAYOUT = [
   '...1111...',
 ] as const;
 
+/** Strip slot order = board sides (SC-PIECE-09). */
+const STRIP_SIDES = ['N', 'E', 'S', 'W'] as const;
+
 const TOURIST_SRC: Record<number, string> = {
   1: tourist1,
   2: tourist2,
@@ -83,6 +94,14 @@ type TileKind = 'start' | 'task' | 'center';
 interface BoardTile {
   kind: TileKind;
   style: Record<string, string>;
+}
+
+interface BoardPiece {
+  sessionId: string;
+  touristId: number;
+  side: string;
+  row: number;
+  col: number;
 }
 
 function buildBoardTiles(): BoardTile[] {
@@ -133,6 +152,23 @@ const game = useGameStore();
 const { mySeat } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
+
+/** Flat list of all seats' pieces for board overlay. */
+const boardPieces = computed((): BoardPiece[] => {
+  const out: BoardPiece[] = [];
+  for (const seat of game.seats) {
+    for (const piece of seat.pieces) {
+      out.push({
+        sessionId: seat.sessionId,
+        touristId: seat.touristId,
+        side: piece.side,
+        row: piece.row,
+        col: piece.col,
+      });
+    }
+  }
+  return out;
+});
 
 const statusLabel = computed(() => {
   switch (game.status) {
@@ -226,6 +262,13 @@ async function onLeave() {
   align-items: center;
   gap: 4px;
   pointer-events: none;
+}
+
+.my-tourist-slots {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .my-tourist-img {

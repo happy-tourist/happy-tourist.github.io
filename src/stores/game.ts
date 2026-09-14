@@ -15,22 +15,33 @@ export interface GameRoomMeta {
   [key: string]: unknown;
 }
 
-/** Mirrored seat from synced MyRoomState.seats (keyed by sessionId on server). */
-export interface GameSeat {
-  sessionId: string;
-  touristId: number;
+/** Mirrored piece from synced Seat.pieces (keyed by side N|E|S|W on server). */
+export interface GamePiece {
   side: string;
   row: number;
   col: number;
 }
 
+/** Mirrored seat from synced MyRoomState.seats (keyed by sessionId on server). */
+export interface GameSeat {
+  sessionId: string;
+  touristId: number;
+  pieces: GamePiece[];
+}
+
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
 
-type SeatSync = {
-  touristId: number;
+type PieceSync = {
   side: string;
   row: number;
   col: number;
+};
+
+type SeatSync = {
+  touristId: number;
+  pieces?: {
+    forEach: (cb: (piece: PieceSync, side: string) => void) => void;
+  };
 };
 
 type TouristRoomState = {
@@ -227,12 +238,18 @@ export const useGameStore = defineStore('game', {
 
       const next: GameSeat[] = [];
       s.seats?.forEach((seat, sessionId) => {
+        const pieces: GamePiece[] = [];
+        seat.pieces?.forEach((piece, sideKey) => {
+          pieces.push({
+            side: String(piece.side || sideKey),
+            row: Number(piece.row),
+            col: Number(piece.col),
+          });
+        });
         next.push({
           sessionId,
           touristId: Number(seat.touristId),
-          side: String(seat.side),
-          row: Number(seat.row),
-          col: Number(seat.col),
+          pieces,
         });
       });
       this.seats = next;
