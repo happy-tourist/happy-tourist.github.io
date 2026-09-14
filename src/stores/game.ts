@@ -55,6 +55,8 @@ type SeatSync = {
 
 type TouristRoomState = {
   started?: boolean;
+  /** Synced current-turn seated sessionId (empty if no seated). */
+  currentTurnSessionId?: string;
   seats?: {
     forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
   };
@@ -147,6 +149,8 @@ export const useGameStore = defineStore('game', {
     roomId: string | null;
     sessionId: string | null;
     started: boolean;
+    /** Mirrored MyRoomState.currentTurnSessionId — whose turn it is. */
+    currentTurnSessionId: string;
     seats: GameSeat[];
     status: GameStatus;
     error: string | null;
@@ -159,6 +163,7 @@ export const useGameStore = defineStore('game', {
     roomId: null,
     sessionId: null,
     started: false,
+    currentTurnSessionId: '',
     seats: [],
     status: 'idle',
     error: null,
@@ -171,6 +176,14 @@ export const useGameStore = defineStore('game', {
       state.seats.find((s) => s.sessionId === state.sessionId) ?? null,
     isSeated: (state) =>
       Boolean(state.sessionId && state.seats.some((s) => s.sessionId === state.sessionId)),
+    /** True when this client is the seated player whose turn it is. */
+    isMyTurn: (state) =>
+      Boolean(
+        state.sessionId &&
+        state.currentTurnSessionId &&
+        state.sessionId === state.currentTurnSessionId &&
+        state.seats.some((s) => s.sessionId === state.sessionId),
+      ),
   },
 
   actions: {
@@ -288,6 +301,19 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
+     * Submit a one-step tourist move (D2). Only via store — pages must not room.send.
+     * Server rejects if not seated / not current turn / illegal; no local authority.
+     * @returns true if the message was sent (room present and isMyTurn).
+     */
+    sendMove(side: string, row: number, col: number): boolean {
+      if (!this.room || !this.isMyTurn) {
+        return false;
+      }
+      this.room.send('move', { side, row, col });
+      return true;
+    },
+
+    /**
      * Detach a prior tourist room without touching the lobby subscription.
      * Lobby stays live until enter succeeds (SC-LOBBY-01 / SC-LOBBY-05).
      * Consented leave of a live prior tourist → clear reconnect token.
@@ -298,6 +324,7 @@ export const useGameStore = defineStore('game', {
       this.roomId = null;
       this.sessionId = null;
       this.started = false;
+      this.currentTurnSessionId = '';
       this.seats = [];
 
       if (room) {
@@ -415,6 +442,8 @@ export const useGameStore = defineStore('game', {
 
       this.sessionId = room.sessionId;
       this.started = Boolean(s.started);
+      this.currentTurnSessionId =
+        typeof s.currentTurnSessionId === 'string' ? s.currentTurnSessionId : '';
 
       const next: GameSeat[] = [];
       s.seats?.forEach((seat, sessionId) => {
@@ -475,6 +504,7 @@ export const useGameStore = defineStore('game', {
       this.roomId = null;
       this.sessionId = null;
       this.started = false;
+      this.currentTurnSessionId = '';
       this.seats = [];
       this.status = 'idle';
     },

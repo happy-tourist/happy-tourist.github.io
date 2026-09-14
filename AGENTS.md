@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated after joining a `tourist` room (move rules later).
+- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated; on own turn select a piece and submit a one-step `move` via the game store.
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
@@ -30,7 +30,7 @@ There is no admin cabinet or content CMS in this app.
 
 ## Important
 
-This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/move rules live on the server; Game mirrors synced seats onto a local tourist board with no move UX yet.
+This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/turn/move rules live on the server; Game mirrors synced seats + `currentTurnSessionId`, shows local select/hints on own turn, and submits moves only via `game.sendMove`.
 
 Deploy target: GitHub Pages (user/org site at domain root). Router mode is **hash** so deep links work without a history fallback (CI also copies `index.html` → `404.html`).
 
@@ -64,7 +64,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 - Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
 - Tourist room name constant `TOURIST_ROOM = 'tourist'` in `stores/game`.
 - Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'tourist' } })`); HTTP `GET /rooms/tourist` remains unused fallback.
-- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave` (game messages when rules land).
+- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave`, `sendMove` → `move`.
 - GitHub Pages deploy — `.github/workflows/deploy.yml` (`quasar build -m spa`).
 
 ## Development Tools
@@ -214,7 +214,7 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `work-with-localization`      | vue-i18n boot (thin)                                                 |
 | `work-with-lobby`             | Live LobbyRoom list, quiet resubscribe, leave policy, create / join  |
 | `work-with-rooms`             | Room lifecycle, tourist reconnect token, `onStateChange` / `onLeave` |
-| `work-with-game-board`        | Tourist board + presence + strip×4 (no move UX)                      |
+| `work-with-game-board`        | Tourist board + presence + strip×4 + turn select/hints/`sendMove`    |
 | `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                  |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
@@ -223,4 +223,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + four `pieces`) / `started`, and renders all pieces + strip×4 on a local Game board until move rules land.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + four `pieces`) / `started` / `currentTurnSessionId`, renders pieces + strip×4 + local move chrome, and sends `move` `{ side, row, col }` via `sendMove`.
