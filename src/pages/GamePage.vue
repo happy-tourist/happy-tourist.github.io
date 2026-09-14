@@ -25,7 +25,10 @@
         class="presence-slot"
         :class="`presence-${marker.slot}`"
       >
-        <div class="presence-marker">
+        <div
+          class="presence-marker"
+          :class="{ 'presence-marker--turn': marker.isCurrentTurn }"
+        >
           <q-circular-progress
             v-if="showGraceRing(marker)"
             :min="0"
@@ -182,6 +185,8 @@ interface PresenceMarker {
   connected: boolean;
   reconnectUntil: number;
   slot: PresenceSlot;
+  /** Synced current-turn seat (SC-MOVE-01 indicator). */
+  isCurrentTurn: boolean;
 }
 
 interface Cell {
@@ -507,6 +512,8 @@ function toMarker(seat: GameSeat, slot: PresenceSlot): PresenceMarker {
     connected: seat.connected,
     reconnectUntil: seat.reconnectUntil,
     slot,
+    isCurrentTurn:
+      Boolean(game.currentTurnSessionId) && seat.sessionId === game.currentTurnSessionId,
   };
 }
 
@@ -527,9 +534,18 @@ const statusLabel = computed(() => {
     case 'connecting':
       return 'Подключение…';
     case 'waiting':
-      return 'Ожидание соперника';
-    case 'playing':
-      return 'Игра идёт';
+    case 'playing': {
+      if (game.currentTurnSessionId) {
+        if (isMyTurn.value) {
+          return 'Ваш ход';
+        }
+        if (mySeat.value) {
+          return 'Ход соперника';
+        }
+        return 'Ход игрока';
+      }
+      return game.status === 'waiting' ? 'Ожидание соперника' : 'Игра идёт';
+    }
     case 'finished':
       return 'Игра окончена';
     default:
@@ -676,6 +692,16 @@ async function onLeave() {
   box-sizing: border-box;
   background: rgba(127, 127, 127, 0.12);
   box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.35);
+}
+
+/* Current-turn seat indicator (SC-MOVE-01) — blue ring on presence avatar. */
+.presence-marker--turn .presence-avatar--solo {
+  box-shadow: 0 0 0 3px #2196f3;
+}
+
+.presence-marker--turn .presence-progress {
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #2196f3;
 }
 
 .tourist-board {
