@@ -141,8 +141,8 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game.
-- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` + `connected` / `reconnectUntil` / `started` / `sessionId`) + `pages/GamePage` tourist board (all pieces) + presence + strip×4 if seated. Move messages — later.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; occupied presence around the board; non-interactive.
+- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` + `connected` / `reconnectUntil` / `started` / `currentTurnSessionId` / `sessionId`; `isMyTurn` / `sendMove`) + `pages/GamePage` tourist board (all pieces) + presence + strip×4 if seated.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; occupied presence with blue ring on current-turn seat; header «Ваш ход» / «Ход соперника» / «Ход игрока»; on own turn local select/hints + `sendMove`.
 - **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 
 ## Pages (routes)
@@ -163,7 +163,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
-- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity), `started`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `rejoinGame`, `leaveGame` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
+- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity), `started`, `currentTurnSessionId`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated` / `isMyTurn`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `rejoinGame`, `leaveGame`, `sendMove` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
 ## Realtime / HTTP Layer
