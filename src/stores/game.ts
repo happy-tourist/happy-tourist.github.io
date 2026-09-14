@@ -207,14 +207,37 @@ export const useGameStore = defineStore('game', {
         // Unsubscribe only after tourist connect succeeds (SC-LOBBY-05 / design D2).
         await this._leaveTouristRoom();
         const room = await connect();
-        await this.unsubscribeLobby();
+        // Attach BEFORE lobby leave: JOIN ack → ROOM_STATE can arrive during the
+        // await gap; without a listener seats stay empty on Game forever.
         this._attachRoom(room);
+        await this.unsubscribeLobby();
         return room;
       } catch (e) {
         this.status = 'idle';
         this.error = e instanceof Error ? e.message : String(e);
         throw e;
       }
+    },
+
+    _mirrorRoomState(room: Room, state: unknown) {
+      const s = state as TouristRoomState;
+
+      this.sessionId = room.sessionId;
+      this.started = Boolean(s.started);
+
+      const next: GameSeat[] = [];
+      s.seats?.forEach((seat, sessionId) => {
+        next.push({
+          sessionId,
+          touristId: Number(seat.touristId),
+          side: String(seat.side),
+          row: Number(seat.row),
+          col: Number(seat.col),
+        });
+      });
+      this.seats = next;
+
+      this.status = this.started ? 'playing' : 'waiting';
     },
 
     _attachRoom(room: Room) {
@@ -224,25 +247,13 @@ export const useGameStore = defineStore('game', {
       this.status = 'waiting';
 
       room.onStateChange((state) => {
-        const s = state as TouristRoomState;
-
-        this.sessionId = room.sessionId;
-        this.started = Boolean(s.started);
-
-        const next: GameSeat[] = [];
-        s.seats?.forEach((seat, sessionId) => {
-          next.push({
-            sessionId,
-            touristId: Number(seat.touristId),
-            side: String(seat.side),
-            row: Number(seat.row),
-            col: Number(seat.col),
-          });
-        });
-        this.seats = next;
-
-        this.status = this.started ? 'playing' : 'waiting';
+        this._mirrorRoomState(room, state);
       });
+
+      // If full state already landed (rare), mirror once; otherwise onStateChange.
+      if (room.state) {
+        this._mirrorRoomState(room, room.state);
+      }
 
       room.onError((_code, message) => {
         this.error = message || 'Room error';
