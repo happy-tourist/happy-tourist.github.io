@@ -40,14 +40,14 @@
     </div>
 
     <div v-if="mySeat" class="my-tourist-strip q-mt-md">
-      <div class="text-caption text-muted">Мой турист</div>
+      <div class="text-caption text-muted">Мои туристы</div>
       <div class="my-tourist-slots">
         <img
           v-for="side in STRIP_SIDES"
           :key="`strip-${side}`"
           class="my-tourist-img"
           :src="touristSrc(mySeat.touristId)"
-          :alt="`Мой турист ${side}`"
+          :alt="`Мои туристы ${side}`"
         />
       </div>
     </div>

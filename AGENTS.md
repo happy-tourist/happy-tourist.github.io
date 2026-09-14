@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мой турист» if seated after joining a `tourist` room (move rules later).
+- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated after joining a `tourist` room (move rules later).
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
