@@ -7,4 +7,11 @@ export default {
   login: {
     google: 'Продолжить с Google',
   },
+  game: {
+    say: {
+      affordance: 'Сказать',
+      hello: 'Всем привет',
+      luck: 'Удачи',
+    },
+  },
 };

@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated; on own turn select a piece and submit a one-step `move` via the game store.
+- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated; on own turn select a piece and submit a one-step `move` via the game store; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`.
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
@@ -30,7 +30,7 @@ There is no admin cabinet or content CMS in this app.
 
 ## Important
 
-This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/turn/move rules live on the server; Game mirrors synced seats + `currentTurnSessionId`, shows local select/hints on own turn, and submits moves only via `game.sendMove`.
+This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/turn/move rules live on the server; Game mirrors synced seats + `currentTurnSessionId`, shows local select/hints on own turn, and submits moves only via `game.sendMove`. Preset say is ephemeral (`sendSay` / `onMessage('say')` → `sayEvents`) — not schema.
 
 Deploy target: GitHub Pages (user/org site at domain root). Router mode is **hash** so deep links work without a history fallback (CI also copies `index.html` → `404.html`).
 
@@ -64,7 +64,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 - Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
 - Tourist room name constant `TOURIST_ROOM = 'tourist'` in `stores/game`.
 - Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'tourist' } })`); HTTP `GET /rooms/tourist` remains unused fallback.
-- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave`, `sendMove` → `move`.
+- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave`, `sendMove` → `move`, `sendSay` → `say` + `onMessage('say')`.
 - GitHub Pages deploy — `.github/workflows/deploy.yml` (`quasar build -m spa`).
 
 ## Development Tools

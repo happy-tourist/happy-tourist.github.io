@@ -36,6 +36,25 @@ export interface GameSeat {
   reconnectUntil: number;
 }
 
+/** Whitelist preset ids for room message `say` (D1 / game/say). */
+export type SayPresetId = 'hello' | 'luck';
+
+/** Ephemeral say broadcast from server (not schema). */
+export interface SayEvent {
+  sessionId: string;
+  presetId: SayPresetId;
+  /** Server timestamp (ms) for TTL. */
+  at: number;
+}
+
+/** Live say bubble lifetime (ms) — mirrors server SAY_TTL_MS. */
+export const SAY_TTL_MS = 10_000;
+
+/** Max concurrent live says per session — mirrors server SAY_MAX_LIVE. */
+export const SAY_MAX_LIVE = 3;
+
+const SAY_PRESETS: ReadonlySet<string> = new Set(['hello', 'luck']);
+
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
 
 type PieceSync = {
@@ -152,6 +171,8 @@ export const useGameStore = defineStore('game', {
     /** Mirrored MyRoomState.currentTurnSessionId — whose turn it is. */
     currentTurnSessionId: string;
     seats: GameSeat[];
+    /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
+    sayEvents: SayEvent[];
     status: GameStatus;
     error: string | null;
     listing: boolean;
@@ -165,6 +186,7 @@ export const useGameStore = defineStore('game', {
     started: false,
     currentTurnSessionId: '',
     seats: [],
+    sayEvents: [],
     status: 'idle',
     error: null,
     listing: false,
@@ -314,6 +336,29 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
+     * Submit a whitelist preset say (D3). Only via store — pages must not room.send.
+     * Seated + connected only; client UX respects max SAY_MAX_LIVE live by `at`.
+     * @returns true if the message was sent.
+     */
+    sendSay(presetId: SayPresetId): boolean {
+      if (!this.room || !SAY_PRESETS.has(presetId)) {
+        return false;
+      }
+      const seat = this.seats.find((s) => s.sessionId === this.sessionId);
+      if (!seat || !seat.connected) {
+        return false;
+      }
+      const now = Date.now();
+      this._pruneSayEvents(now);
+      const live = this.sayEvents.filter((e) => e.sessionId === this.sessionId).length;
+      if (live >= SAY_MAX_LIVE) {
+        return false;
+      }
+      this.room.send('say', { presetId });
+      return true;
+    },
+
+    /**
      * Detach a prior tourist room without touching the lobby subscription.
      * Lobby stays live until enter succeeds (SC-LOBBY-01 / SC-LOBBY-05).
      * Consented leave of a live prior tourist → clear reconnect token.
@@ -326,6 +371,7 @@ export const useGameStore = defineStore('game', {
       this.started = false;
       this.currentTurnSessionId = '';
       this.seats = [];
+      this.sayEvents = [];
 
       if (room) {
         clearTouristReconnect();
@@ -476,6 +522,7 @@ export const useGameStore = defineStore('game', {
       this.roomId = room.roomId;
       this.sessionId = room.sessionId;
       this.status = 'waiting';
+      this.sayEvents = [];
 
       // D3: persist tourist reconnection token only (never lobby).
       saveTouristReconnect(room);
@@ -489,6 +536,10 @@ export const useGameStore = defineStore('game', {
         this._mirrorRoomState(room, room.state);
       }
 
+      room.onMessage('say', (message: unknown) => {
+        this._onSayMessage(message);
+      });
+
       room.onError((_code, message) => {
         this.error = message || 'Room error';
       });
@@ -499,6 +550,43 @@ export const useGameStore = defineStore('game', {
       });
     },
 
+    _pruneSayEvents(now = Date.now()) {
+      this.sayEvents = this.sayEvents.filter((e) => now - e.at < SAY_TTL_MS);
+    },
+
+    _onSayMessage(message: unknown) {
+      if (!message || typeof message !== 'object') {
+        return;
+      }
+      const raw = message as Record<string, unknown>;
+      const sessionId = raw.sessionId;
+      const presetId = raw.presetId;
+      const at = raw.at;
+      if (
+        typeof sessionId !== 'string' ||
+        typeof presetId !== 'string' ||
+        !SAY_PRESETS.has(presetId) ||
+        typeof at !== 'number' ||
+        !Number.isFinite(at)
+      ) {
+        return;
+      }
+      const now = Date.now();
+      this._pruneSayEvents(now);
+      const forSession = this.sayEvents.filter((e) => e.sessionId === sessionId);
+      if (forSession.length >= SAY_MAX_LIVE) {
+        const oldestAt = Math.min(...forSession.map((e) => e.at));
+        this.sayEvents = this.sayEvents.filter(
+          (e) => !(e.sessionId === sessionId && e.at === oldestAt),
+        );
+      }
+      this.sayEvents.push({
+        sessionId,
+        presetId: presetId as SayPresetId,
+        at,
+      });
+    },
+
     _resetRoomState() {
       this.room = null;
       this.roomId = null;
@@ -506,6 +594,7 @@ export const useGameStore = defineStore('game', {
       this.started = false;
       this.currentTurnSessionId = '';
       this.seats = [];
+      this.sayEvents = [];
       this.status = 'idle';
     },
   },
