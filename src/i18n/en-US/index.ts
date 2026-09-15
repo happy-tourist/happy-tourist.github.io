@@ -32,6 +32,9 @@ export default {
     /** Place modal after all four pieces finish (SC-FINISH-03/04). */
     finishPlaceModal: 'Вы {n}-й!',
     finishPlaceModalOk: 'ОК',
+    /** Solo budget expiry — tourists not finished in time (SC-MOVE-31). */
+    timeExpiredModal: 'Вы не успели довести туристов до финиша вовремя.',
+    timeExpiredModalOk: 'ОК',
     /** a11y for strip finish icon and presence place badge. */
     finishStripAria: 'Финиш',
     finishPlaceBadgeAria: 'Место {n}',

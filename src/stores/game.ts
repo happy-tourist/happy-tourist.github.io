@@ -54,6 +54,8 @@ export interface GameSeat {
   ready: boolean;
   /** Finish place; `0` until all four pieces finished (game/finish). */
   finishPlace: number;
+  /** Solo turn budget elapsed; moves rejected until leave (game/move). */
+  timeExpired: boolean;
 }
 
 /** Flat unfinished piece for board overlay (SC-PIECE-09 / SC-FINISH-01). */
@@ -73,6 +75,31 @@ export function isFinishedSeat(seat: GameSeat): boolean {
 /** Strip slot / piece is finished and must not be selected for moves. */
 export function isFinishedPiece(piece: GamePiece): boolean {
   return piece.finished;
+}
+
+/** Seat locked after solo budget expiry (game/move). */
+export function isTimeExpiredSeat(seat: GameSeat): boolean {
+  return seat.timeExpired;
+}
+
+/** Solo five-minute budget is active (turnBudgetSeconds === 300). */
+export function isSoloBudgetSeconds(turnBudgetSeconds: number): boolean {
+  return turnBudgetSeconds === 300;
+}
+
+/**
+ * Remaining turn seconds from synced turnUntil (clamped to budget).
+ * Full at deadline start → empty at turnUntil.
+ */
+export function turnRemainingSeconds(
+  turnUntil: number,
+  turnBudgetSeconds: number,
+  nowMs: number,
+): number {
+  if (turnUntil <= 0 || turnBudgetSeconds <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(turnBudgetSeconds, (turnUntil - nowMs) / 1000));
 }
 
 /** Whitelist preset ids for room message `say` (D1 / game/say). */
@@ -109,6 +136,7 @@ type SeatSync = {
   reconnectUntil?: number;
   ready?: boolean;
   finishPlace?: number;
+  timeExpired?: boolean;
   pieces?: {
     forEach: (cb: (piece: PieceSync, side: string) => void) => void;
   };
@@ -122,6 +150,10 @@ type TouristRoomState = {
   countdownRemaining?: number;
   /** Synced current-turn seated sessionId (empty if no seated). */
   currentTurnSessionId?: string;
+  /** Unix ms turn deadline; 0 = no active timer. */
+  turnUntil?: number;
+  /** Active turn budget seconds (60 multi / 300 solo); 0 when none. */
+  turnBudgetSeconds?: number;
   seats?: {
     forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
   };
@@ -230,6 +262,10 @@ export const useGameStore = defineStore('game', {
     countdownRemaining: number;
     /** Mirrored MyRoomState.currentTurnSessionId — whose turn it is. */
     currentTurnSessionId: string;
+    /** Unix ms turn deadline; `0` = no active turn timer (game/move). */
+    turnUntil: number;
+    /** Active turn budget in seconds (60 multi / 300 solo); `0` when none. */
+    turnBudgetSeconds: number;
     seats: GameSeat[];
     /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
     sayEvents: SayEvent[];
@@ -248,6 +284,8 @@ export const useGameStore = defineStore('game', {
     maxSeats: 2,
     countdownRemaining: 0,
     currentTurnSessionId: '',
+    turnUntil: 0,
+    turnBudgetSeconds: 0,
     seats: [],
     sayEvents: [],
     status: 'idle',
@@ -313,6 +351,21 @@ export const useGameStore = defineStore('game', {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       return Boolean(seat && seat.finishPlace > 0);
     },
+    /** Solo five-minute budget is active (SC-PRESENCE-09 / SC-MOVE-29). */
+    isSoloBudget: (state): boolean => isSoloBudgetSeconds(state.turnBudgetSeconds),
+    /** Own seat is locked after solo budget expiry (SC-MOVE-31). */
+    isMySeatTimeExpired: (state): boolean => {
+      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
+      return Boolean(seat && seat.timeExpired);
+    },
+    /**
+     * Remaining turn seconds from synced turnUntil (needs wall-clock nowMs).
+     * Use with page tick like reconnect grace (SC-PRESENCE-08…11).
+     */
+    turnRemainingSeconds:
+      (state) =>
+      (nowMs: number): number =>
+        turnRemainingSeconds(state.turnUntil, state.turnBudgetSeconds, nowMs),
     /**
      * Own strip sides whose pieces are finished (SC-FINISH-09/10 / SC-PIECE-09).
      * Empty when not seated.
@@ -446,7 +499,13 @@ export const useGameStore = defineStore('game', {
      * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
     sendMove(side: string, row: number, col: number): boolean {
-      if (!this.room || this.phase !== 'playing' || !this.isMyTurn || this.isMySeatFinished) {
+      if (
+        !this.room ||
+        this.phase !== 'playing' ||
+        !this.isMyTurn ||
+        this.isMySeatFinished ||
+        this.isMySeatTimeExpired
+      ) {
         return false;
       }
       this.room.send('move', { side, row, col });
@@ -505,6 +564,8 @@ export const useGameStore = defineStore('game', {
       this.maxSeats = 2;
       this.countdownRemaining = 0;
       this.currentTurnSessionId = '';
+      this.turnUntil = 0;
+      this.turnBudgetSeconds = 0;
       this.seats = [];
       this.sayEvents = [];
 
@@ -631,6 +692,15 @@ export const useGameStore = defineStore('game', {
       this.countdownRemaining = Number.isFinite(cd) && cd > 0 ? Math.floor(cd) : 0;
       this.currentTurnSessionId =
         typeof s.currentTurnSessionId === 'string' ? s.currentTurnSessionId : '';
+      const turnUntilRaw = Number(s.turnUntil ?? 0);
+      this.turnUntil = Number.isFinite(turnUntilRaw) && turnUntilRaw > 0 ? turnUntilRaw : 0;
+      const budgetRaw = Number(s.turnBudgetSeconds ?? 0);
+      this.turnBudgetSeconds =
+        budgetRaw === 60 || budgetRaw === 300
+          ? budgetRaw
+          : budgetRaw > 0
+            ? Math.floor(budgetRaw)
+            : 0;
 
       const next: GameSeat[] = [];
       s.seats?.forEach((seat, sessionId) => {
@@ -651,6 +721,7 @@ export const useGameStore = defineStore('game', {
           reconnectUntil: Number(seat.reconnectUntil ?? 0),
           ready: Boolean(seat.ready),
           finishPlace: Number(seat.finishPlace ?? 0) || 0,
+          timeExpired: Boolean(seat.timeExpired),
         });
       });
       this.seats = next;
@@ -741,6 +812,8 @@ export const useGameStore = defineStore('game', {
       this.maxSeats = 2;
       this.countdownRemaining = 0;
       this.currentTurnSessionId = '';
+      this.turnUntil = 0;
+      this.turnBudgetSeconds = 0;
       this.seats = [];
       this.sayEvents = [];
       this.status = 'idle';

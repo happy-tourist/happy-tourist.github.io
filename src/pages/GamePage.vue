@@ -47,6 +47,20 @@
       </q-card>
     </q-dialog>
 
+    <!-- Own seat solo budget expiry (SC-MOVE-31); close keeps player in room. -->
+    <q-dialog v-model="timeoutModalOpen" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6 text-center">
+            {{ $t('game.timeExpiredModal') }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn color="primary" :label="$t('game.timeExpiredModalOk')" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-banner
       v-if="game.error"
       class="bg-negative text-white q-mb-md"
@@ -67,29 +81,33 @@
         <div
           class="presence-marker"
           :class="{
-            'presence-marker--turn': marker.isCurrentTurn,
             'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
           }"
         >
+          <!-- Always reserve outer 52px chrome (SC-PRESENCE-11); turn outer / reconnect inner (D5). -->
           <q-circular-progress
-            v-if="showGraceRing(marker)"
             :min="0"
-            :max="GRACE_SECONDS"
-            :value="graceRemaining(marker.reconnectUntil)"
+            :max="turnRingMax"
+            :value="turnRingValue(marker)"
             size="52px"
-            :thickness="0.15"
-            color="warning"
-            track-color="grey-4"
-            class="presence-progress"
+            :thickness="0.12"
+            :color="turnRingColor(marker)"
+            :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
+            class="presence-progress presence-progress--outer"
           >
-            <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+            <q-circular-progress
+              :min="0"
+              :max="GRACE_SECONDS"
+              :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+              size="40px"
+              :thickness="0.18"
+              :color="showGraceRing(marker) ? 'warning' : 'transparent'"
+              :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+              class="presence-progress presence-progress--inner"
+            >
+              <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+            </q-circular-progress>
           </q-circular-progress>
-          <img
-            v-else
-            class="presence-avatar presence-avatar--solo"
-            :src="touristSrc(marker.touristId)"
-            alt=""
-          />
 
           <span
             v-if="marker.finishPlace > 0"
@@ -184,8 +202,9 @@
       </div>
     </div>
 
+    <!-- Strip only once own pieces exist (SC-PIECE-09/17 — empty before playing). -->
     <div
-      v-if="mySeat"
+      v-if="mySeat && hasOwnPieces"
       class="my-tourist-strip q-mt-md"
       :class="{ 'my-tourist-strip--interactive': isInteractive }"
     >
@@ -235,6 +254,7 @@ import {
   type SayPresetId,
   SAY_TTL_MS,
   isFinishedPiece,
+  turnRemainingSeconds,
 } from '@/stores/game';
 
 /** 10×10 sparse layout: `.` hole, `1` start, `*` task, `7` center (solid 2×2). */
@@ -394,6 +414,7 @@ const {
   isPlaying,
   isSeated,
   isMySeatFinished,
+  isMySeatTimeExpired,
   myFinishedStripSides,
 } = storeToRefs(game);
 const route = useRoute('game');
@@ -407,11 +428,13 @@ const moveAnimating = ref(false);
 const pieceTransitionsReady = ref(false);
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
-/** Leave confirm for seated ∧ playing ∧ !finishPlace (SC-LEAVE-02…06). */
+/** Leave confirm for seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-02…07). */
 const leaveConfirmOpen = ref(false);
 /** Own place congratulation modal (SC-FINISH-03/04). */
 const placeModalOpen = ref(false);
 const celebratedPlace = ref(0);
+/** Own solo timeout modal (SC-MOVE-31); other clients never open this. */
+const timeoutModalOpen = ref(false);
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -437,6 +460,9 @@ function pieceKey(sessionId: string, side: string): string {
 function isStripSlotFinished(side: string): boolean {
   return myFinishedStripSides.value.includes(side);
 }
+
+/** Personal strip only after pieces materialize (SC-PIECE-17). */
+const hasOwnPieces = computed(() => Boolean(mySeat.value && mySeat.value.pieces.length > 0));
 
 /** Flat board overlay: unfinished + short-lived disappearing finishers. */
 const boardPieces = computed((): BoardPiece[] => {
@@ -469,12 +495,13 @@ const boardPieces = computed((): BoardPiece[] => {
   return out;
 });
 
-/** Move chrome / submit only in playing (SC-MOVE-20 / SC-START-10). */
+/** Move chrome / submit only in playing; lock when finished or time-expired (SC-MOVE-20/31/32). */
 const isInteractive = computed(
   () =>
     isPlaying.value &&
     isMyTurn.value &&
     !isMySeatFinished.value &&
+    !isMySeatTimeExpired.value &&
     !moveAnimating.value,
 );
 
@@ -715,6 +742,37 @@ function showGraceRing(marker: PresenceMarker): boolean {
   return !marker.connected && marker.reconnectUntil > 0;
 }
 
+/**
+ * Active turn countdown on current-turn seat while deadline is synced (SC-PRESENCE-08/09).
+ * Track chrome stays reserved even when inactive (SC-PRESENCE-11).
+ */
+function showTurnRing(marker: PresenceMarker): boolean {
+  return (
+    marker.isCurrentTurn &&
+    game.phase === 'playing' &&
+    game.turnUntil > 0 &&
+    game.turnBudgetSeconds > 0
+  );
+}
+
+/** Outer ring max = synced budget (60 or 300); fallback keeps layout stable. */
+const turnRingMax = computed(() => (game.turnBudgetSeconds > 0 ? game.turnBudgetSeconds : 60));
+
+function turnRingValue(marker: PresenceMarker): number {
+  if (!showTurnRing(marker)) {
+    return 0;
+  }
+  return turnRemainingSeconds(game.turnUntil, game.turnBudgetSeconds, nowMs.value);
+}
+
+/** Blue for multi 60s; red for solo 300s (D5 / SC-PRESENCE-08/09). */
+function turnRingColor(marker: PresenceMarker): string {
+  if (!showTurnRing(marker)) {
+    return 'transparent';
+  }
+  return game.isSoloBudget ? 'negative' : 'primary';
+}
+
 /** Affordance only on own online seated marker (SC-SAY-07/08). */
 function canSendSay(marker: PresenceMarker): boolean {
   return Boolean(game.sessionId) && marker.sessionId === game.sessionId && marker.connected;
@@ -815,6 +873,19 @@ async function ensureTouristRoom() {
 watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
+  }
+});
+
+/**
+ * Own seat time-expired → solo timeout modal + clear move chrome (SC-MOVE-31/32).
+ * Only this client; skip initial sync (already expired on remount).
+ */
+watch(isMySeatTimeExpired, (expired, prev) => {
+  if (expired) {
+    selectedSide.value = null;
+  }
+  if (prev === false && expired) {
+    timeoutModalOpen.value = true;
   }
 });
 
@@ -936,9 +1007,9 @@ onUnmounted(() => {
   finishFadeTimers.clear();
 });
 
-/** Confirm only when seated ∧ playing ∧ !finishPlace (SC-LEAVE-02/05/06). */
+/** Confirm only when seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-05/07). */
 const needsLeaveConfirm = computed(
-  () => isSeated.value && isPlaying.value && !isMySeatFinished.value,
+  () => isSeated.value && isPlaying.value && !isMySeatFinished.value && !isMySeatTimeExpired.value,
 );
 
 function onExitClick() {
@@ -1015,6 +1086,9 @@ async function onLeave() {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
 }
 
 .presence-marker--sayable {
@@ -1092,19 +1166,10 @@ body.body--dark .countdown-overlay__card {
 }
 
 .presence-avatar {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   border-radius: 50%;
-}
-
-.presence-avatar--solo {
-  width: 44px;
-  height: 44px;
-  padding: 2px;
-  box-sizing: border-box;
-  background: rgba(127, 127, 127, 0.12);
-  box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.35);
 }
 
 /* Finish place on presence marker (SC-PRESENCE-06/07). */
@@ -1124,16 +1189,6 @@ body.body--dark .countdown-overlay__card {
   line-height: 18px;
   text-align: center;
   pointer-events: none;
-}
-
-/* Current-turn seat indicator (SC-MOVE-01) — blue ring on presence avatar. */
-.presence-marker--turn .presence-avatar--solo {
-  box-shadow: 0 0 0 3px #2196f3;
-}
-
-.presence-marker--turn .presence-progress {
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px #2196f3;
 }
 
 /* Comic say bubbles near presence (D4 / SC-SAY-09…12) — not Notify toasts. */
