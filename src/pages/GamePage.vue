@@ -1,5 +1,18 @@
 <template>
   <q-page class="q-pa-md flex flex-center column">
+    <div
+      v-if="showCountdownOverlay"
+      class="countdown-overlay"
+      role="dialog"
+      aria-live="assertive"
+      :aria-label="$t('game.countdownSoon')"
+    >
+      <div class="countdown-overlay__card">
+        <div class="countdown-overlay__title">{{ $t('game.countdownSoon') }}</div>
+        <div class="countdown-overlay__seconds">{{ game.countdownRemaining }}</div>
+      </div>
+    </div>
+
     <div class="row items-center justify-between full-width q-mb-md game-header">
       <q-btn flat icon="arrow_back" label="Лобби" @click="onLeave" />
       <div class="text-center">
@@ -29,7 +42,7 @@
           class="presence-marker"
           :class="{
             'presence-marker--turn': marker.isCurrentTurn,
-            'presence-marker--sayable': canSendSay(marker),
+            'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
           }"
         >
           <q-circular-progress
@@ -62,15 +75,27 @@
             </div>
           </div>
 
-          <button
-            v-if="canSendSay(marker)"
-            type="button"
-            class="say-affordance"
-            :aria-label="$t('game.say.affordance')"
-            @click.stop="toggleSayPicker"
-          >
-            <q-icon name="chat_bubble_outline" size="18px" />
-          </button>
+          <div v-if="canSendSay(marker) || canShowReady(marker)" class="presence-actions">
+            <button
+              v-if="canShowReady(marker)"
+              type="button"
+              class="ready-affordance"
+              :aria-label="$t('game.readyButton')"
+              @click.stop="onReadyClick"
+            >
+              {{ $t('game.readyButton') }}
+            </button>
+
+            <button
+              v-if="canSendSay(marker)"
+              type="button"
+              class="say-affordance"
+              :aria-label="$t('game.say.affordance')"
+              @click.stop="toggleSayPicker"
+            >
+              <q-icon name="chat_bubble_outline" size="18px" />
+            </button>
+          </div>
 
           <div
             v-if="sayPickerOpen && canSendSay(marker)"
@@ -208,7 +233,7 @@ const SEATED_OPPONENT_SLOTS: PresenceSlot[] = ['top', 'left', 'right'];
 /** Spectator join order → top, bottom, left, right. */
 const SPECTATOR_SLOTS: PresenceSlot[] = ['top', 'bottom', 'left', 'right'];
 
-/** Whitelist preset ids — display copy via i18n `game.say.*` (D1 / SC-SAY-07). */
+/** Whitelist preset ids for picker — display copy via i18n `game.say.*` (ready via sendReady). */
 const SAY_PRESET_IDS: readonly SayPresetId[] = ['hello', 'luck'];
 
 type TileKind = 'start' | 'task' | 'center';
@@ -306,7 +331,7 @@ function touristSrc(touristId: number): string {
 const boardTiles = buildBoardTiles();
 
 const game = useGameStore();
-const { mySeat, isMyTurn } = storeToRefs(game);
+const { mySeat, isMyTurn, canSendReady, isPlaying } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
 
@@ -346,7 +371,11 @@ const boardPieces = computed((): BoardPiece[] => {
   return out;
 });
 
-const isInteractive = computed(() => isMyTurn.value && !moveAnimating.value);
+/** Move chrome / submit only in playing (SC-MOVE-20 / SC-START-10). */
+const isInteractive = computed(() => isPlaying.value && isMyTurn.value && !moveAnimating.value);
+
+/** Fullscreen countdown for every client in the room (SC-START-08). */
+const showCountdownOverlay = computed(() => game.phase === 'countdown');
 
 /** Occupancy of every piece on the board (local hint, not authority). */
 function buildOccupancy(exclude?: Cell): Set<string> {
@@ -578,6 +607,11 @@ function canSendSay(marker: PresenceMarker): boolean {
   return Boolean(game.sessionId) && marker.sessionId === game.sessionId && marker.connected;
 }
 
+/** Ready control beside own say when eligible (SC-START-09). */
+function canShowReady(marker: PresenceMarker): boolean {
+  return canSendReady.value && marker.sessionId === game.sessionId;
+}
+
 /** Live bubbles for a seat — TTL from server `at`, max 3, oldest→newest (D4). */
 function liveSaysFor(sessionId: string): SayEvent[] {
   const now = nowMs.value;
@@ -596,6 +630,11 @@ function chooseSayPreset(presetId: SayPresetId) {
   game.sendSay(presetId);
 }
 
+function onReadyClick() {
+  sayPickerOpen.value = false;
+  game.sendReady();
+}
+
 function closeSayPicker() {
   sayPickerOpen.value = false;
 }
@@ -609,12 +648,15 @@ function graceRemaining(reconnectUntil: number): number {
 }
 
 const statusLabel = computed(() => {
+  if (game.phase === 'countdown') {
+    return 'Старт…';
+  }
   switch (game.status) {
     case 'connecting':
       return 'Подключение…';
     case 'waiting':
     case 'playing': {
-      if (game.currentTurnSessionId) {
+      if (game.phase === 'playing' && game.currentTurnSessionId) {
         if (isMyTurn.value) {
           return 'Ваш ход';
         }
@@ -623,7 +665,7 @@ const statusLabel = computed(() => {
         }
         return 'Ход игрока';
       }
-      return game.status === 'waiting' ? 'Ожидание соперника' : 'Игра идёт';
+      return game.phase === 'playing' ? 'Игра идёт' : 'Ожидание соперника';
     }
     case 'finished':
       return 'Игра окончена';
@@ -656,14 +698,14 @@ async function ensureTouristRoom() {
   }
 }
 
-// Clear local selection when turn ends / spectator (SC-MOVE-11…13 / SC-BOARD-05).
-watch(isMyTurn, (mine) => {
-  if (!mine) {
+// Clear local selection when turn ends / not playing / spectator (SC-MOVE-11…13 / SC-BOARD-05).
+watch([isMyTurn, isPlaying], ([mine, playing]) => {
+  if (!mine || !playing) {
     selectedSide.value = null;
   }
 });
 
-// Close say picker if we lose seat / go offline.
+// Close say picker if we lose seat / go offline / lose ready eligibility context.
 watch(
   () => {
     const seat = game.seats.find((s) => s.sessionId === game.sessionId);
@@ -781,6 +823,76 @@ async function onLeave() {
   pointer-events: auto;
 }
 
+.presence-actions {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  bottom: -6px;
+  right: -6px;
+}
+
+.ready-affordance {
+  pointer-events: auto;
+  border: none;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  color: #fff;
+  background: #43a047;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.ready-affordance:hover {
+  background: #388e3c;
+}
+
+.countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+}
+
+.countdown-overlay__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 36px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a1a1a;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  text-align: center;
+  max-width: min(90vw, 360px);
+}
+
+body.body--dark .countdown-overlay__card {
+  background: rgba(40, 40, 40, 0.96);
+  color: #f0f0f0;
+}
+
+.countdown-overlay__title {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.countdown-overlay__seconds {
+  font-size: 3.5rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 .presence-avatar {
   width: 36px;
   height: 36px;
@@ -871,10 +983,8 @@ body.body--dark .say-bubble {
 }
 
 .say-affordance {
-  position: absolute;
+  position: relative;
   z-index: 3;
-  right: -6px;
-  bottom: -4px;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -888,6 +998,7 @@ body.body--dark .say-bubble {
   color: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   pointer-events: auto;
+  flex-shrink: 0;
 }
 
 .say-affordance:hover {

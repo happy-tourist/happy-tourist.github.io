@@ -7,11 +7,23 @@ export default {
   login: {
     google: 'Продолжить с Google',
   },
+  lobby: {
+    create: 'Создать игру',
+    createTitle: 'Создать игру',
+    createConfirm: 'Создать',
+    createCancel: 'Отмена',
+    maxSeats: 'Число мест',
+    maxSeatsOption: '{n}',
+    capacity: '{seats}/{maxSeats}',
+  },
   game: {
     say: {
       affordance: 'Сказать',
       hello: 'Всем привет',
       luck: 'Удачи',
+      ready: 'Готов начать!',
     },
+    readyButton: 'Готов начать',
+    countdownSoon: 'Игра скоро начнётся',
   },
 };

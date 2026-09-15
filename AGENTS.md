@@ -15,8 +15,8 @@ Main scenarios:
 - Register / sign in with email and password (Colyseus Auth).
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
-- Create a game, join by room id, or `joinOrCreate`.
-- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated; on own turn select a piece and submit a one-step `move` via the game store; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`.
+- Create a game with chosen `maxSeats` (2|3|4), or join by room id.
+- Open Game and view the tourist board with synced seats (4 pieces per seated player) and strip×4 «Мои туристы» if seated; after phase `playing`, on own turn select a piece and submit a one-step `move` via the game store; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
 - Leave the room and return to the lobby; sign out.
 
 ## Who The Users Are
@@ -30,7 +30,7 @@ There is no admin cabinet or content CMS in this app.
 
 ## Important
 
-This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/turn/move rules live on the server; Game mirrors synced seats + `currentTurnSessionId`, shows local select/hints on own turn, and submits moves only via `game.sendMove`. Preset say is ephemeral (`sendSay` / `onMessage('say')` → `sayEvents`) — not schema.
+This is a realtime multiplayer client, not a static brochure site. Auth token is managed by `@colyseus/sdk` (`client.auth`, token key `colyseus-auth-token`). Protected routes wait for `auth.whenReady()` before deciding login vs lobby. Seating/turn/move rules live on the server; Game mirrors synced seats + `phase` / `maxSeats` / `currentTurnSessionId`, shows local select/hints only while `isPlaying` and on own turn, and submits moves only via `game.sendMove`. Ready-to-start uses `sendReady`. Preset say is ephemeral (`sendSay` / `onMessage('say')` → `sayEvents`) — not schema.
 
 Deploy target: GitHub Pages (user/org site at domain root). Router mode is **hash** so deep links work without a history fallback (CI also copies `index.html` → `404.html`).
 
@@ -64,7 +64,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 - Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
 - Tourist room name constant `TOURIST_ROOM = 'tourist'` in `stores/game`.
 - Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'tourist' } })`); HTTP `GET /rooms/tourist` remains unused fallback.
-- Room lifecycle: `create` / `joinById` / `joinOrCreate`, `onStateChange`, `leave`, `sendMove` → `move`, `sendSay` → `say` + `onMessage('say')`.
+- Room lifecycle: `create({ maxSeats })` / `joinById`, `onStateChange`, `leave`, `sendMove` → `move`, `sendReady` → `ready`, `sendSay` → `say` + `onMessage('say')`.
 - GitHub Pages deploy — `.github/workflows/deploy.yml` (`quasar build -m spa`).
 
 ## Development Tools
@@ -141,8 +141,8 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game.
-- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` + `connected` / `reconnectUntil` / `started` / `currentTurnSessionId` / `sessionId`; `isMyTurn` / `sendMove`) + `pages/GamePage` tourist board (all pieces) + presence + strip×4 if seated.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; occupied presence with blue ring on current-turn seat; header «Ваш ход» / «Ход соперника» / «Ход игрока»; on own turn local select/hints + `sendMove`.
+- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` + `connected` / `reconnectUntil` / `ready` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `sessionId`; `isMyTurn` / `isPlaying` / `sendMove` / `sendReady`) + `pages/GamePage` tourist board (all pieces) + presence + strip×4 if seated + countdown overlay.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay all seats’ pieces; occupied presence with blue ring on current-turn seat; header «Ваш ход» / «Ход соперника» / «Ход игрока»; countdown overlay; ready affordance; on own turn while `playing` local select/hints + `sendMove`.
 - **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 
 ## Pages (routes)
@@ -163,7 +163,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 
 - **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
-- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity), `started`, `currentTurnSessionId`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated` / `isMyTurn`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame`, `joinGame`, `rejoinGame`, `leaveGame`, `sendMove` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
+- **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity + `ready`), `phase`, `maxSeats`, `countdownRemaining`, legacy `started`, `currentTurnSessionId`, `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated` / `isMyTurn` / `isPlaying` / `canSendReady`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame({ maxSeats })`, `joinGame`, `rejoinGame`, `leaveGame`, `sendMove`, `sendReady`, `sendSay` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
 ## Realtime / HTTP Layer
@@ -212,9 +212,9 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `work-with-stores`            | Pinia `auth` / `theme` / `game`                                      |
 | `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board     |
 | `work-with-localization`      | vue-i18n boot (thin)                                                 |
-| `work-with-lobby`             | Live LobbyRoom list, quiet resubscribe, leave policy, create / join  |
+| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe |
 | `work-with-rooms`             | Room lifecycle, tourist reconnect token, `onStateChange` / `onLeave` |
-| `work-with-game-board`        | Tourist board + presence + strip×4 + turn select/hints/`sendMove`    |
+| `work-with-game-board`        | Board + presence + ready/countdown + strip×4 + `sendMove`/`sendReady`/`sendSay` |
 | `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                  |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
@@ -223,4 +223,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + four `pieces`) / `started` / `currentTurnSessionId`, renders pieces + strip×4 + local move chrome, and sends `move` `{ side, row, col }` via `sendMove`.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + four `pieces`) / `phase` / `maxSeats` / `currentTurnSessionId`, renders pieces + strip×4 + local move chrome only in `playing`, and sends `move` `{ side, row, col }` via `sendMove` / `ready` via `sendReady`.

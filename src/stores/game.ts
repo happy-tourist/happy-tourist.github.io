@@ -15,7 +15,18 @@ const TOURIST_RECONNECT_KEY = 'ht-tourist-reconnect';
 export interface GameRoomMeta {
   title?: string;
   status?: 'waiting' | 'playing' | 'finished';
+  /** Occupied seated count from room metadata (not clients). */
+  seats?: number;
+  /** Max seated players from room metadata (not maxClients). */
+  maxSeats?: number;
   [key: string]: unknown;
+}
+
+/** Allowed maxSeats values for tourist room create (D4). */
+export type CreateGameMaxSeats = 2 | 3 | 4;
+
+export interface CreateGameOptions {
+  maxSeats?: CreateGameMaxSeats;
 }
 
 /** Mirrored piece from synced Seat.pieces (keyed by side N|E|S|W on server). */
@@ -24,6 +35,9 @@ export interface GamePiece {
   row: number;
   col: number;
 }
+
+/** Synced start phase from MyRoomState.phase. */
+export type GamePhase = 'waiting' | 'countdown' | 'playing';
 
 /** Mirrored seat from synced MyRoomState.seats (keyed by sessionId on server). */
 export interface GameSeat {
@@ -34,10 +48,12 @@ export interface GameSeat {
   connected: boolean;
   /** Unix ms reconnect deadline; 0 when online (D2). */
   reconnectUntil: number;
+  /** Ready-to-start while waiting underfilled (game/start). */
+  ready: boolean;
 }
 
 /** Whitelist preset ids for room message `say` (D1 / game/say). */
-export type SayPresetId = 'hello' | 'luck';
+export type SayPresetId = 'hello' | 'luck' | 'ready';
 
 /** Ephemeral say broadcast from server (not schema). */
 export interface SayEvent {
@@ -53,7 +69,7 @@ export const SAY_TTL_MS = 10_000;
 /** Max concurrent live says per session — mirrors server SAY_MAX_LIVE. */
 export const SAY_MAX_LIVE = 3;
 
-const SAY_PRESETS: ReadonlySet<string> = new Set(['hello', 'luck']);
+const SAY_PRESETS: ReadonlySet<string> = new Set(['hello', 'luck', 'ready']);
 
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
 
@@ -67,19 +83,31 @@ type SeatSync = {
   touristId: number;
   connected?: boolean;
   reconnectUntil?: number;
+  ready?: boolean;
   pieces?: {
     forEach: (cb: (piece: PieceSync, side: string) => void) => void;
   };
 };
 
 type TouristRoomState = {
+  /** Legacy; prefer phase === 'playing'. */
   started?: boolean;
+  phase?: string;
+  maxSeats?: number;
+  countdownRemaining?: number;
   /** Synced current-turn seated sessionId (empty if no seated). */
   currentTurnSessionId?: string;
   seats?: {
     forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
   };
 };
+
+function parsePhase(raw: unknown): GamePhase {
+  if (raw === 'countdown' || raw === 'playing' || raw === 'waiting') {
+    return raw;
+  }
+  return 'waiting';
+}
 
 type StoredTouristReconnect = {
   roomId: string;
@@ -167,7 +195,14 @@ export const useGameStore = defineStore('game', {
     room: Room | null;
     roomId: string | null;
     sessionId: string | null;
+    /** Derived mirror of phase === 'playing' (legacy; prefer phase). */
     started: boolean;
+    /** Synced start phase (waiting | countdown | playing). */
+    phase: GamePhase;
+    /** Synced room capacity (2|3|4). */
+    maxSeats: number;
+    /** Synced countdown seconds remaining (5…1 while countdown; else 0). */
+    countdownRemaining: number;
     /** Mirrored MyRoomState.currentTurnSessionId — whose turn it is. */
     currentTurnSessionId: string;
     seats: GameSeat[];
@@ -184,6 +219,9 @@ export const useGameStore = defineStore('game', {
     roomId: null,
     sessionId: null,
     started: false,
+    phase: 'waiting',
+    maxSeats: 2,
+    countdownRemaining: 0,
     currentTurnSessionId: '',
     seats: [],
     sayEvents: [],
@@ -206,6 +244,23 @@ export const useGameStore = defineStore('game', {
         state.sessionId === state.currentTurnSessionId &&
         state.seats.some((s) => s.sessionId === state.sessionId),
       ),
+    /** Moves / move chrome only while phase is playing. */
+    isPlaying: (state) => state.phase === 'playing',
+    /**
+     * Own seated client may submit ready (SC-START-04/09):
+     * waiting, ≥2 seated, under maxSeats, own seat not ready, connected.
+     */
+    canSendReady: (state) => {
+      if (state.phase !== 'waiting' || !state.sessionId) {
+        return false;
+      }
+      const seated = state.seats.length;
+      if (seated < 2 || seated >= state.maxSeats) {
+        return false;
+      }
+      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
+      return Boolean(seat && seat.connected && !seat.ready);
+    },
   },
 
   actions: {
@@ -276,7 +331,7 @@ export const useGameStore = defineStore('game', {
       }
     },
 
-    async createGame(options: Record<string, unknown> = {}) {
+    async createGame(options: CreateGameOptions = {}) {
       return this._enterRoom(() => client.create(TOURIST_ROOM, options));
     },
 
@@ -324,11 +379,11 @@ export const useGameStore = defineStore('game', {
 
     /**
      * Submit a one-step tourist move (D2). Only via store — pages must not room.send.
-     * Server rejects if not seated / not current turn / illegal; no local authority.
-     * @returns true if the message was sent (room present and isMyTurn).
+     * Server rejects if not seated / not current turn / not playing / illegal.
+     * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
     sendMove(side: string, row: number, col: number): boolean {
-      if (!this.room || !this.isMyTurn) {
+      if (!this.room || this.phase !== 'playing' || !this.isMyTurn) {
         return false;
       }
       this.room.send('move', { side, row, col });
@@ -338,10 +393,11 @@ export const useGameStore = defineStore('game', {
     /**
      * Submit a whitelist preset say (D3). Only via store — pages must not room.send.
      * Seated + connected only; client UX respects max SAY_MAX_LIVE live by `at`.
+     * Manual picker uses hello|luck; ready arrives via sendReady broadcast.
      * @returns true if the message was sent.
      */
     sendSay(presetId: SayPresetId): boolean {
-      if (!this.room || !SAY_PRESETS.has(presetId)) {
+      if (!this.room || !SAY_PRESETS.has(presetId) || presetId === 'ready') {
         return false;
       }
       const seat = this.seats.find((s) => s.sessionId === this.sessionId);
@@ -359,6 +415,19 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
+     * One-shot ready-to-start (game/start). Only via store — pages must not room.send.
+     * Server marks seat.ready + broadcasts say preset `ready`.
+     * @returns true if the message was sent.
+     */
+    sendReady(): boolean {
+      if (!this.room || !this.canSendReady) {
+        return false;
+      }
+      this.room.send('ready');
+      return true;
+    },
+
+    /**
      * Detach a prior tourist room without touching the lobby subscription.
      * Lobby stays live until enter succeeds (SC-LOBBY-01 / SC-LOBBY-05).
      * Consented leave of a live prior tourist → clear reconnect token.
@@ -369,6 +438,9 @@ export const useGameStore = defineStore('game', {
       this.roomId = null;
       this.sessionId = null;
       this.started = false;
+      this.phase = 'waiting';
+      this.maxSeats = 2;
+      this.countdownRemaining = 0;
       this.currentTurnSessionId = '';
       this.seats = [];
       this.sayEvents = [];
@@ -487,7 +559,13 @@ export const useGameStore = defineStore('game', {
       const s = state as TouristRoomState;
 
       this.sessionId = room.sessionId;
-      this.started = Boolean(s.started);
+      this.phase = parsePhase(s.phase);
+      // Phase-first: started mirrors playing (legacy field may still exist on server).
+      this.started = this.phase === 'playing';
+      const maxRaw = Number(s.maxSeats);
+      this.maxSeats = maxRaw === 2 || maxRaw === 3 || maxRaw === 4 ? maxRaw : 2;
+      const cd = Number(s.countdownRemaining ?? 0);
+      this.countdownRemaining = Number.isFinite(cd) && cd > 0 ? Math.floor(cd) : 0;
       this.currentTurnSessionId =
         typeof s.currentTurnSessionId === 'string' ? s.currentTurnSessionId : '';
 
@@ -507,11 +585,13 @@ export const useGameStore = defineStore('game', {
           pieces,
           connected: seat.connected !== false,
           reconnectUntil: Number(seat.reconnectUntil ?? 0),
+          ready: Boolean(seat.ready),
         });
       });
       this.seats = next;
 
-      this.status = this.started ? 'playing' : 'waiting';
+      // Status from phase (countdown stays waiting for lobby-style label).
+      this.status = this.phase === 'playing' ? 'playing' : 'waiting';
 
       // Keep localStorage token fresh after soft reconnect (token may rotate).
       saveTouristReconnect(room);
@@ -592,6 +672,9 @@ export const useGameStore = defineStore('game', {
       this.roomId = null;
       this.sessionId = null;
       this.started = false;
+      this.phase = 'waiting';
+      this.maxSeats = 2;
+      this.countdownRemaining = 0;
       this.currentTurnSessionId = '';
       this.seats = [];
       this.sayEvents = [];

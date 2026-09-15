@@ -15,20 +15,10 @@
       <div class="col-12 col-sm-auto">
         <q-btn
           color="primary"
-          icon="sports_esports"
-          label="Играть"
-          :loading="joining"
-          @click="onPlay"
-        />
-      </div>
-      <div class="col-12 col-sm-auto">
-        <q-btn
-          outline
-          color="primary"
           icon="add"
-          label="Создать игру"
+          :label="$t('lobby.create')"
           :loading="creating"
-          @click="onCreate"
+          @click="openCreateModal"
         />
       </div>
     </div>
@@ -65,7 +55,12 @@
               room.metadata?.title || `Комната ${room.roomId.slice(0, 6)}`
             }}</q-item-label>
             <q-item-label caption>
-              {{ room.clients }}/{{ room.maxClients }} игроков
+              {{
+                $t('lobby.capacity', {
+                  seats: room.metadata?.seats ?? 0,
+                  maxSeats: room.metadata?.maxSeats ?? '—',
+                })
+              }}
               <span v-if="room.metadata?.status"> · {{ room.metadata.status }}</span>
             </q-item-label>
           </q-item-section>
@@ -75,22 +70,67 @@
         </q-item>
       </template>
     </q-list>
+
+    <q-dialog v-model="createModalOpen" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('lobby.createTitle') }}</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.maxSeats') }}</div>
+          <q-option-group
+            v-model="createMaxSeats"
+            type="radio"
+            color="primary"
+            :options="maxSeatsOptions"
+            inline
+          />
+        </q-card-section>
+
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="$t('lobby.createCancel')"
+            :disable="creating"
+            @click="closeCreateModal"
+          />
+          <q-btn
+            color="primary"
+            :label="$t('lobby.createConfirm')"
+            :loading="creating"
+            @click="onConfirmCreate"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { useGameStore } from '@/stores/game';
+import { useGameStore, type CreateGameMaxSeats } from '@/stores/game';
 
 const auth = useAuthStore();
 const game = useGameStore();
 const router = useRouter();
+const { t } = useI18n();
 
 const creating = ref(false);
 const joining = ref(false);
+const createModalOpen = ref(false);
+const createMaxSeats = ref<CreateGameMaxSeats>(2);
+
+const maxSeatsOptions = computed(() =>
+  ([2, 3, 4] as const).map((n) => ({
+    label: t('lobby.maxSeatsOption', { n }),
+    value: n,
+  })),
+);
 
 onMounted(() => {
   void game.subscribeLobby();
@@ -100,23 +140,23 @@ onUnmounted(() => {
   void game.unsubscribeLobby();
 });
 
-/** joinOrCreate(TOURIST_ROOM) → room в Pinia → /game/:roomId */
-async function onPlay() {
-  joining.value = true;
-  try {
-    const room = await game.joinGame();
-    await router.push({ name: 'game', params: { roomId: room.roomId } });
-  } catch {
-    // error in store
-  } finally {
-    joining.value = false;
-  }
+function openCreateModal() {
+  createMaxSeats.value = 2;
+  createModalOpen.value = true;
 }
 
-async function onCreate() {
+function closeCreateModal() {
+  if (creating.value) {
+    return;
+  }
+  createModalOpen.value = false;
+}
+
+async function onConfirmCreate() {
   creating.value = true;
   try {
-    const room = await game.createGame();
+    const room = await game.createGame({ maxSeats: createMaxSeats.value });
+    createModalOpen.value = false;
     await router.push({ name: 'game', params: { roomId: room.roomId } });
   } catch {
     // error in store
