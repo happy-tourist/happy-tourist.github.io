@@ -14,12 +14,24 @@
     </div>
 
     <div class="row items-center justify-between full-width q-mb-md game-header">
-      <q-btn flat icon="arrow_back" label="Лобби" @click="onLeave" />
+      <q-btn flat icon="arrow_back" :label="$t('game.leave')" @click="onExitClick" />
       <div class="text-center">
         <div class="text-subtitle1">{{ statusLabel }}</div>
       </div>
       <div class="text-caption text-muted">{{ game.roomId?.slice(0, 8) }}</div>
     </div>
+
+    <q-dialog v-model="leaveConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-body1">{{ $t('game.leaveConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('game.leaveCancel')" v-close-popup />
+          <q-btn color="primary" :label="$t('game.leaveExit')" @click="onConfirmLeave" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
 
     <q-banner
       v-if="game.error"
@@ -331,7 +343,7 @@ function touristSrc(touristId: number): string {
 const boardTiles = buildBoardTiles();
 
 const game = useGameStore();
-const { mySeat, isMyTurn, canSendReady, isPlaying } = storeToRefs(game);
+const { mySeat, isMyTurn, canSendReady, isPlaying, isSeated } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
 
@@ -343,6 +355,8 @@ const moveAnimating = ref(false);
 const pieceTransitionsReady = ref(false);
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
+/** Leave confirm for seated players in playing (SC-LEAVE-02…04). */
+const leaveConfirmOpen = ref(false);
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -755,6 +769,20 @@ onUnmounted(() => {
     moveAnimTimer = undefined;
   }
 });
+
+/** Exit control: confirm only when seated ∧ playing (SC-LEAVE-02…05). */
+function onExitClick() {
+  if (isSeated.value && game.phase === 'playing') {
+    leaveConfirmOpen.value = true;
+    return;
+  }
+  void onLeave();
+}
+
+function onConfirmLeave() {
+  leaveConfirmOpen.value = false;
+  void onLeave();
+}
 
 async function onLeave() {
   consentedLeaving.value = true;

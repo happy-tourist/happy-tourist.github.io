@@ -65,7 +65,7 @@
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-btn flat dense color="primary" label="Войти" />
+            <q-btn flat dense color="primary" label="Войти" :loading="joining" :disable="joining" />
           </q-item-section>
         </q-item>
       </template>

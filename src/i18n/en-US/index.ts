@@ -25,5 +25,9 @@ export default {
     },
     readyButton: 'Готов начать',
     countdownSoon: 'Игра скоро начнётся',
+    leave: 'Выход из игры',
+    leaveConfirm: 'Вы уверены? Если выйдете, прогресс будет сброшен.',
+    leaveCancel: 'Отмена',
+    leaveExit: 'Выйти',
   },
 };
