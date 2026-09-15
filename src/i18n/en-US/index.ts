@@ -29,5 +29,11 @@ export default {
     leaveConfirm: 'Вы уверены? Если выйдете, прогресс будет сброшен.',
     leaveCancel: 'Отмена',
     leaveExit: 'Выйти',
+    /** Place modal after all four pieces finish (SC-FINISH-03/04). */
+    finishPlaceModal: 'Вы {n}-й!',
+    finishPlaceModalOk: 'ОК',
+    /** a11y for strip finish icon and presence place badge. */
+    finishStripAria: 'Финиш',
+    finishPlaceBadgeAria: 'Место {n}',
   },
 };

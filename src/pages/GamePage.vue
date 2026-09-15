@@ -33,6 +33,20 @@
       </q-card>
     </q-dialog>
 
+    <!-- Own finish place 0→N (SC-FINISH-03/04); close keeps player in room. -->
+    <q-dialog v-model="placeModalOpen" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6 text-center">
+            {{ $t('game.finishPlaceModal', { n: celebratedPlace }) }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn color="primary" :label="$t('game.finishPlaceModalOk')" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-banner
       v-if="game.error"
       class="bg-negative text-white q-mb-md"
@@ -76,6 +90,14 @@
             :src="touristSrc(marker.touristId)"
             alt=""
           />
+
+          <span
+            v-if="marker.finishPlace > 0"
+            class="presence-place-badge"
+            :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
+          >
+            {{ marker.finishPlace }}
+          </span>
 
           <div class="say-bubbles" :class="`say-bubbles--${marker.slot}`" aria-live="polite">
             <div
@@ -149,8 +171,9 @@
           :key="`piece-${piece.sessionId}-${piece.side}`"
           class="piece"
           :class="{
-            'piece--own': isOwnPiece(piece),
+            'piece--own': isOwnPiece(piece) && !piece.disappearing,
             'piece--no-transition': !pieceTransitionsReady,
+            'piece--disappearing': piece.disappearing,
           }"
           :src="touristSrc(piece.touristId)"
           alt=""
@@ -168,15 +191,29 @@
     >
       <div class="text-caption text-muted">Мои туристы</div>
       <div class="my-tourist-slots">
-        <img
+        <div
           v-for="side in STRIP_SIDES"
           :key="`strip-${side}`"
-          class="my-tourist-img"
-          :class="{ 'my-tourist-img--selected': selectedSide === side }"
-          :src="touristSrc(mySeat.touristId)"
-          :alt="`Мои туристы ${side}`"
+          class="my-tourist-slot"
+          :class="{
+            'my-tourist-slot--finished': isStripSlotFinished(side),
+            'my-tourist-slot--selected': selectedSide === side && !isStripSlotFinished(side),
+          }"
           @click="onStripClick(side)"
-        />
+        >
+          <img
+            class="my-tourist-img"
+            :src="touristSrc(mySeat.touristId)"
+            :alt="`Мои туристы ${side}`"
+          />
+          <q-icon
+            v-if="isStripSlotFinished(side)"
+            class="my-tourist-finish-icon"
+            name="flag"
+            size="18px"
+            :aria-label="$t('game.finishStripAria')"
+          />
+        </div>
       </div>
     </div>
   </q-page>
@@ -197,6 +234,7 @@ import {
   type SayEvent,
   type SayPresetId,
   SAY_TTL_MS,
+  isFinishedPiece,
 } from '@/stores/game';
 
 /** 10×10 sparse layout: `.` hole, `1` start, `*` task, `7` center (solid 2×2). */
@@ -221,6 +259,8 @@ const GRACE_SECONDS = 30;
 
 /** Piece travel animation (D6) — matches CSS transition. */
 const MOVE_ANIM_MS = 250;
+/** Short fade after landing on center before DOM removal (SC-FINISH-01). */
+const FINISH_FADE_MS = 200;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -264,6 +304,8 @@ interface BoardPiece {
   side: string;
   row: number;
   col: number;
+  /** True while slide+fade after finish — still in DOM, not selectable. */
+  disappearing?: boolean;
 }
 
 interface PresenceMarker {
@@ -274,6 +316,8 @@ interface PresenceMarker {
   slot: PresenceSlot;
   /** Synced current-turn seat (SC-MOVE-01 indicator). */
   isCurrentTurn: boolean;
+  /** Finish place; 0 = none (SC-PRESENCE-06/07). */
+  finishPlace: number;
 }
 
 interface Cell {
@@ -343,7 +387,15 @@ function touristSrc(touristId: number): string {
 const boardTiles = buildBoardTiles();
 
 const game = useGameStore();
-const { mySeat, isMyTurn, canSendReady, isPlaying, isSeated } = storeToRefs(game);
+const {
+  mySeat,
+  isMyTurn,
+  canSendReady,
+  isPlaying,
+  isSeated,
+  isMySeatFinished,
+  myFinishedStripSides,
+} = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
 
@@ -355,8 +407,11 @@ const moveAnimating = ref(false);
 const pieceTransitionsReady = ref(false);
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
-/** Leave confirm for seated players in playing (SC-LEAVE-02…04). */
+/** Leave confirm for seated ∧ playing ∧ !finishPlace (SC-LEAVE-02…06). */
 const leaveConfirmOpen = ref(false);
+/** Own place congratulation modal (SC-FINISH-03/04). */
+const placeModalOpen = ref(false);
+const celebratedPlace = ref(0);
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -368,17 +423,46 @@ const consentedLeaving = ref(false);
 /** Avoid overlapping remount / soft-fail rejoin attempts. */
 let rejoinInFlight = false;
 
-/** Flat list of all seats' pieces for board overlay. */
+/**
+ * Keys of pieces that just finished — keep on board for slide + fade (SC-FINISH-01).
+ * Cleared after MOVE_ANIM_MS + FINISH_FADE_MS; mid-join finished pieces never enter here.
+ */
+const disappearingKeys = ref<Set<string>>(new Set());
+const finishFadeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function pieceKey(sessionId: string, side: string): string {
+  return `${sessionId}:${side}`;
+}
+
+function isStripSlotFinished(side: string): boolean {
+  return myFinishedStripSides.value.includes(side);
+}
+
+/** Flat board overlay: unfinished + short-lived disappearing finishers. */
 const boardPieces = computed((): BoardPiece[] => {
   const out: BoardPiece[] = [];
+  const fading = disappearingKeys.value;
+
+  for (const piece of game.unfinishedBoardPieces) {
+    out.push({ ...piece });
+  }
+
   for (const seat of game.seats) {
     for (const piece of seat.pieces) {
+      if (!piece.finished) {
+        continue;
+      }
+      const key = pieceKey(seat.sessionId, piece.side);
+      if (!fading.has(key)) {
+        continue;
+      }
       out.push({
         sessionId: seat.sessionId,
         touristId: seat.touristId,
         side: piece.side,
         row: piece.row,
         col: piece.col,
+        disappearing: true,
       });
     }
   }
@@ -386,16 +470,22 @@ const boardPieces = computed((): BoardPiece[] => {
 });
 
 /** Move chrome / submit only in playing (SC-MOVE-20 / SC-START-10). */
-const isInteractive = computed(() => isPlaying.value && isMyTurn.value && !moveAnimating.value);
+const isInteractive = computed(
+  () =>
+    isPlaying.value &&
+    isMyTurn.value &&
+    !isMySeatFinished.value &&
+    !moveAnimating.value,
+);
 
 /** Fullscreen countdown for every client in the room (SC-START-08). */
 const showCountdownOverlay = computed(() => game.phase === 'countdown');
 
-/** Occupancy of every piece on the board (local hint, not authority). */
+/** Occupancy of unfinished pieces only (local hint; finished do not block). */
 function buildOccupancy(exclude?: Cell): Set<string> {
   const set = new Set<string>();
   const excludeKey = exclude ? cellKey(exclude.row, exclude.col) : null;
-  for (const piece of boardPieces.value) {
+  for (const piece of game.unfinishedBoardPieces) {
     const key = cellKey(piece.row, piece.col);
     if (excludeKey !== null && key === excludeKey) {
       continue;
@@ -405,12 +495,14 @@ function buildOccupancy(exclude?: Cell): Set<string> {
   return set;
 }
 
-/** Legal one-step destinations for the selected own piece (D5 / SC-MOVE-12). */
+/** Legal one-step destinations for the selected own unfinished piece (D5 / SC-MOVE-12). */
 const legalTargets = computed((): Cell[] => {
   if (!isInteractive.value || !selectedSide.value || !mySeat.value) {
     return [];
   }
-  const piece = mySeat.value.pieces.find((p) => p.side === selectedSide.value);
+  const piece = mySeat.value.pieces.find(
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+  );
   if (!piece) {
     return [];
   }
@@ -444,7 +536,9 @@ const selectedCell = computed((): Cell | null => {
   if (!selectedSide.value || !mySeat.value) {
     return null;
   }
-  const piece = mySeat.value.pieces.find((p) => p.side === selectedSide.value);
+  const piece = mySeat.value.pieces.find(
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+  );
   return piece ? { row: piece.row, col: piece.col } : null;
 });
 
@@ -488,7 +582,8 @@ function selectOwnSide(side: string) {
   if (!isInteractive.value || !mySeat.value) {
     return;
   }
-  if (!mySeat.value.pieces.some((p) => p.side === side)) {
+  const piece = mySeat.value.pieces.find((p) => p.side === side);
+  if (!piece || isFinishedPiece(piece)) {
     return;
   }
   selectedSide.value = side;
@@ -518,13 +613,16 @@ function submitMove(side: string, row: number, col: number) {
 }
 
 function onPieceClick(piece: BoardPiece) {
-  if (!isInteractive.value || !isOwnPiece(piece)) {
+  if (!isInteractive.value || !isOwnPiece(piece) || piece.disappearing) {
     return;
   }
   selectOwnSide(piece.side);
 }
 
 function onStripClick(side: string) {
+  if (isStripSlotFinished(side)) {
+    return;
+  }
   selectOwnSide(side);
 }
 
@@ -609,6 +707,7 @@ function toMarker(seat: GameSeat, slot: PresenceSlot): PresenceMarker {
     slot,
     isCurrentTurn:
       Boolean(game.currentTurnSessionId) && seat.sessionId === game.currentTurnSessionId,
+    finishPlace: seat.finishPlace,
   };
 }
 
@@ -719,6 +818,69 @@ watch([isMyTurn, isPlaying], ([mine, playing]) => {
   }
 });
 
+/**
+ * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01).
+ * flush sync so disappearingKeys updates before boardPieces re-render (no one-frame gap).
+ * Initial sync skipped — already-finished pieces stay off the board.
+ */
+watch(
+  () =>
+    game.seats.flatMap((s) =>
+      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.side)),
+    ),
+  (finishedKeys, prevKeys) => {
+    if (prevKeys === undefined) {
+      return;
+    }
+    const prev = new Set(prevKeys);
+    for (const key of finishedKeys) {
+      if (prev.has(key) || disappearingKeys.value.has(key)) {
+        continue;
+      }
+      const next = new Set(disappearingKeys.value);
+      next.add(key);
+      disappearingKeys.value = next;
+
+      const existing = finishFadeTimers.get(key);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+      finishFadeTimers.set(
+        key,
+        setTimeout(() => {
+          finishFadeTimers.delete(key);
+          const cleared = new Set(disappearingKeys.value);
+          cleared.delete(key);
+          disappearingKeys.value = cleared;
+        }, MOVE_ANIM_MS + FINISH_FADE_MS),
+      );
+    }
+
+    // Drop selection if the selected piece just finished (SC-MOVE-24).
+    if (selectedSide.value && mySeat.value) {
+      const sel = mySeat.value.pieces.find((p) => p.side === selectedSide.value);
+      if (sel && isFinishedPiece(sel)) {
+        selectedSide.value = null;
+      }
+    }
+  },
+  { flush: 'sync' },
+);
+
+/**
+ * Own finish place 0→N → local place modal; stay in room after close (SC-FINISH-03/04).
+ * Skip initial sync (already finished mid-join / remount).
+ */
+watch(
+  () => mySeat.value?.finishPlace ?? 0,
+  (place, prev) => {
+    if (typeof prev === 'number' && prev === 0 && place > 0) {
+      celebratedPlace.value = place;
+      placeModalOpen.value = true;
+    }
+  },
+);
+
 // Close say picker if we lose seat / go offline / lose ready eligibility context.
 watch(
   () => {
@@ -768,11 +930,19 @@ onUnmounted(() => {
     clearTimeout(moveAnimTimer);
     moveAnimTimer = undefined;
   }
+  for (const timer of finishFadeTimers.values()) {
+    clearTimeout(timer);
+  }
+  finishFadeTimers.clear();
 });
 
-/** Exit control: confirm only when seated ∧ playing (SC-LEAVE-02…05). */
+/** Confirm only when seated ∧ playing ∧ !finishPlace (SC-LEAVE-02/05/06). */
+const needsLeaveConfirm = computed(
+  () => isSeated.value && isPlaying.value && !isMySeatFinished.value,
+);
+
 function onExitClick() {
-  if (isSeated.value && game.phase === 'playing') {
+  if (needsLeaveConfirm.value) {
     leaveConfirmOpen.value = true;
     return;
   }
@@ -935,6 +1105,25 @@ body.body--dark .countdown-overlay__card {
   box-sizing: border-box;
   background: rgba(127, 127, 127, 0.12);
   box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.35);
+}
+
+/* Finish place on presence marker (SC-PRESENCE-06/07). */
+.presence-place-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #2e7d32;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* Current-turn seat indicator (SC-MOVE-01) — blue ring on presence avatar. */
@@ -1151,6 +1340,15 @@ body.body--dark .say-picker {
   transition: none;
 }
 
+.piece--disappearing {
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    left 250ms ease-out,
+    top 250ms ease-out,
+    opacity 200ms ease-out 250ms;
+}
+
 .tourist-board--interactive .piece--own {
   pointer-events: auto;
   cursor: pointer;
@@ -1175,21 +1373,42 @@ body.body--dark .say-picker {
   gap: 8px;
 }
 
-.my-tourist-img {
+.my-tourist-slot {
+  position: relative;
   width: 72px;
   height: 72px;
-  object-fit: contain;
-  pointer-events: none;
   border-radius: 8px;
+  pointer-events: none;
 }
 
-.my-tourist-strip--interactive .my-tourist-img {
+.my-tourist-strip--interactive .my-tourist-slot:not(.my-tourist-slot--finished) {
   pointer-events: auto;
   cursor: pointer;
 }
 
-.my-tourist-img--selected {
+.my-tourist-slot--finished {
+  opacity: 0.55;
+}
+
+.my-tourist-slot--selected {
   outline: 3px solid #ffffff;
   outline-offset: 2px;
+}
+
+.my-tourist-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+}
+
+.my-tourist-finish-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  color: #2e7d32;
+  filter: drop-shadow(0 0 1px #fff);
+  pointer-events: none;
 }
 </style>

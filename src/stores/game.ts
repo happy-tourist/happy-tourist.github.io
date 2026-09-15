@@ -34,6 +34,8 @@ export interface GamePiece {
   side: string;
   row: number;
   col: number;
+  /** Synced finish flag — finished pieces leave board occupancy (game/finish). */
+  finished: boolean;
 }
 
 /** Synced start phase from MyRoomState.phase. */
@@ -50,6 +52,27 @@ export interface GameSeat {
   reconnectUntil: number;
   /** Ready-to-start while waiting underfilled (game/start). */
   ready: boolean;
+  /** Finish place; `0` until all four pieces finished (game/finish). */
+  finishPlace: number;
+}
+
+/** Flat unfinished piece for board overlay (SC-PIECE-09 / SC-FINISH-01). */
+export interface UnfinishedBoardPiece {
+  sessionId: string;
+  touristId: number;
+  side: string;
+  row: number;
+  col: number;
+}
+
+/** Seat has a finish place (all four pieces finished). */
+export function isFinishedSeat(seat: GameSeat): boolean {
+  return seat.finishPlace > 0;
+}
+
+/** Strip slot / piece is finished and must not be selected for moves. */
+export function isFinishedPiece(piece: GamePiece): boolean {
+  return piece.finished;
 }
 
 /** Whitelist preset ids for room message `say` (D1 / game/say). */
@@ -77,6 +100,7 @@ type PieceSync = {
   side: string;
   row: number;
   col: number;
+  finished?: boolean;
 };
 
 type SeatSync = {
@@ -84,6 +108,7 @@ type SeatSync = {
   connected?: boolean;
   reconnectUntil?: number;
   ready?: boolean;
+  finishPlace?: number;
   pieces?: {
     forEach: (cb: (piece: PieceSync, side: string) => void) => void;
   };
@@ -261,6 +286,44 @@ export const useGameStore = defineStore('game', {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       return Boolean(seat && seat.connected && !seat.ready);
     },
+    /**
+     * Unfinished pieces of all seats for board overlay (SC-FINISH-01 / SC-PIECE-09).
+     * Finished pieces stay off the board (disappear animation is page-local).
+     */
+    unfinishedBoardPieces: (state): UnfinishedBoardPiece[] => {
+      const out: UnfinishedBoardPiece[] = [];
+      for (const seat of state.seats) {
+        for (const piece of seat.pieces) {
+          if (piece.finished) {
+            continue;
+          }
+          out.push({
+            sessionId: seat.sessionId,
+            touristId: seat.touristId,
+            side: piece.side,
+            row: piece.row,
+            col: piece.col,
+          });
+        }
+      }
+      return out;
+    },
+    /** Own seat has a finish place (all four pieces finished). */
+    isMySeatFinished: (state): boolean => {
+      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
+      return Boolean(seat && seat.finishPlace > 0);
+    },
+    /**
+     * Own strip sides whose pieces are finished (SC-FINISH-09/10 / SC-PIECE-09).
+     * Empty when not seated.
+     */
+    myFinishedStripSides: (state): string[] => {
+      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
+      if (!seat) {
+        return [];
+      }
+      return seat.pieces.filter((p) => p.finished).map((p) => p.side);
+    },
   },
 
   actions: {
@@ -383,7 +446,7 @@ export const useGameStore = defineStore('game', {
      * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
     sendMove(side: string, row: number, col: number): boolean {
-      if (!this.room || this.phase !== 'playing' || !this.isMyTurn) {
+      if (!this.room || this.phase !== 'playing' || !this.isMyTurn || this.isMySeatFinished) {
         return false;
       }
       this.room.send('move', { side, row, col });
@@ -577,6 +640,7 @@ export const useGameStore = defineStore('game', {
             side: String(piece.side || sideKey),
             row: Number(piece.row),
             col: Number(piece.col),
+            finished: Boolean(piece.finished),
           });
         });
         next.push({
@@ -586,6 +650,7 @@ export const useGameStore = defineStore('game', {
           connected: seat.connected !== false,
           reconnectUntil: Number(seat.reconnectUntil ?? 0),
           ready: Boolean(seat.ready),
+          finishPlace: Number(seat.finishPlace ?? 0) || 0,
         });
       });
       this.seats = next;
