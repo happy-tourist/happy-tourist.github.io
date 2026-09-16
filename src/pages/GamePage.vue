@@ -524,6 +524,7 @@ const {
   isMySeatTimeExpired,
   myFinishedStripSides,
   budgetsInfinite,
+  peekedThisTurn,
 } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
@@ -545,18 +546,14 @@ const celebratedPlace = ref(0);
 const timeoutModalOpen = ref(false);
 /** Solo unlimited-resources modal (SC-PRESENCE-19). */
 const soloUnlimitedModalOpen = ref(false);
-/**
- * Local one-peek-per-turn gate for multi eye affordance (server does not sync peekedThisTurn).
- * Reset when own turn starts; set when peekOpen arrives.
- */
-const peekedThisTurnLocal = ref(false);
 
-/** +N fall-into-counter animations (SC-PRESENCE-15). */
+/** +N fall-into-counter animations (SC-PRESENCE-15 / SC-PRESENCE-20). */
 const stepFalls = ref<BudgetFall[]>([]);
 const peekFalls = ref<BudgetFall[]>([]);
 let budgetFallSeq = 0;
 const budgetFallTimers = new Map<number, ReturnType<typeof setTimeout>>();
-const BUDGET_FALL_MS = 900;
+/** Local +N fall duration ≈ 2s (SC-PRESENCE-20); keep in sync with `.budget-fall` CSS. */
+const BUDGET_FALL_MS = 2000;
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -751,12 +748,15 @@ const selectedCell = computed((): Cell | null => {
   return piece ? { row: piece.row, col: piece.col } : null;
 });
 
-/** Eye when selected own unfinished piece sits on a still-present task cell (SC-BOARD-13). */
+/**
+ * Eye when selected own unfinished piece sits on a still-present task cell
+ * (SC-BOARD-13/14). Keep-focus after move reuses selection — no re-click needed.
+ */
 const canShowPeekAffordance = computed(() => {
   if (!isInteractive.value || !selectedSide.value || !mySeat.value || game.openPeek) {
     return false;
   }
-  if (!budgetsInfinite.value && (game.peeks <= 0 || peekedThisTurnLocal.value)) {
+  if (!budgetsInfinite.value && (game.peeks <= 0 || peekedThisTurn.value)) {
     return false;
   }
   const piece = mySeat.value.pieces.find(
@@ -842,7 +842,10 @@ function submitMove(side: string, row: number, col: number) {
   if (!game.sendMove(side, row, col)) {
     return;
   }
-  selectedSide.value = null;
+  // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
+  if (isCenterCell(row, col)) {
+    selectedSide.value = null;
+  }
   beginMoveAnimation();
 }
 
@@ -1103,23 +1106,11 @@ async function ensureTouristRoom() {
 }
 
 // Clear local selection when turn ends / not playing / spectator (SC-MOVE-11…13 / SC-BOARD-05).
-// Reset local peek-used flag whenever turn/playing eligibility changes (SC-BOARD-13).
 watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
   }
-  peekedThisTurnLocal.value = false;
 });
-
-/** Mark one-peek-per-turn when server opens peek for this client. */
-watch(
-  () => game.openPeek,
-  (peek) => {
-    if (peek) {
-      peekedThisTurnLocal.value = true;
-    }
-  },
-);
 
 /** +N falls into own counters on finite budget increases (SC-PRESENCE-15). */
 watch(
@@ -1429,7 +1420,8 @@ body.body--dark .budget-counter {
   font-size: 12px;
   font-weight: 700;
   pointer-events: none;
-  animation: budget-fall-in 0.85s ease-in forwards;
+  /* ≈ BUDGET_FALL_MS / SC-PRESENCE-20 */
+  animation: budget-fall-in 2s ease-in forwards;
 }
 
 @keyframes budget-fall-in {

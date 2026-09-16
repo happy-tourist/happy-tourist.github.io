@@ -118,6 +118,8 @@ export interface SeatBudgets {
   steps: number;
   peeks: number;
   infinite: boolean;
+  /** Multi one-peek-per-turn; restored on reconnect. */
+  peekedThisTurn?: boolean;
 }
 
 /** Open peek modal payload from room `peekOpen` (owner-only). */
@@ -299,6 +301,11 @@ export const useGameStore = defineStore('game', {
     /** Solo infinite steps/peeks mode from `budgets`. */
     budgetsInfinite: boolean;
     /**
+     * Multi: already used the one peek this turn (from `budgets.peekedThisTurn`).
+     * Solo infinite stays false; used for eye affordance after reconnect.
+     */
+    peekedThisTurn: boolean;
+    /**
      * Open peek modal for this client (`peekOpen`); null when none.
      * Cleared on answer / room reset (page shows modal in block 3).
      */
@@ -327,6 +334,7 @@ export const useGameStore = defineStore('game', {
     steps: 0,
     peeks: 0,
     budgetsInfinite: false,
+    peekedThisTurn: false,
     openPeek: null,
     sayEvents: [],
     status: 'idle',
@@ -677,6 +685,7 @@ export const useGameStore = defineStore('game', {
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
+      this.peekedThisTurn = false;
       this.openPeek = null;
       this.sayEvents = [];
 
@@ -870,6 +879,7 @@ export const useGameStore = defineStore('game', {
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
+      this.peekedThisTurn = false;
       this.openPeek = null;
 
       // D3: persist tourist reconnection token only (never lobby).
@@ -921,6 +931,7 @@ export const useGameStore = defineStore('game', {
       this.steps = Number.isFinite(steps) && steps >= 0 ? Math.floor(steps) : 0;
       this.peeks = Number.isFinite(peeks) && peeks >= 0 ? Math.floor(peeks) : 0;
       this.budgetsInfinite = Boolean(raw.infinite);
+      this.peekedThisTurn = Boolean(raw.peekedThisTurn);
     },
 
     _onPeekOpenMessage(message: unknown) {
@@ -947,6 +958,10 @@ export const useGameStore = defineStore('game', {
         col: Math.floor(col),
         reward: reward,
       };
+      // Multi one-peek UX: hide eye before budgets patch arrives after answer.
+      if (!this.budgetsInfinite) {
+        this.peekedThisTurn = true;
+      }
     },
 
     _onSayMessage(message: unknown) {
@@ -998,6 +1013,7 @@ export const useGameStore = defineStore('game', {
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
+      this.peekedThisTurn = false;
       this.openPeek = null;
       this.sayEvents = [];
       this.status = 'idle';
