@@ -47,16 +47,28 @@
       </q-card>
     </q-dialog>
 
-    <!-- Own seat solo budget expiry (SC-MOVE-31); close keeps player in room. -->
+    <!-- Solo end: timer vs steps-exhausted (SC-PRESENCE-21 / SC-MOVE-45/48). -->
     <q-dialog v-model="timeoutModalOpen" persistent>
       <q-card style="min-width: 280px">
         <q-card-section>
           <div class="text-h6 text-center">
-            {{ $t('game.timeExpiredModal') }}
+            {{
+              endModalKind === 'steps'
+                ? $t('game.stepsExhaustedModal')
+                : $t('game.timeExpiredModal')
+            }}
           </div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn color="primary" :label="$t('game.timeExpiredModalOk')" v-close-popup />
+          <q-btn
+            color="primary"
+            :label="
+              endModalKind === 'steps'
+                ? $t('game.stepsExhaustedModalOk')
+                : $t('game.timeExpiredModalOk')
+            "
+            v-close-popup
+          />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -76,7 +88,7 @@
       </q-card>
     </q-dialog>
 
-    <!-- Solo infinite budgets (SC-PRESENCE-19); close keeps player in room. -->
+    <!-- Solo peeks∞ / finite steps (SC-PRESENCE-19); close keeps player in room. -->
     <q-dialog v-model="soloUnlimitedModalOpen" persistent>
       <q-card style="min-width: 280px">
         <q-card-section>
@@ -211,7 +223,7 @@
                 <div class="budget-counters">
                   <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
                     <q-icon name="directions_walk" size="16px" />
-                    <span class="budget-value">{{ budgetDisplay(game.steps) }}</span>
+                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
                     <span
                       v-for="fall in stepFalls"
                       :key="`step-fall-${fall.id}`"
@@ -223,7 +235,7 @@
                   </div>
                   <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
                     <q-icon name="visibility" size="16px" />
-                    <span class="budget-value">{{ budgetDisplay(game.peeks) }}</span>
+                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
                     <span
                       v-for="fall in peekFalls"
                       :key="`peek-fall-${fall.id}`"
@@ -411,7 +423,7 @@ interface BoardTile {
   row: number;
   col: number;
   style: Record<string, string>;
-  /** Removed task cell — visual hole, still clickable for moves (SC-BOARD-11/12). */
+  /** Removed task cell — visual hole; not landable; piece may stand (SC-BOARD-11/12/15). */
   removed?: boolean;
 }
 
@@ -524,7 +536,6 @@ const {
   isMySeatTimeExpired,
   myFinishedStripSides,
   budgetsInfinite,
-  peekedThisTurn,
 } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
@@ -542,9 +553,11 @@ const leaveConfirmOpen = ref(false);
 /** Own place congratulation modal (SC-FINISH-03/04). */
 const placeModalOpen = ref(false);
 const celebratedPlace = ref(0);
-/** Own solo timeout modal (SC-MOVE-31); other clients never open this. */
+/** Own solo end modal (SC-MOVE-45/48 / SC-PRESENCE-21); other clients never open this. */
 const timeoutModalOpen = ref(false);
-/** Solo unlimited-resources modal (SC-PRESENCE-19). */
+/** Which solo end copy to show when `timeoutModalOpen` (timer vs steps). */
+const endModalKind = ref<'timer' | 'steps'>('timer');
+/** Solo peeks-unlimited modal (SC-PRESENCE-19). */
 const soloUnlimitedModalOpen = ref(false);
 
 /** +N fall-into-counter animations (SC-PRESENCE-15 / SC-PRESENCE-20). */
@@ -595,9 +608,19 @@ function isPresentTaskCell(row: number, col: number): boolean {
   return LAYOUT[row]?.[col] === '*' && !removedTaskKeySet.value.has(cellKey(row, col));
 }
 
-function budgetDisplay(value: number): string {
-  return budgetsInfinite.value ? t('game.budgetInfinity') : String(value);
+/** Landing targets: playable LAYOUT cell that is not a removed-task hole (SC-BOARD-15). */
+function isLandableCell(row: number, col: number): boolean {
+  if (!isPlayableCell(row, col)) {
+    return false;
+  }
+  return !removedTaskKeySet.value.has(cellKey(row, col));
 }
+
+/** Steps always numeric; peeks ∞ only in solo (SC-PRESENCE-16). */
+const stepsBudgetDisplay = computed(() => String(game.steps));
+const peeksBudgetDisplay = computed(() =>
+  budgetsInfinite.value ? t('game.budgetInfinity') : String(game.peeks),
+);
 
 function showOwnBudgets(marker: PresenceMarker): boolean {
   return (
@@ -609,7 +632,8 @@ function showOwnBudgets(marker: PresenceMarker): boolean {
 }
 
 function pushBudgetFall(target: 'steps' | 'peeks', delta: number) {
-  if (delta <= 0 || budgetsInfinite.value) {
+  // Peeks∞: no +N on peeks; steps stay finite and still animate (SC-PRESENCE-16/20).
+  if (delta <= 0 || (target === 'peeks' && budgetsInfinite.value)) {
     return;
   }
   const id = ++budgetFallSeq;
@@ -697,13 +721,13 @@ function buildOccupancy(exclude?: Cell): Set<string> {
   return set;
 }
 
-/** Legal one-step destinations for the selected own unfinished piece (D5 / SC-MOVE-12). */
+/** Legal one-step destinations for the selected own unfinished piece (D5 / SC-MOVE-12/46). */
 const legalTargets = computed((): Cell[] => {
   if (!isInteractive.value || !selectedSide.value || !mySeat.value) {
     return [];
   }
-  // Finite mode with 0 steps: keep selection for peek eye, but no move hints.
-  if (!budgetsInfinite.value && game.steps <= 0) {
+  // Steps always finite (incl. solo): 0 steps → keep selection for peek eye, no move hints.
+  if (game.steps <= 0) {
     return [];
   }
   const piece = mySeat.value.pieces.find(
@@ -722,7 +746,8 @@ const legalTargets = computed((): Cell[] => {
       }
       const row = from.row + dr;
       const col = from.col + dc;
-      if (!isPlayableCell(row, col)) {
+      // Removed-task holes are not landable (SC-BOARD-11/15); stand-on-hole is OK.
+      if (!isLandableCell(row, col)) {
         continue;
       }
       if (occupied.has(cellKey(row, col))) {
@@ -756,7 +781,8 @@ const canShowPeekAffordance = computed(() => {
   if (!isInteractive.value || !selectedSide.value || !mySeat.value || game.openPeek) {
     return false;
   }
-  if (!budgetsInfinite.value && (game.peeks <= 0 || peekedThisTurn.value)) {
+  // Multi peek while peeks remain; solo peeks∞ — no one-peek/turn gate (SC-BOARD-14).
+  if (!budgetsInfinite.value && game.peeks <= 0) {
     return false;
   }
   const piece = mySeat.value.pieces.find(
@@ -1112,11 +1138,11 @@ watch([isMyTurn, isPlaying], ([mine, playing]) => {
   }
 });
 
-/** +N falls into own counters on finite budget increases (SC-PRESENCE-15). */
+/** +N falls into own counters on finite budget increases (SC-PRESENCE-15/20). */
 watch(
   () => game.steps,
   (next, prev) => {
-    if (typeof prev !== 'number' || budgetsInfinite.value) {
+    if (typeof prev !== 'number') {
       return;
     }
     if (next > prev) {
@@ -1138,7 +1164,7 @@ watch(
 );
 
 /**
- * Solo infinite budgets → unlimited modal (SC-PRESENCE-19).
+ * Solo peeks∞ → peeks-unlimited modal (SC-PRESENCE-19).
  * Skip initial sync (already infinite on remount).
  */
 watch(budgetsInfinite, (infinite, prev) => {
@@ -1147,8 +1173,18 @@ watch(budgetsInfinite, (infinite, prev) => {
   }
 });
 
+/** Own unfinished piece on a still-present task cell (live `*`). */
+function hasOwnUnfinishedOnLiveTask(): boolean {
+  const seat = mySeat.value;
+  if (!seat) {
+    return false;
+  }
+  return seat.pieces.some((p) => !isFinishedPiece(p) && isPresentTaskCell(p.row, p.col));
+}
+
 /**
- * Own seat time-expired → solo timeout modal + clear move chrome (SC-MOVE-31/32).
+ * Own seat time-expired → dual end copy + clear move chrome (SC-PRESENCE-21 / SC-MOVE-45/48).
+ * Infer cause locally: steps=0 ∧ ¬on live `*` → steps; else timer.
  * Only this client; skip initial sync (already expired on remount).
  */
 watch(isMySeatTimeExpired, (expired, prev) => {
@@ -1156,6 +1192,7 @@ watch(isMySeatTimeExpired, (expired, prev) => {
     selectedSide.value = null;
   }
   if (prev === false && expired) {
+    endModalKind.value = game.steps <= 0 && !hasOwnUnfinishedOnLiveTask() ? 'steps' : 'timer';
     timeoutModalOpen.value = true;
   }
 });
@@ -1723,7 +1760,7 @@ body.body--dark .say-picker {
   background: #8d6e63;
 }
 
-/* Removed task cells = page background hole; keep grid hit-target (SC-BOARD-11/12). */
+/* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */
 .tile-task.tile--removed {
   background: transparent;
 }
@@ -1744,9 +1781,8 @@ body.body--dark .say-picker {
   outline-offset: -2px;
 }
 
-.tile--removed.tile--selected,
-.tile--removed.tile--target {
-  /* Hole still shows selection/target chrome without brown fill. */
+.tile--removed.tile--selected {
+  /* Piece may stand on a hole with selection chrome; never offer as a red target (SC-BOARD-12/15). */
   background: transparent;
 }
 

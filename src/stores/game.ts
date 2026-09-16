@@ -171,7 +171,7 @@ type TouristRoomState = {
   turnUntil?: number;
   /** Active turn budget seconds (60 multi / 300 solo); 0 when none. */
   turnBudgetSeconds?: number;
-  /** Synced removed task cell keys `"r,c"` (walkable holes). */
+  /** Synced removed task cell keys `"r,c"` (holes: not landable; stand OK). */
   removedTaskKeys?: {
     forEach: (cb: (key: string) => void) => void;
     length?: number;
@@ -290,19 +290,22 @@ export const useGameStore = defineStore('game', {
     turnBudgetSeconds: number;
     seats: GameSeat[];
     /**
-     * Synced removed task cell keys `"r,c"` (visual holes; still walkable).
-     * Mirrored from MyRoomState.removedTaskKeys.
+     * Synced removed task cell keys `"r,c"` (visual holes; not landable).
+     * Mirrored from MyRoomState.removedTaskKeys. Piece may stand on a hole.
      */
     removedTaskKeys: string[];
-    /** Own private steps budget from `budgets` (0 for spectators / unset). */
+    /** Own private steps budget from `budgets` (always finite; 0 for spectators / unset). */
     steps: number;
     /** Own private peeks budget from `budgets` (0 for spectators / unset). */
     peeks: number;
-    /** Solo infinite steps/peeks mode from `budgets`. */
+    /**
+     * Solo peeks∞ flag from `budgets.infinite` — does **not** make steps infinite
+     * (SC-PRESENCE-16 / SC-MOVE-40).
+     */
     budgetsInfinite: boolean;
     /**
-     * Multi: already used the one peek this turn (from `budgets.peekedThisTurn`).
-     * Solo infinite stays false; used for eye affordance after reconnect.
+     * Legacy mirror of `budgets.peekedThisTurn` (server no longer gates peeks).
+     * Kept for payload/reconnect parity; GamePage does not gate the eye on it.
      */
     peekedThisTurn: boolean;
     /**
@@ -402,7 +405,7 @@ export const useGameStore = defineStore('game', {
     },
     /** Solo five-minute budget is active (SC-PRESENCE-09 / SC-MOVE-29). */
     isSoloBudget: (state): boolean => isSoloBudgetSeconds(state.turnBudgetSeconds),
-    /** Own seat is locked after solo budget expiry (SC-MOVE-31). */
+    /** Own seat is locked after solo timer or steps exhaustion (SC-MOVE-45/48). */
     isMySeatTimeExpired: (state): boolean => {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       return Boolean(seat && seat.timeExpired);
@@ -427,8 +430,8 @@ export const useGameStore = defineStore('game', {
       return seat.pieces.filter((p) => p.finished).map((p) => p.side);
     },
     /**
-     * Multiplayer end-turn is available: own turn, finite budgets, not finished/expired.
-     * Solo infinite mode hides end-turn (SC-MOVE-41 / SC-PRESENCE-18).
+     * Multiplayer end-turn is available: own turn, not solo peeks∞, not finished/expired.
+     * Solo peeks∞ hides end-turn (SC-MOVE-41 / SC-PRESENCE-18).
      */
     canSendEndTurn: (state): boolean => {
       if (
@@ -572,7 +575,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.steps <= 0)
+        this.steps <= 0
       ) {
         return false;
       }
@@ -582,6 +585,7 @@ export const useGameStore = defineStore('game', {
 
     /**
      * Open a peek on own unfinished piece standing on a present task cell.
+     * Finite peeks: require peeks > 0; solo peeks∞ skips that gate.
      * Server replies with private `peekOpen` (reward) or rejects silently.
      * @returns true if the message was sent.
      */
@@ -592,6 +596,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
+        (!this.budgetsInfinite && this.peeks <= 0) ||
         typeof side !== 'string' ||
         side.length === 0
       ) {
@@ -615,7 +620,7 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * End own multiplayer turn (does not move pieces). Solo infinite → no-op.
+     * End own multiplayer turn (does not move pieces). Solo peeks∞ → no-op.
      * @returns true if the message was sent.
      */
     sendEndTurn(): boolean {
@@ -958,10 +963,6 @@ export const useGameStore = defineStore('game', {
         col: Math.floor(col),
         reward: reward,
       };
-      // Multi one-peek UX: hide eye before budgets patch arrives after answer.
-      if (!this.budgetsInfinite) {
-        this.peekedThisTurn = true;
-      }
     },
 
     _onSayMessage(message: unknown) {

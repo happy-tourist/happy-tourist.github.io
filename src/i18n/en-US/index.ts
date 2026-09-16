@@ -32,9 +32,13 @@ export default {
     /** Place modal after all four pieces finish (SC-FINISH-03/04). */
     finishPlaceModal: 'Вы {n}-й!',
     finishPlaceModalOk: 'ОК',
-    /** Solo budget expiry — tourists not finished in time (SC-MOVE-31). */
+    /** Solo budget expiry — five-minute timer (SC-MOVE-45 / SC-PRESENCE-21). */
     timeExpiredModal: 'Вы не успели довести туристов до финиша вовремя.',
     timeExpiredModalOk: 'ОК',
+    /** Solo steps exhaustion with no live task tile (SC-MOVE-48 / SC-PRESENCE-21). */
+    stepsExhaustedModal:
+      'Шаги закончились, и под туристами нет плиток для просмотра. Игра для вас окончена.',
+    stepsExhaustedModalOk: 'ОК',
     /** a11y for strip finish icon and presence place badge. */
     finishStripAria: 'Финиш',
     finishPlaceBadgeAria: 'Место {n}',
@@ -49,9 +53,8 @@ export default {
     peekCorrect: 'Правильно',
     peekWrong: 'Неправильно',
     peekAffordance: 'Посмотреть под плиткой',
-    /** Solo infinite budgets modal (SC-PRESENCE-19). */
-    soloUnlimitedModal:
-      'Вы один в игре. Шаги и просмотры безлимитны, просмотры плиток не ограничены за ход.',
+    /** Solo peeks∞ / finite steps modal (SC-PRESENCE-19). */
+    soloUnlimitedModal: 'Вы один в игре. Просмотры безлимитны, шаги по-прежнему ограничены.',
     soloUnlimitedModalOk: 'ОК',
   },
 };
