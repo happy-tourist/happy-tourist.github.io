@@ -84,8 +84,8 @@
             'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
           }"
         >
-          <!-- Sibling rings (not nested slots — Quasar nesting hides the avatar).
-               Outer turn behind; inner reconnect + img on top (SC-PRESENCE-10/11). -->
+          <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12).
+               Quasar default slot renders only with show-value — img must be sibling. -->
           <q-circular-progress
             :min="0"
             :max="turnRingMax"
@@ -105,9 +105,8 @@
             :color="showGraceRing(marker) ? 'warning' : 'transparent'"
             :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
             class="presence-progress presence-progress--inner"
-          >
-            <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
-          </q-circular-progress>
+          />
+          <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
 
           <span
             v-if="marker.finishPlace > 0"
@@ -1099,8 +1098,12 @@ async function onLeave() {
 }
 
 .presence-progress--inner {
-  position: relative;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 1;
+  pointer-events: none;
 }
 
 .presence-marker--sayable {
@@ -1178,10 +1181,13 @@ body.body--dark .countdown-overlay__card {
 }
 
 .presence-avatar {
+  position: relative;
+  z-index: 2;
   width: 28px;
   height: 28px;
   object-fit: contain;
   border-radius: 50%;
+  pointer-events: none;
 }
 
 /* Finish place on presence marker (SC-PRESENCE-06/07). */
@@ -1189,7 +1195,7 @@ body.body--dark .countdown-overlay__card {
   position: absolute;
   top: -4px;
   right: -4px;
-  z-index: 2;
+  z-index: 3;
   min-width: 18px;
   height: 18px;
   padding: 0 4px;

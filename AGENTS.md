@@ -201,7 +201,7 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | Skill                         | Use for                                                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `colyseus-client`             | `client.http` + room messages (not axios/BFF)                                                                 |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit                                                         |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)   |
 | `client-locate-change-points` | Where to edit/add without changing code                                                                       |
 | `client-verify-code`          | Branch diff vs all client code skills                                                                         |
 | `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                       |
@@ -210,7 +210,7 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `work-with-forms`             | LoginPage `q-form` / rules                                                                                    |
 | `work-with-pages`             | Routes + guards; App theme header                                                                             |
 | `work-with-stores`            | Pinia `auth` / `theme` / `game`                                                                               |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board                                              |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board + presence ring/avatar CSS                    |
 | `work-with-localization`      | vue-i18n boot; `game.say` / ready / countdown / leave / finish / timeout keys                                 |
 | `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe                                  |
 | `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                              |
