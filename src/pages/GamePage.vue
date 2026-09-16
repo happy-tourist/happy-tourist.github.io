@@ -61,6 +61,35 @@
       </q-card>
     </q-dialog>
 
+    <!-- Peek under task tile — Correct / Wrong (SC-BOARD-08/09); owner-only via openPeek. -->
+    <q-dialog :model-value="Boolean(game.openPeek)" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-body1 text-center">
+            {{ $t('game.peekModal', { n: game.openPeek?.reward ?? 0 }) }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('game.peekWrong')" @click="answerPeek(false)" />
+          <q-btn color="primary" :label="$t('game.peekCorrect')" @click="answerPeek(true)" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Solo infinite budgets (SC-PRESENCE-19); close keeps player in room. -->
+    <q-dialog v-model="soloUnlimitedModalOpen" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-body1 text-center">
+            {{ $t('game.soloUnlimitedModal') }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn color="primary" :label="$t('game.soloUnlimitedModalOk')" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-banner
       v-if="game.error"
       class="bg-negative text-white q-mb-md"
@@ -83,11 +112,13 @@
               v-for="marker in row.markers"
               :key="`presence-${marker.sessionId}`"
               class="presence-slot"
+              :class="{ 'presence-slot--own-budgets': showOwnBudgets(marker) }"
             >
               <div
                 class="presence-marker"
                 :class="{
-                  'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
+                  'presence-marker--sayable':
+                    canSendSay(marker) || canShowReady(marker) || showOwnBudgets(marker),
                 }"
               >
                 <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
@@ -174,6 +205,46 @@
                   </button>
                 </div>
               </div>
+
+              <!-- Own steps/peeks + end-turn (SC-PRESENCE-15…18); never on opponents. -->
+              <div v-if="showOwnBudgets(marker)" class="presence-budgets">
+                <div class="budget-counters">
+                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
+                    <q-icon name="directions_walk" size="16px" />
+                    <span class="budget-value">{{ budgetDisplay(game.steps) }}</span>
+                    <span
+                      v-for="fall in stepFalls"
+                      :key="`step-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
+                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
+                    <q-icon name="visibility" size="16px" />
+                    <span class="budget-value">{{ budgetDisplay(game.peeks) }}</span>
+                    <span
+                      v-for="fall in peekFalls"
+                      :key="`peek-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
+                </div>
+                <q-btn
+                  v-if="canSendEndTurn"
+                  dense
+                  unelevated
+                  color="primary"
+                  size="sm"
+                  class="end-turn-btn"
+                  :label="$t('game.endTurn')"
+                  @click.stop="onEndTurnClick"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -188,6 +259,7 @@
               {
                 'tile--selected': isTileSelected(tile),
                 'tile--target': isTileTarget(tile),
+                'tile--removed': tile.removed,
               },
             ]"
             :style="tile.style"
@@ -208,6 +280,17 @@
             @click.stop="onPieceClick(piece)"
             @transitionend="onPieceTransitionEnd($event)"
           />
+          <!-- Eye to open peek on selected own piece on present * (SC-BOARD-13). -->
+          <button
+            v-if="canShowPeekAffordance"
+            type="button"
+            class="peek-affordance"
+            :aria-label="$t('game.peekAffordance')"
+            :style="peekAffordanceStyle"
+            @click.stop="onPeekClick"
+          >
+            <q-icon name="visibility" size="18px" />
+          </button>
         </div>
       </template>
     </div>
@@ -250,6 +333,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 
@@ -327,6 +411,13 @@ interface BoardTile {
   row: number;
   col: number;
   style: Record<string, string>;
+  /** Removed task cell — visual hole, still clickable for moves (SC-BOARD-11/12). */
+  removed?: boolean;
+}
+
+interface BudgetFall {
+  id: number;
+  n: number;
 }
 
 interface BoardPiece {
@@ -418,18 +509,21 @@ function touristSrc(touristId: number): string {
   return TOURIST_SRC[touristId] ?? tourist1;
 }
 
-const boardTiles = buildBoardTiles();
+const LAYOUT_TILES = buildBoardTiles();
 
+const { t } = useI18n();
 const game = useGameStore();
 const {
   mySeat,
   isMyTurn,
   canSendReady,
+  canSendEndTurn,
   isPlaying,
   isSeated,
   isMySeatFinished,
   isMySeatTimeExpired,
   myFinishedStripSides,
+  budgetsInfinite,
 } = storeToRefs(game);
 const route = useRoute('game');
 const router = useRouter();
@@ -449,6 +543,20 @@ const placeModalOpen = ref(false);
 const celebratedPlace = ref(0);
 /** Own solo timeout modal (SC-MOVE-31); other clients never open this. */
 const timeoutModalOpen = ref(false);
+/** Solo unlimited-resources modal (SC-PRESENCE-19). */
+const soloUnlimitedModalOpen = ref(false);
+/**
+ * Local one-peek-per-turn gate for multi eye affordance (server does not sync peekedThisTurn).
+ * Reset when own turn starts; set when peekOpen arrives.
+ */
+const peekedThisTurnLocal = ref(false);
+
+/** +N fall-into-counter animations (SC-PRESENCE-15). */
+const stepFalls = ref<BudgetFall[]>([]);
+const peekFalls = ref<BudgetFall[]>([]);
+let budgetFallSeq = 0;
+const budgetFallTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const BUDGET_FALL_MS = 900;
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -467,8 +575,64 @@ let rejoinInFlight = false;
 const disappearingKeys = ref<Set<string>>(new Set());
 const finishFadeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Synced removed task keys as a Set for O(1) hole checks. */
+const removedTaskKeySet = computed(() => new Set(game.removedTaskKeys));
+
+/** Board tiles with removed `*` as transparent holes (still in DOM for targets). */
+const boardTiles = computed((): BoardTile[] => {
+  const removed = removedTaskKeySet.value;
+  return LAYOUT_TILES.map((tile) => {
+    if (tile.kind !== 'task') {
+      return tile;
+    }
+    const key = cellKey(tile.row, tile.col);
+    return removed.has(key) ? { ...tile, removed: true } : tile;
+  });
+});
+
 function pieceKey(sessionId: string, side: string): string {
   return `${sessionId}:${side}`;
+}
+
+function isPresentTaskCell(row: number, col: number): boolean {
+  return LAYOUT[row]?.[col] === '*' && !removedTaskKeySet.value.has(cellKey(row, col));
+}
+
+function budgetDisplay(value: number): string {
+  return budgetsInfinite.value ? t('game.budgetInfinity') : String(value);
+}
+
+function showOwnBudgets(marker: PresenceMarker): boolean {
+  return (
+    isPlaying.value &&
+    isSeated.value &&
+    Boolean(game.sessionId) &&
+    marker.sessionId === game.sessionId
+  );
+}
+
+function pushBudgetFall(target: 'steps' | 'peeks', delta: number) {
+  if (delta <= 0 || budgetsInfinite.value) {
+    return;
+  }
+  const id = ++budgetFallSeq;
+  const entry: BudgetFall = { id, n: delta };
+  if (target === 'steps') {
+    stepFalls.value = [...stepFalls.value, entry];
+  } else {
+    peekFalls.value = [...peekFalls.value, entry];
+  }
+  budgetFallTimers.set(
+    id,
+    setTimeout(() => {
+      budgetFallTimers.delete(id);
+      if (target === 'steps') {
+        stepFalls.value = stepFalls.value.filter((f) => f.id !== id);
+      } else {
+        peekFalls.value = peekFalls.value.filter((f) => f.id !== id);
+      }
+    }, BUDGET_FALL_MS),
+  );
 }
 
 function isStripSlotFinished(side: string): boolean {
@@ -541,6 +705,10 @@ const legalTargets = computed((): Cell[] => {
   if (!isInteractive.value || !selectedSide.value || !mySeat.value) {
     return [];
   }
+  // Finite mode with 0 steps: keep selection for peek eye, but no move hints.
+  if (!budgetsInfinite.value && game.steps <= 0) {
+    return [];
+  }
   const piece = mySeat.value.pieces.find(
     (p) => p.side === selectedSide.value && !isFinishedPiece(p),
   );
@@ -581,6 +749,31 @@ const selectedCell = computed((): Cell | null => {
     (p) => p.side === selectedSide.value && !isFinishedPiece(p),
   );
   return piece ? { row: piece.row, col: piece.col } : null;
+});
+
+/** Eye when selected own unfinished piece sits on a still-present task cell (SC-BOARD-13). */
+const canShowPeekAffordance = computed(() => {
+  if (!isInteractive.value || !selectedSide.value || !mySeat.value || game.openPeek) {
+    return false;
+  }
+  if (!budgetsInfinite.value && (game.peeks <= 0 || peekedThisTurnLocal.value)) {
+    return false;
+  }
+  const piece = mySeat.value.pieces.find(
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+  );
+  return Boolean(piece && isPresentTaskCell(piece.row, piece.col));
+});
+
+const peekAffordanceStyle = computed((): Record<string, string> => {
+  const cell = selectedCell.value;
+  if (!cell) {
+    return {};
+  }
+  return {
+    '--prow': String(cell.row),
+    '--pcol': String(cell.col),
+  };
 });
 
 function isTileSelected(tile: BoardTile): boolean {
@@ -830,6 +1023,22 @@ function onReadyClick() {
   game.sendReady();
 }
 
+function onEndTurnClick() {
+  sayPickerOpen.value = false;
+  game.sendEndTurn();
+}
+
+function onPeekClick() {
+  if (!canShowPeekAffordance.value || !selectedSide.value) {
+    return;
+  }
+  game.sendPeek(selectedSide.value);
+}
+
+function answerPeek(correct: boolean) {
+  game.sendPeekAnswer(correct);
+}
+
 function closeSayPicker() {
   sayPickerOpen.value = false;
 }
@@ -894,9 +1103,56 @@ async function ensureTouristRoom() {
 }
 
 // Clear local selection when turn ends / not playing / spectator (SC-MOVE-11…13 / SC-BOARD-05).
+// Reset local peek-used flag whenever turn/playing eligibility changes (SC-BOARD-13).
 watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
+  }
+  peekedThisTurnLocal.value = false;
+});
+
+/** Mark one-peek-per-turn when server opens peek for this client. */
+watch(
+  () => game.openPeek,
+  (peek) => {
+    if (peek) {
+      peekedThisTurnLocal.value = true;
+    }
+  },
+);
+
+/** +N falls into own counters on finite budget increases (SC-PRESENCE-15). */
+watch(
+  () => game.steps,
+  (next, prev) => {
+    if (typeof prev !== 'number' || budgetsInfinite.value) {
+      return;
+    }
+    if (next > prev) {
+      pushBudgetFall('steps', next - prev);
+    }
+  },
+);
+
+watch(
+  () => game.peeks,
+  (next, prev) => {
+    if (typeof prev !== 'number' || budgetsInfinite.value) {
+      return;
+    }
+    if (next > prev) {
+      pushBudgetFall('peeks', next - prev);
+    }
+  },
+);
+
+/**
+ * Solo infinite budgets → unlimited modal (SC-PRESENCE-19).
+ * Skip initial sync (already infinite on remount).
+ */
+watch(budgetsInfinite, (infinite, prev) => {
+  if (prev === false && infinite) {
+    soloUnlimitedModalOpen.value = true;
   }
 });
 
@@ -1029,6 +1285,10 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   finishFadeTimers.clear();
+  for (const timer of budgetFallTimers.values()) {
+    clearTimeout(timer);
+  }
+  budgetFallTimers.clear();
 });
 
 /** Confirm only when seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-05/07). */
@@ -1114,6 +1374,80 @@ async function onLeave() {
   position: relative;
   overflow: visible;
   flex-shrink: 0;
+}
+
+.presence-slot--own-budgets {
+  gap: 10px;
+}
+
+/* Own private budgets beside avatar (SC-PRESENCE-15…18). */
+.presence-budgets {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.budget-counters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.budget-counter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 48px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+
+body.body--dark .budget-counter {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.budget-value {
+  min-width: 1ch;
+}
+
+.budget-fall {
+  position: absolute;
+  left: 50%;
+  top: -14px;
+  transform: translateX(-50%);
+  color: #81c784;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: budget-fall-in 0.85s ease-in forwards;
+}
+
+@keyframes budget-fall-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+}
+
+.end-turn-btn {
+  white-space: nowrap;
 }
 
 .presence-marker {
@@ -1397,6 +1731,11 @@ body.body--dark .say-picker {
   background: #8d6e63;
 }
 
+/* Removed task cells = page background hole; keep grid hit-target (SC-BOARD-11/12). */
+.tile-task.tile--removed {
+  background: transparent;
+}
+
 .tile-center {
   background: #ffeb3b;
 }
@@ -1411,6 +1750,39 @@ body.body--dark .say-picker {
 .tile--target {
   outline: 3px solid #f44336;
   outline-offset: -2px;
+}
+
+.tile--removed.tile--selected,
+.tile--removed.tile--target {
+  /* Hole still shows selection/target chrome without brown fill. */
+  background: transparent;
+}
+
+/* Eye affordance on selected peekable tourist (SC-BOARD-13). */
+.peek-affordance {
+  position: absolute;
+  z-index: 4;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: #fff;
+  background: rgba(33, 150, 243, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
+}
+
+.peek-affordance:hover {
+  background: #1e88e5;
 }
 
 .piece {

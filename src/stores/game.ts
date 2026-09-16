@@ -113,6 +113,21 @@ export interface SayEvent {
   at: number;
 }
 
+/** Private step/peek budgets from room `budgets` message (owner-only). */
+export interface SeatBudgets {
+  steps: number;
+  peeks: number;
+  infinite: boolean;
+}
+
+/** Open peek modal payload from room `peekOpen` (owner-only). */
+export interface OpenPeek {
+  side: string;
+  row: number;
+  col: number;
+  reward: 1 | 2 | 3;
+}
+
 /** Live say bubble lifetime (ms) — mirrors server SAY_TTL_MS. */
 export const SAY_TTL_MS = 10_000;
 
@@ -154,6 +169,11 @@ type TouristRoomState = {
   turnUntil?: number;
   /** Active turn budget seconds (60 multi / 300 solo); 0 when none. */
   turnBudgetSeconds?: number;
+  /** Synced removed task cell keys `"r,c"` (walkable holes). */
+  removedTaskKeys?: {
+    forEach: (cb: (key: string) => void) => void;
+    length?: number;
+  };
   seats?: {
     forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
   };
@@ -267,6 +287,22 @@ export const useGameStore = defineStore('game', {
     /** Active turn budget in seconds (60 multi / 300 solo); `0` when none. */
     turnBudgetSeconds: number;
     seats: GameSeat[];
+    /**
+     * Synced removed task cell keys `"r,c"` (visual holes; still walkable).
+     * Mirrored from MyRoomState.removedTaskKeys.
+     */
+    removedTaskKeys: string[];
+    /** Own private steps budget from `budgets` (0 for spectators / unset). */
+    steps: number;
+    /** Own private peeks budget from `budgets` (0 for spectators / unset). */
+    peeks: number;
+    /** Solo infinite steps/peeks mode from `budgets`. */
+    budgetsInfinite: boolean;
+    /**
+     * Open peek modal for this client (`peekOpen`); null when none.
+     * Cleared on answer / room reset (page shows modal in block 3).
+     */
+    openPeek: OpenPeek | null;
     /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
     sayEvents: SayEvent[];
     status: GameStatus;
@@ -287,6 +323,11 @@ export const useGameStore = defineStore('game', {
     turnUntil: 0,
     turnBudgetSeconds: 0,
     seats: [],
+    removedTaskKeys: [],
+    steps: 0,
+    peeks: 0,
+    budgetsInfinite: false,
+    openPeek: null,
     sayEvents: [],
     status: 'idle',
     error: null,
@@ -376,6 +417,23 @@ export const useGameStore = defineStore('game', {
         return [];
       }
       return seat.pieces.filter((p) => p.finished).map((p) => p.side);
+    },
+    /**
+     * Multiplayer end-turn is available: own turn, finite budgets, not finished/expired.
+     * Solo infinite mode hides end-turn (SC-MOVE-41 / SC-PRESENCE-18).
+     */
+    canSendEndTurn: (state): boolean => {
+      if (
+        state.phase !== 'playing' ||
+        !state.sessionId ||
+        !state.currentTurnSessionId ||
+        state.sessionId !== state.currentTurnSessionId ||
+        state.budgetsInfinite
+      ) {
+        return false;
+      }
+      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
+      return Boolean(seat && seat.finishPlace === 0 && !seat.timeExpired);
     },
   },
 
@@ -494,8 +552,9 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Submit a one-step tourist move (D2). Only via store — pages must not room.send.
-     * Server rejects if not seated / not current turn / not playing / illegal.
+     * Submit a one-step tourist move. Only via store — pages must not room.send.
+     * Spends one step on the server; does **not** advance the turn (endTurn / auto / timeout).
+     * Server rejects if not seated / not current turn / not playing / no steps / illegal.
      * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
     sendMove(side: string, row: number, col: number): boolean {
@@ -504,11 +563,58 @@ export const useGameStore = defineStore('game', {
         this.phase !== 'playing' ||
         !this.isMyTurn ||
         this.isMySeatFinished ||
-        this.isMySeatTimeExpired
+        this.isMySeatTimeExpired ||
+        (!this.budgetsInfinite && this.steps <= 0)
       ) {
         return false;
       }
       this.room.send('move', { side, row, col });
+      return true;
+    },
+
+    /**
+     * Open a peek on own unfinished piece standing on a present task cell.
+     * Server replies with private `peekOpen` (reward) or rejects silently.
+     * @returns true if the message was sent.
+     */
+    sendPeek(side: string): boolean {
+      if (
+        !this.room ||
+        this.phase !== 'playing' ||
+        !this.isMyTurn ||
+        this.isMySeatFinished ||
+        this.isMySeatTimeExpired ||
+        typeof side !== 'string' ||
+        side.length === 0
+      ) {
+        return false;
+      }
+      this.room.send('peek', { side });
+      return true;
+    },
+
+    /**
+     * Resolve an open peek («Правильно» / «Неправильно»). Clears local openPeek on send.
+     * @returns true if the message was sent.
+     */
+    sendPeekAnswer(correct: boolean): boolean {
+      if (!this.room || typeof correct !== 'boolean') {
+        return false;
+      }
+      this.room.send('peekAnswer', { correct });
+      this.openPeek = null;
+      return true;
+    },
+
+    /**
+     * End own multiplayer turn (does not move pieces). Solo infinite → no-op.
+     * @returns true if the message was sent.
+     */
+    sendEndTurn(): boolean {
+      if (!this.room || !this.canSendEndTurn) {
+        return false;
+      }
+      this.room.send('endTurn');
       return true;
     },
 
@@ -567,6 +673,11 @@ export const useGameStore = defineStore('game', {
       this.turnUntil = 0;
       this.turnBudgetSeconds = 0;
       this.seats = [];
+      this.removedTaskKeys = [];
+      this.steps = 0;
+      this.peeks = 0;
+      this.budgetsInfinite = false;
+      this.openPeek = null;
       this.sayEvents = [];
 
       if (room) {
@@ -726,6 +837,22 @@ export const useGameStore = defineStore('game', {
       });
       this.seats = next;
 
+      const removed: string[] = [];
+      s.removedTaskKeys?.forEach((key) => {
+        removed.push(String(key));
+      });
+      this.removedTaskKeys = removed;
+
+      // Drop stale peek modal if turn moved away (timeout force-wrong / end-turn).
+      if (
+        this.openPeek &&
+        (!this.sessionId ||
+          !this.currentTurnSessionId ||
+          this.sessionId !== this.currentTurnSessionId)
+      ) {
+        this.openPeek = null;
+      }
+
       // Status from phase (countdown stays waiting for lobby-style label).
       this.status = this.phase === 'playing' ? 'playing' : 'waiting';
 
@@ -739,6 +866,11 @@ export const useGameStore = defineStore('game', {
       this.sessionId = room.sessionId;
       this.status = 'waiting';
       this.sayEvents = [];
+      this.removedTaskKeys = [];
+      this.steps = 0;
+      this.peeks = 0;
+      this.budgetsInfinite = false;
+      this.openPeek = null;
 
       // D3: persist tourist reconnection token only (never lobby).
       saveTouristReconnect(room);
@@ -756,6 +888,14 @@ export const useGameStore = defineStore('game', {
         this._onSayMessage(message);
       });
 
+      room.onMessage('budgets', (message: unknown) => {
+        this._onBudgetsMessage(message);
+      });
+
+      room.onMessage('peekOpen', (message: unknown) => {
+        this._onPeekOpenMessage(message);
+      });
+
       room.onError((_code, message) => {
         this.error = message || 'Room error';
       });
@@ -768,6 +908,45 @@ export const useGameStore = defineStore('game', {
 
     _pruneSayEvents(now = Date.now()) {
       this.sayEvents = this.sayEvents.filter((e) => now - e.at < SAY_TTL_MS);
+    },
+
+    _onBudgetsMessage(message: unknown) {
+      if (!message || typeof message !== 'object') {
+        return;
+      }
+      const raw = message as Record<string, unknown>;
+      const steps = Number(raw.steps);
+      const peeks = Number(raw.peeks);
+      // Accept 0 (spent budget); reject NaN / negative.
+      this.steps = Number.isFinite(steps) && steps >= 0 ? Math.floor(steps) : 0;
+      this.peeks = Number.isFinite(peeks) && peeks >= 0 ? Math.floor(peeks) : 0;
+      this.budgetsInfinite = Boolean(raw.infinite);
+    },
+
+    _onPeekOpenMessage(message: unknown) {
+      if (!message || typeof message !== 'object') {
+        return;
+      }
+      const raw = message as Record<string, unknown>;
+      const side = raw.side;
+      const row = Number(raw.row);
+      const col = Number(raw.col);
+      const reward = Number(raw.reward);
+      if (
+        typeof side !== 'string' ||
+        side.length === 0 ||
+        !Number.isFinite(row) ||
+        !Number.isFinite(col) ||
+        (reward !== 1 && reward !== 2 && reward !== 3)
+      ) {
+        return;
+      }
+      this.openPeek = {
+        side,
+        row: Math.floor(row),
+        col: Math.floor(col),
+        reward: reward,
+      };
     },
 
     _onSayMessage(message: unknown) {
@@ -815,6 +994,11 @@ export const useGameStore = defineStore('game', {
       this.turnUntil = 0;
       this.turnBudgetSeconds = 0;
       this.seats = [];
+      this.removedTaskKeys = [];
+      this.steps = 0;
+      this.peeks = 0;
+      this.budgetsInfinite = false;
+      this.openPeek = null;
       this.sayEvents = [];
       this.status = 'idle';
     },
