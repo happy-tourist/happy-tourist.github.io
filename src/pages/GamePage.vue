@@ -84,7 +84,8 @@
             'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
           }"
         >
-          <!-- Always reserve outer 52px chrome (SC-PRESENCE-11); turn outer / reconnect inner (D5). -->
+          <!-- Sibling rings (not nested slots — Quasar nesting hides the avatar).
+               Outer turn behind; inner reconnect + img on top (SC-PRESENCE-10/11). -->
           <q-circular-progress
             :min="0"
             :max="turnRingMax"
@@ -94,19 +95,18 @@
             :color="turnRingColor(marker)"
             :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
             class="presence-progress presence-progress--outer"
+          />
+          <q-circular-progress
+            :min="0"
+            :max="GRACE_SECONDS"
+            :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+            size="40px"
+            :thickness="0.18"
+            :color="showGraceRing(marker) ? 'warning' : 'transparent'"
+            :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+            class="presence-progress presence-progress--inner"
           >
-            <q-circular-progress
-              :min="0"
-              :max="GRACE_SECONDS"
-              :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
-              size="40px"
-              :thickness="0.18"
-              :color="showGraceRing(marker) ? 'warning' : 'transparent'"
-              :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
-              class="presence-progress presence-progress--inner"
-            >
-              <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
-            </q-circular-progress>
+            <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
           </q-circular-progress>
 
           <span
@@ -1089,6 +1089,18 @@ async function onLeave() {
   width: 52px;
   height: 52px;
   flex-shrink: 0;
+}
+
+.presence-progress--outer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.presence-progress--inner {
+  position: relative;
+  z-index: 1;
 }
 
 .presence-marker--sayable {

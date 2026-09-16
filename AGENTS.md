@@ -198,24 +198,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                                                        |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                                                  |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit                                          |
-| `client-locate-change-points` | Where to edit/add without changing code                                                        |
-| `client-verify-code`          | Branch diff vs all client code skills                                                          |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                        |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                 |
-| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell)                               |
-| `work-with-forms`             | LoginPage `q-form` / rules                                                                     |
-| `work-with-pages`             | Routes + guards; App theme header                                                              |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                                                |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board                               |
-| `work-with-localization`      | vue-i18n boot; `game.say` / ready / countdown / leave / finish / timeout keys |
-| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe                   |
-| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)               |
+| Skill                         | Use for                                                                                                       |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                                                                 |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit                                                         |
+| `client-locate-change-points` | Where to edit/add without changing code                                                                       |
+| `client-verify-code`          | Branch diff vs all client code skills                                                                         |
+| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                       |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                                |
+| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell)                                              |
+| `work-with-forms`             | LoginPage `q-form` / rules                                                                                    |
+| `work-with-pages`             | Routes + guards; App theme header                                                                             |
+| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                                                               |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board                                              |
+| `work-with-localization`      | vue-i18n boot; `game.say` / ready / countdown / leave / finish / timeout keys                                 |
+| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe                                  |
+| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                              |
 | `work-with-game-board`        | Board + dual presence rings + place/timeout modals + ready/countdown + leave confirm + strip + move/ready/say |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                            |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                           |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 
