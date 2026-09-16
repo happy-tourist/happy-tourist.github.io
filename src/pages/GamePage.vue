@@ -14,7 +14,7 @@
     </div>
 
     <div class="row items-center justify-between full-width q-mb-md game-header">
-      <q-btn flat icon="arrow_back" :label="$t('game.leave')" @click="onExitClick" />
+      <q-btn flat dense icon="logout" :aria-label="$t('game.leave')" @click="onExitClick" />
       <div class="text-center">
         <div class="text-subtitle1">{{ statusLabel }}</div>
       </div>
@@ -75,102 +75,104 @@
       <template v-for="(row, ri) in presenceLayout" :key="`presence-row-${ri}`">
         <div
           v-if="row.kind === 'markers'"
-          class="presence-row"
-          :class="`presence-row--${row.slot}`"
+          class="presence-row-scroll"
+          :class="`presence-row-scroll--${row.slot}`"
         >
-          <div
-            v-for="marker in row.markers"
-            :key="`presence-${marker.sessionId}`"
-            class="presence-slot"
-          >
+          <div class="presence-row" :class="`presence-row--${row.slot}`">
             <div
-              class="presence-marker"
-              :class="{
-                'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
-              }"
+              v-for="marker in row.markers"
+              :key="`presence-${marker.sessionId}`"
+              class="presence-slot"
             >
-              <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
-                   Quasar default slot renders only with show-value — img must be sibling. -->
-              <q-circular-progress
-                :min="0"
-                :max="turnRingMax"
-                :value="turnRingValue(marker)"
-                :size="`${PRESENCE_OUTER_PX}px`"
-                :thickness="0.12"
-                :color="turnRingColor(marker)"
-                :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
-                class="presence-progress presence-progress--outer"
-              />
-              <q-circular-progress
-                :min="0"
-                :max="GRACE_SECONDS"
-                :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
-                :size="`${PRESENCE_INNER_PX}px`"
-                :thickness="0.18"
-                :color="showGraceRing(marker) ? 'warning' : 'transparent'"
-                :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
-                class="presence-progress presence-progress--inner"
-              />
-              <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
-
-              <!-- Finish badge top-left (SC-PRESENCE-14) -->
-              <span
-                v-if="marker.finishPlace > 0"
-                class="presence-place-badge"
-                :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
-              >
-                {{ marker.finishPlace }}
-              </span>
-
-              <!-- Ready top-left own only (SC-PRESENCE-14); phases do not overlap finish -->
-              <button
-                v-if="canShowReady(marker)"
-                type="button"
-                class="ready-affordance"
-                :aria-label="$t('game.readyButton')"
-                @click.stop="onReadyClick"
-              >
-                {{ $t('game.readyButton') }}
-              </button>
-
-              <!-- Say top-right own only (SC-PRESENCE-14 / SC-SAY-07) -->
-              <button
-                v-if="canSendSay(marker)"
-                type="button"
-                class="say-affordance"
-                :aria-label="$t('game.say.affordance')"
-                @click.stop="toggleSayPicker"
-              >
-                <q-icon name="chat_bubble_outline" size="18px" />
-              </button>
-
-              <!-- Bubbles toward board: top below / bottom above (SC-SAY-11/12) -->
-              <div class="say-bubbles" :class="`say-bubbles--${row.slot}`" aria-live="polite">
-                <div
-                  v-for="bubble in liveSaysFor(marker.sessionId)"
-                  :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
-                  class="say-bubble"
-                >
-                  {{ $t(`game.say.${bubble.presetId}`) }}
-                </div>
-              </div>
-
               <div
-                v-if="sayPickerOpen && canSendSay(marker)"
-                class="say-picker"
-                role="menu"
-                @click.stop
+                class="presence-marker"
+                :class="{
+                  'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
+                }"
               >
-                <button
-                  v-for="presetId in SAY_PRESET_IDS"
-                  :key="presetId"
-                  type="button"
-                  class="say-picker__btn"
-                  role="menuitem"
-                  @click="chooseSayPreset(presetId)"
+                <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
+                   Quasar default slot renders only with show-value — img must be sibling. -->
+                <q-circular-progress
+                  :min="0"
+                  :max="turnRingMax"
+                  :value="turnRingValue(marker)"
+                  :size="`${PRESENCE_OUTER_PX}px`"
+                  :thickness="0.12"
+                  :color="turnRingColor(marker)"
+                  :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
+                  class="presence-progress presence-progress--outer"
+                />
+                <q-circular-progress
+                  :min="0"
+                  :max="GRACE_SECONDS"
+                  :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+                  :size="`${PRESENCE_INNER_PX}px`"
+                  :thickness="0.18"
+                  :color="showGraceRing(marker) ? 'warning' : 'transparent'"
+                  :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+                  class="presence-progress presence-progress--inner"
+                />
+                <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+
+                <!-- Finish badge top-left (SC-PRESENCE-14) -->
+                <span
+                  v-if="marker.finishPlace > 0"
+                  class="presence-place-badge"
+                  :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
                 >
-                  {{ $t(`game.say.${presetId}`) }}
+                  {{ marker.finishPlace }}
+                </span>
+
+                <!-- Ready top-left own only (SC-PRESENCE-14); phases do not overlap finish -->
+                <button
+                  v-if="canShowReady(marker)"
+                  type="button"
+                  class="ready-affordance"
+                  :aria-label="$t('game.readyButton')"
+                  @click.stop="onReadyClick"
+                >
+                  {{ $t('game.readyButton') }}
                 </button>
+
+                <!-- Say top-right own only (SC-PRESENCE-14 / SC-SAY-07) -->
+                <button
+                  v-if="canSendSay(marker)"
+                  type="button"
+                  class="say-affordance"
+                  :aria-label="$t('game.say.affordance')"
+                  @click.stop="toggleSayPicker"
+                >
+                  <q-icon name="chat_bubble_outline" size="18px" />
+                </button>
+
+                <!-- Bubbles toward board: top below / bottom above (SC-SAY-11/12) -->
+                <div class="say-bubbles" :class="`say-bubbles--${row.slot}`" aria-live="polite">
+                  <div
+                    v-for="bubble in liveSaysFor(marker.sessionId)"
+                    :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
+                    class="say-bubble"
+                  >
+                    {{ $t(`game.say.${bubble.presetId}`) }}
+                  </div>
+                </div>
+
+                <div
+                  v-if="sayPickerOpen && canSendSay(marker)"
+                  class="say-picker"
+                  role="menu"
+                  @click.stop
+                >
+                  <button
+                    v-for="presetId in SAY_PRESET_IDS"
+                    :key="presetId"
+                    type="button"
+                    class="say-picker__btn"
+                    role="menuitem"
+                    @click="chooseSayPreset(presetId)"
+                  >
+                    {{ $t(`game.say.${presetId}`) }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1072,6 +1074,19 @@ async function onLeave() {
   pointer-events: none;
 }
 
+/* Horizontal scroll on a wrapper — not on the row — so Y chrome (say affordance /
+   picker / bubbles) is not clipped by browsers forcing overflow-y with overflow-x (D15 / SC-SAY-15). */
+.presence-row-scroll {
+  width: 100%;
+  overflow-x: auto;
+  /* Absorb Y overflow inside the scroll box so forced overflow-y does not hide chrome. */
+  padding-block: 120px;
+  margin-block: -120px;
+  /* Frame is pointer-events:none so board stays clickable under padding overlap;
+     keep the scroll port non-interactive too — only the row/markers receive hits. */
+  pointer-events: none;
+}
+
 .presence-row {
   display: flex;
   flex-direction: row;
@@ -1080,10 +1095,12 @@ async function onLeave() {
   justify-content: center;
   /* Gap keeps neighbor say-bubbles from overlapping (SC-SAY-11/12 / D9). */
   gap: 48px;
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: visible;
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
   min-height: 96px; /* = PRESENCE_OUTER_PX */
+  /* Enable marker chrome + touch-drag scroll without reactivating padded overlap. */
+  pointer-events: auto;
 }
 
 .presence-row--bottom {
@@ -1271,14 +1288,17 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Say affordance top-right own only (SC-PRESENCE-14 / SC-SAY-07). */
+/* Say affordance top-right own only (SC-PRESENCE-14 / SC-SAY-07 / SC-SAY-15).
+   Hit-area ≥ ~32px; icon glyph may stay smaller. */
 .say-affordance {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  z-index: 3;
-  width: 22px;
-  height: 22px;
+  top: -8px;
+  right: -8px;
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -1299,7 +1319,7 @@ body.body--dark .say-bubble {
 
 .say-picker {
   position: absolute;
-  z-index: 4;
+  z-index: 6;
   left: 50%;
   bottom: calc(100% + 28px);
   transform: translateX(-50%);

@@ -17,7 +17,7 @@ Main scenarios:
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game with chosen `maxSeats` (2|3|4), or join by room id.
 - Open Game and view the tourist board with synced seats (pieces appear only in `playing`) and strip×4 «Мои туристы» once own pieces exist; after phase `playing`, on own turn select an unfinished piece and submit a one-step `move` via the game store; landing on center finishes a piece (disappear + strip icon); finishing all four shows a place modal and presence badge while the seat stays (say allowed, no moves, leave without confirm); solo five-minute budget expiry shows a timeout modal + locks moves (`timeExpired`); presence sits in top/bottom rows (no side columns) with dual circular countdowns (outer turn blue/red, inner reconnect warning) around a strip-sized avatar; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
-- Leave the room («Выход из игры»); seated players in phase `playing` without finish place or time-expired confirm before consented leave; sign out.
+- Leave the room via Game header icon-only `logout` (accessible name «Выход из игры»); seated players in phase `playing` without finish place or time-expired confirm before consented leave; sign out.
 
 ## Who The Users Are
 
