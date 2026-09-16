@@ -72,133 +72,142 @@
     </q-banner>
 
     <div class="presence-frame">
-      <div
-        v-for="marker in presenceMarkers"
-        :key="`presence-${marker.sessionId}`"
-        class="presence-slot"
-        :class="`presence-${marker.slot}`"
-      >
+      <template v-for="(row, ri) in presenceLayout" :key="`presence-row-${ri}`">
         <div
-          class="presence-marker"
-          :class="{
-            'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
-          }"
+          v-if="row.kind === 'markers'"
+          class="presence-row"
+          :class="`presence-row--${row.slot}`"
         >
-          <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12).
-               Quasar default slot renders only with show-value — img must be sibling. -->
-          <q-circular-progress
-            :min="0"
-            :max="turnRingMax"
-            :value="turnRingValue(marker)"
-            size="52px"
-            :thickness="0.12"
-            :color="turnRingColor(marker)"
-            :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
-            class="presence-progress presence-progress--outer"
-          />
-          <q-circular-progress
-            :min="0"
-            :max="GRACE_SECONDS"
-            :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
-            size="40px"
-            :thickness="0.18"
-            :color="showGraceRing(marker) ? 'warning' : 'transparent'"
-            :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
-            class="presence-progress presence-progress--inner"
-          />
-          <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
-
-          <span
-            v-if="marker.finishPlace > 0"
-            class="presence-place-badge"
-            :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
+          <div
+            v-for="marker in row.markers"
+            :key="`presence-${marker.sessionId}`"
+            class="presence-slot"
           >
-            {{ marker.finishPlace }}
-          </span>
-
-          <div class="say-bubbles" :class="`say-bubbles--${marker.slot}`" aria-live="polite">
             <div
-              v-for="bubble in liveSaysFor(marker.sessionId)"
-              :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
-              class="say-bubble"
+              class="presence-marker"
+              :class="{
+                'presence-marker--sayable': canSendSay(marker) || canShowReady(marker),
+              }"
             >
-              {{ $t(`game.say.${bubble.presetId}`) }}
+              <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
+                   Quasar default slot renders only with show-value — img must be sibling. -->
+              <q-circular-progress
+                :min="0"
+                :max="turnRingMax"
+                :value="turnRingValue(marker)"
+                :size="`${PRESENCE_OUTER_PX}px`"
+                :thickness="0.12"
+                :color="turnRingColor(marker)"
+                :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
+                class="presence-progress presence-progress--outer"
+              />
+              <q-circular-progress
+                :min="0"
+                :max="GRACE_SECONDS"
+                :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+                :size="`${PRESENCE_INNER_PX}px`"
+                :thickness="0.18"
+                :color="showGraceRing(marker) ? 'warning' : 'transparent'"
+                :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+                class="presence-progress presence-progress--inner"
+              />
+              <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+
+              <!-- Finish badge top-left (SC-PRESENCE-14) -->
+              <span
+                v-if="marker.finishPlace > 0"
+                class="presence-place-badge"
+                :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
+              >
+                {{ marker.finishPlace }}
+              </span>
+
+              <!-- Ready top-left own only (SC-PRESENCE-14); phases do not overlap finish -->
+              <button
+                v-if="canShowReady(marker)"
+                type="button"
+                class="ready-affordance"
+                :aria-label="$t('game.readyButton')"
+                @click.stop="onReadyClick"
+              >
+                {{ $t('game.readyButton') }}
+              </button>
+
+              <!-- Say top-right own only (SC-PRESENCE-14 / SC-SAY-07) -->
+              <button
+                v-if="canSendSay(marker)"
+                type="button"
+                class="say-affordance"
+                :aria-label="$t('game.say.affordance')"
+                @click.stop="toggleSayPicker"
+              >
+                <q-icon name="chat_bubble_outline" size="18px" />
+              </button>
+
+              <!-- Bubbles toward board: top below / bottom above (SC-SAY-11/12) -->
+              <div class="say-bubbles" :class="`say-bubbles--${row.slot}`" aria-live="polite">
+                <div
+                  v-for="bubble in liveSaysFor(marker.sessionId)"
+                  :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
+                  class="say-bubble"
+                >
+                  {{ $t(`game.say.${bubble.presetId}`) }}
+                </div>
+              </div>
+
+              <div
+                v-if="sayPickerOpen && canSendSay(marker)"
+                class="say-picker"
+                role="menu"
+                @click.stop
+              >
+                <button
+                  v-for="presetId in SAY_PRESET_IDS"
+                  :key="presetId"
+                  type="button"
+                  class="say-picker__btn"
+                  role="menuitem"
+                  @click="chooseSayPreset(presetId)"
+                >
+                  {{ $t(`game.say.${presetId}`) }}
+                </button>
+              </div>
             </div>
           </div>
-
-          <div v-if="canSendSay(marker) || canShowReady(marker)" class="presence-actions">
-            <button
-              v-if="canShowReady(marker)"
-              type="button"
-              class="ready-affordance"
-              :aria-label="$t('game.readyButton')"
-              @click.stop="onReadyClick"
-            >
-              {{ $t('game.readyButton') }}
-            </button>
-
-            <button
-              v-if="canSendSay(marker)"
-              type="button"
-              class="say-affordance"
-              :aria-label="$t('game.say.affordance')"
-              @click.stop="toggleSayPicker"
-            >
-              <q-icon name="chat_bubble_outline" size="18px" />
-            </button>
-          </div>
-
-          <div
-            v-if="sayPickerOpen && canSendSay(marker)"
-            class="say-picker"
-            role="menu"
-            @click.stop
-          >
-            <button
-              v-for="presetId in SAY_PRESET_IDS"
-              :key="presetId"
-              type="button"
-              class="say-picker__btn"
-              role="menuitem"
-              @click="chooseSayPreset(presetId)"
-            >
-              {{ $t(`game.say.${presetId}`) }}
-            </button>
-          </div>
         </div>
-      </div>
 
-      <div class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
-        <div
-          v-for="(tile, i) in boardTiles"
-          :key="`tile-${i}`"
-          class="tile"
-          :class="[
-            `tile-${tile.kind}`,
-            {
-              'tile--selected': isTileSelected(tile),
-              'tile--target': isTileTarget(tile),
-            },
-          ]"
-          :style="tile.style"
-          @click="onTileClick(tile, $event)"
-        />
-        <img
-          v-for="piece in boardPieces"
-          :key="`piece-${piece.sessionId}-${piece.side}`"
-          class="piece"
-          :class="{
-            'piece--own': isOwnPiece(piece) && !piece.disappearing,
-            'piece--no-transition': !pieceTransitionsReady,
-            'piece--disappearing': piece.disappearing,
-          }"
-          :src="touristSrc(piece.touristId)"
-          alt=""
-          :style="pieceStyle(piece)"
-          @click.stop="onPieceClick(piece)"
-          @transitionend="onPieceTransitionEnd($event)"
-        />
-      </div>
+        <div v-else class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
+          <div
+            v-for="(tile, i) in boardTiles"
+            :key="`tile-${i}`"
+            class="tile"
+            :class="[
+              `tile-${tile.kind}`,
+              {
+                'tile--selected': isTileSelected(tile),
+                'tile--target': isTileTarget(tile),
+              },
+            ]"
+            :style="tile.style"
+            @click="onTileClick(tile, $event)"
+          />
+          <img
+            v-for="piece in boardPieces"
+            :key="`piece-${piece.sessionId}-${piece.side}`"
+            class="piece"
+            :class="{
+              'piece--own': isOwnPiece(piece) && !piece.disappearing,
+              'piece--no-transition': !pieceTransitionsReady,
+              'piece--disappearing': piece.disappearing,
+            }"
+            :src="touristSrc(piece.touristId)"
+            alt=""
+            :style="pieceStyle(piece)"
+            @click.stop="onPieceClick(piece)"
+            @transitionend="onPieceTransitionEnd($event)"
+          />
+        </div>
+      </template>
     </div>
 
     <!-- Strip only once own pieces exist (SC-PIECE-09/17 — empty before playing). -->
@@ -295,14 +304,15 @@ const TOURIST_SRC: Record<number, string> = {
   4: tourist4,
 };
 
-/** Presence positions around the board (SC-PRESENCE-02/03). */
-type PresenceSlot = 'top' | 'bottom' | 'left' | 'right';
+/** Presence row slots — top opponents / bottom self (SC-PRESENCE-02/03). No left/right. */
+type PresenceSlot = 'top' | 'bottom';
 
-/** Opponents for a seated viewer: join order → top, left, right. */
-const SEATED_OPPONENT_SLOTS: PresenceSlot[] = ['top', 'left', 'right'];
-
-/** Spectator join order → top, bottom, left, right. */
-const SPECTATOR_SLOTS: PresenceSlot[] = ['top', 'bottom', 'left', 'right'];
+/**
+ * Presence chrome sizes (SC-PRESENCE-11/13): avatar matches strip tourist (72px);
+ * rings scale around avatar; reserved marker box = outer ring.
+ */
+const PRESENCE_OUTER_PX = 96;
+const PRESENCE_INNER_PX = 84;
 
 /** Whitelist preset ids for picker — display copy via i18n `game.say.*` (ready via sendReady). */
 const SAY_PRESET_IDS: readonly SayPresetId[] = ['hello', 'luck'];
@@ -338,6 +348,9 @@ interface PresenceMarker {
   /** Finish place; 0 = none (SC-PRESENCE-06/07). */
   finishPlace: number;
 }
+
+type PresenceLayoutRow =
+  { kind: 'markers'; slot: PresenceSlot; markers: PresenceMarker[] } | { kind: 'board' };
 
 interface Cell {
   row: number;
@@ -697,7 +710,8 @@ function onPieceTransitionEnd(event: TransitionEvent) {
 
 /**
  * Occupied seats only (store mirrors MapSchema — no empty slots).
- * Join order = array order from sync map forEach (design D5).
+ * Join order = array order from sync map forEach (design D9).
+ * Seated: self bottom; opponents one top row L→R. Spectator: all top L→R.
  */
 const presenceMarkers = computed((): PresenceMarker[] => {
   const seats = game.seats;
@@ -706,22 +720,31 @@ const presenceMarkers = computed((): PresenceMarker[] => {
 
   if (self) {
     const markers: PresenceMarker[] = [toMarker(self, 'bottom')];
-    const others = seats.filter((s) => s.sessionId !== selfId);
-    others.forEach((seat, i) => {
-      const slot = SEATED_OPPONENT_SLOTS[i];
-      if (slot) {
-        markers.push(toMarker(seat, slot));
+    for (const seat of seats) {
+      if (seat.sessionId !== selfId) {
+        markers.push(toMarker(seat, 'top'));
       }
-    });
+    }
     return markers;
   }
 
-  return seats
-    .map((seat, i) => {
-      const slot = SPECTATOR_SLOTS[i];
-      return slot ? toMarker(seat, slot) : null;
-    })
-    .filter((m): m is PresenceMarker => m !== null);
+  return seats.map((seat) => toMarker(seat, 'top'));
+});
+
+/** Top row → board → bottom row (omit empty rows). */
+const presenceLayout = computed((): PresenceLayoutRow[] => {
+  const markers = presenceMarkers.value;
+  const top = markers.filter((m) => m.slot === 'top');
+  const bottom = markers.filter((m) => m.slot === 'bottom');
+  const rows: PresenceLayoutRow[] = [];
+  if (top.length > 0) {
+    rows.push({ kind: 'markers', slot: 'top', markers: top });
+  }
+  rows.push({ kind: 'board' });
+  if (bottom.length > 0) {
+    rows.push({ kind: 'markers', slot: 'bottom', markers: bottom });
+  }
+  return rows;
 });
 
 function toMarker(seat: GameSeat, slot: PresenceSlot): PresenceMarker {
@@ -1033,51 +1056,47 @@ async function onLeave() {
 
 <style scoped>
 .game-header {
-  max-width: calc(10 * 60px + 9 * 6px + 2 * 64px);
+  /* Cap to board max-width — no side presence gutters (D9 / SC-PRESENCE-02 / SC-BOARD-03). */
+  max-width: calc(10 * 60px + 9 * 2px);
   width: 100%;
 }
 
-/* Occupied presence around the board (SC-PRESENCE-01…05). */
+/* Presence rows above/below board — no left/right columns (SC-PRESENCE-02/03). */
 .presence-frame {
-  display: grid;
-  grid-template-columns: 56px minmax(0, calc(10 * 60px + 9 * 6px)) 56px;
-  grid-template-rows: 56px auto 56px;
-  grid-template-areas:
-    '. top .'
-    'left board right'
-    '. bottom .';
-  column-gap: 4px;
-  row-gap: 4px;
-  width: 100%;
-  max-width: calc(10 * 60px + 9 * 6px + 2 * 60px);
-  justify-content: center;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: calc(10 * 60px + 9 * 2px);
   pointer-events: none;
 }
 
-.presence-top {
-  grid-area: top;
+.presence-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  /* Gap keeps neighbor say-bubbles from overlapping (SC-SAY-11/12 / D9). */
+  gap: 48px;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  min-height: 96px; /* = PRESENCE_OUTER_PX */
 }
 
-.presence-left {
-  grid-area: left;
-}
-
-.presence-right {
-  grid-area: right;
-}
-
-.presence-bottom {
-  grid-area: bottom;
+.presence-row--bottom {
+  align-items: flex-end;
 }
 
 .presence-slot {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 52px;
   position: relative;
   overflow: visible;
+  flex-shrink: 0;
 }
 
 .presence-marker {
@@ -1085,8 +1104,9 @@ async function onLeave() {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
+  /* Reserved outer chrome = PRESENCE_OUTER_PX (SC-PRESENCE-11). */
+  width: 96px;
+  height: 96px;
   flex-shrink: 0;
 }
 
@@ -1110,17 +1130,12 @@ async function onLeave() {
   pointer-events: auto;
 }
 
-.presence-actions {
-  position: absolute;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  bottom: -6px;
-  right: -6px;
-}
-
+/* Ready top-left own only (SC-PRESENCE-14). */
 .ready-affordance {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  z-index: 3;
   pointer-events: auto;
   border: none;
   border-radius: 12px;
@@ -1180,21 +1195,22 @@ body.body--dark .countdown-overlay__card {
   font-variant-numeric: tabular-nums;
 }
 
+/* Avatar matches strip tourist image box 72px (SC-PRESENCE-13). */
 .presence-avatar {
   position: relative;
   z-index: 2;
-  width: 28px;
-  height: 28px;
+  width: 72px;
+  height: 72px;
   object-fit: contain;
   border-radius: 50%;
   pointer-events: none;
 }
 
-/* Finish place on presence marker (SC-PRESENCE-06/07). */
+/* Finish place top-left (SC-PRESENCE-14). */
 .presence-place-badge {
   position: absolute;
   top: -4px;
-  right: -4px;
+  left: -4px;
   z-index: 3;
   min-width: 18px;
   height: 18px;
@@ -1209,7 +1225,7 @@ body.body--dark .countdown-overlay__card {
   pointer-events: none;
 }
 
-/* Comic say bubbles near presence (D4 / SC-SAY-09…12) — not Notify toasts. */
+/* Comic say bubbles toward board (SC-SAY-11/12) — not Notify toasts. */
 .say-bubbles {
   position: absolute;
   z-index: 2;
@@ -1217,38 +1233,21 @@ body.body--dark .countdown-overlay__card {
   gap: 4px;
   pointer-events: none;
   max-width: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
 }
 
+/* Top row: stack below avatar toward board; newer closer (column-reverse + oldest→newest). */
 .say-bubbles--top {
-  bottom: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  flex-direction: column;
-  align-items: center;
-}
-
-.say-bubbles--bottom {
   top: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
   flex-direction: column-reverse;
-  align-items: center;
 }
 
-.say-bubbles--left {
-  left: calc(100% + 4px);
-  top: 50%;
-  transform: translateY(-50%);
+/* Bottom self: stack above avatar toward board; newer closer (column + oldest→newest). */
+.say-bubbles--bottom {
+  bottom: calc(100% + 4px);
   flex-direction: column;
-  align-items: flex-start;
-}
-
-.say-bubbles--right {
-  right: calc(100% + 4px);
-  top: 50%;
-  transform: translateY(-50%);
-  flex-direction: column;
-  align-items: flex-end;
 }
 
 .say-bubble {
@@ -1272,8 +1271,11 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* Say affordance top-right own only (SC-PRESENCE-14 / SC-SAY-07). */
 .say-affordance {
-  position: relative;
+  position: absolute;
+  top: -4px;
+  right: -4px;
   z-index: 3;
   width: 22px;
   height: 22px;
@@ -1334,9 +1336,8 @@ body.body--dark .say-picker {
 }
 
 .tourist-board {
-  grid-area: board;
-  --gap: 6px;
-  --radius: 12px;
+  --gap: 2px;
+  --radius: 2px;
   --cell: calc((100% - 9 * var(--gap)) / 10);
   position: relative;
 
@@ -1346,7 +1347,7 @@ body.body--dark .say-picker {
   grid-template-rows: repeat(10, 1fr);
   gap: var(--gap);
   width: 100%;
-  max-width: calc(10 * 60px + 9 * 6px);
+  max-width: calc(10 * 60px + 9 * 2px);
   aspect-ratio: 1;
   /* Holes show page background — no board chrome fill */
   background: transparent;

@@ -16,7 +16,7 @@ Main scenarios:
 - Sign in anonymously as a guest.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game with chosen `maxSeats` (2|3|4), or join by room id.
-- Open Game and view the tourist board with synced seats (pieces appear only in `playing`) and strip×4 «Мои туристы» once own pieces exist; after phase `playing`, on own turn select an unfinished piece and submit a one-step `move` via the game store; landing on center finishes a piece (disappear + strip icon); finishing all four shows a place modal and presence badge while the seat stays (say allowed, no moves, leave without confirm); solo five-minute budget expiry shows a timeout modal + locks moves (`timeExpired`); presence uses dual circular countdowns (outer turn blue/red, inner reconnect warning) with reserved chrome size; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
+- Open Game and view the tourist board with synced seats (pieces appear only in `playing`) and strip×4 «Мои туристы» once own pieces exist; after phase `playing`, on own turn select an unfinished piece and submit a one-step `move` via the game store; landing on center finishes a piece (disappear + strip icon); finishing all four shows a place modal and presence badge while the seat stays (say allowed, no moves, leave without confirm); solo five-minute budget expiry shows a timeout modal + locks moves (`timeExpired`); presence sits in top/bottom rows (no side columns) with dual circular countdowns (outer turn blue/red, inner reconnect warning) around a strip-sized avatar; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
 - Leave the room («Выход из игры»); seated players in phase `playing` without finish place or time-expired confirm before consented leave; sign out.
 
 ## Who The Users Are
@@ -141,8 +141,8 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game.
-- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` (+ `finished`) + `connected` / `reconnectUntil` / `ready` / `finishPlace` / `timeExpired` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds` / `sessionId`; `isMyTurn` / `isPlaying` / `isMySeatFinished` / `isMySeatTimeExpired` / `sendMove` / `sendReady`) + `pages/GamePage` tourist board (unfinished pieces + disappear) + dual presence rings + place badge + strip×4 once pieces exist + countdown overlay + leave confirm when seated ∧ `playing` ∧ `!finishPlace` ∧ `!timeExpired`.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay unfinished pieces only after materialize; occupied presence with outer turn countdown (blue 60s / red solo 300s) + inner reconnect warning, reserved 52px chrome (no static turn outline); header «Ваш ход» / «Ход соперника» / «Ход игрока»; countdown overlay; ready affordance; on own turn while `playing` local select/hints + `sendMove`; center finish → fade + strip icon + place modal; solo timeout → modal + lock.
+- **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` (+ `finished`) + `connected` / `reconnectUntil` / `ready` / `finishPlace` / `timeExpired` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds` / `sessionId`; `isMyTurn` / `isPlaying` / `isMySeatFinished` / `isMySeatTimeExpired` / `sendMove` / `sendReady`) + `pages/GamePage` tourist board (unfinished pieces + disappear) + presence rows + dual rings + corner affordances + strip×4 once pieces exist + countdown overlay + leave confirm when seated ∧ `playing` ∧ `!finishPlace` ∧ `!timeExpired`.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles); overlay unfinished pieces only after materialize; occupied presence in top/bottom rows (no side columns) with outer turn countdown (blue 60s / red solo 300s) + inner reconnect warning, reserved 96px chrome around 72px avatar (no static turn outline); finish/ready top-left, say top-right; bubbles toward board; header «Ваш ход» / «Ход соперника» / «Ход игрока»; countdown overlay; on own turn while `playing` local select/hints + `sendMove`; center finish → fade + strip icon + place modal; solo timeout → modal + lock.
 - **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 
 ## Pages (routes)
@@ -198,24 +198,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                                                                       |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                                                                 |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)   |
-| `client-locate-change-points` | Where to edit/add without changing code                                                                       |
-| `client-verify-code`          | Branch diff vs all client code skills                                                                         |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                       |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                                |
-| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell)                                              |
-| `work-with-forms`             | LoginPage `q-form` / rules                                                                                    |
-| `work-with-pages`             | Routes + guards; App theme header                                                                             |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                                                               |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board + presence ring/avatar CSS                    |
-| `work-with-localization`      | vue-i18n boot; `game.say` / ready / countdown / leave / finish / timeout keys                                 |
-| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe                                  |
-| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                              |
-| `work-with-game-board`        | Board + dual presence rings + place/timeout modals + ready/countdown + leave confirm + strip + move/ready/say |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                           |
+| Skill                         | Use for                                                                                                     |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (not axios/BFF)                                                               |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide) |
+| `client-locate-change-points` | Where to edit/add without changing code                                                                     |
+| `client-verify-code`          | Branch diff vs all client code skills                                                                       |
+| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                     |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                              |
+| `client-work-with-structure`  | pages / components / boot / stores placement (incl. theme shell)                                            |
+| `work-with-forms`             | LoginPage `q-form` / rules                                                                                  |
+| `work-with-pages`             | Routes + guards; App theme header; GamePage presence rows overview                                          |
+| `work-with-stores`            | Pinia `auth` / `theme` / `game`                                                                             |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board + presence row/ring/avatar CSS             |
+| `work-with-localization`      | vue-i18n boot; `game.say` / ready / countdown / leave / finish / timeout keys                               |
+| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats modal (no Play), quiet resubscribe                                |
+| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                            |
+| `work-with-game-board`        | Board + presence rows + dual rings + corner affordances + bubbles toward board + modals + strip + move/say  |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                         |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 
@@ -223,4 +223,4 @@ Commands (`npm run lint`, `npm run typecheck`, `quasar dev`, `quasar build`) are
 
 ## Related Package
 
-- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + `pieces` + `finished` / `finishPlace` / `timeExpired`) / `phase` / `maxSeats` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds`, renders unfinished pieces only after materialize + dual presence rings + strip finish chrome + place/timeout modals + local move chrome only in `playing` for eligible seats, and sends `move` `{ side, row, col }` via `sendMove` / `ready` via `sendReady`.
+- [`../happy-tourist-server`](../happy-tourist-server) — Colyseus multiplayer server (rooms, auth, HTTP `/rooms/:roomName`). Prefer changing room names, state schema, and move protocol in coordination with the server; this client assumes room type `tourist`, mirrors seats (`touristId` + `pieces` + `finished` / `finishPlace` / `timeExpired`) / `phase` / `maxSeats` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds`, renders unfinished pieces only after materialize + presence rows (top/bottom) with dual rings + strip finish chrome + place/timeout modals + local move chrome only in `playing` for eligible seats, and sends `move` `{ side, row, col }` via `sendMove` / `ready` via `sendReady`.
