@@ -14,6 +14,10 @@ export default {
     createCancel: 'Отмена',
     maxSeats: 'Число мест',
     maxSeatsOption: '{n}',
+    grilleDensity: 'Плотность решёток',
+    grilleDensityFew: 'мало',
+    grilleDensityMedium: 'средне',
+    grilleDensityMany: 'много',
     capacity: '{seats}/{maxSeats}',
   },
   game: {
@@ -56,5 +60,12 @@ export default {
     /** Solo peeks∞ / finite steps modal (SC-PRESENCE-19). */
     soloUnlimitedModal: 'Вы один в игре. Просмотры безлимитны, шаги по-прежнему ограничены.',
     soloUnlimitedModalOk: 'ОК',
+    /** Rescue adjacent trapped tourist (SC-MOVE-54 UX). */
+    rescueAffordance: 'Освободить туриста',
+    /** Return finished tourist onto center ring (SC-FINISH-13). */
+    returnAffordance: 'Вернуть с финиша',
+    /** All-jail reset warning — own seat only (SC-MOVE-63). */
+    allJailWarningModal: 'Все туристы попали в решётки. Они отправлены на стартовые клетки.',
+    allJailWarningModalOk: 'ОК',
   },
 };

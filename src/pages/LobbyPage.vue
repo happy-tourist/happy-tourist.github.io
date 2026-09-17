@@ -88,6 +88,17 @@
           />
         </q-card-section>
 
+        <q-card-section class="q-pt-none">
+          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.grilleDensity') }}</div>
+          <q-option-group
+            v-model="createGrilleDensity"
+            type="radio"
+            color="primary"
+            :options="grilleDensityOptions"
+            inline
+          />
+        </q-card-section>
+
         <q-card-actions align="right">
           <q-btn
             flat
@@ -113,7 +124,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { useGameStore, type CreateGameMaxSeats } from '@/stores/game';
+import { useGameStore, type CreateGameGrilleDensity, type CreateGameMaxSeats } from '@/stores/game';
 
 const auth = useAuthStore();
 const game = useGameStore();
@@ -124,6 +135,8 @@ const creating = ref(false);
 const joining = ref(false);
 const createModalOpen = ref(false);
 const createMaxSeats = ref<CreateGameMaxSeats>(2);
+/** Default medium (45%) — SC-LOBBY-15. */
+const createGrilleDensity = ref<CreateGameGrilleDensity>('medium');
 
 const maxSeatsOptions = computed(() =>
   ([2, 3, 4] as const).map((n) => ({
@@ -131,6 +144,12 @@ const maxSeatsOptions = computed(() =>
     value: n,
   })),
 );
+
+const grilleDensityOptions = computed(() => [
+  { label: t('lobby.grilleDensityFew'), value: 'few' as const },
+  { label: t('lobby.grilleDensityMedium'), value: 'medium' as const },
+  { label: t('lobby.grilleDensityMany'), value: 'many' as const },
+]);
 
 onMounted(() => {
   void game.subscribeLobby();
@@ -142,6 +161,7 @@ onUnmounted(() => {
 
 function openCreateModal() {
   createMaxSeats.value = 2;
+  createGrilleDensity.value = 'medium';
   createModalOpen.value = true;
 }
 
@@ -155,7 +175,10 @@ function closeCreateModal() {
 async function onConfirmCreate() {
   creating.value = true;
   try {
-    const room = await game.createGame({ maxSeats: createMaxSeats.value });
+    const room = await game.createGame({
+      maxSeats: createMaxSeats.value,
+      grilleDensity: createGrilleDensity.value,
+    });
     createModalOpen.value = false;
     await router.push({ name: 'game', params: { roomId: room.roomId } });
   } catch {

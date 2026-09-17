@@ -25,8 +25,13 @@ export interface GameRoomMeta {
 /** Allowed maxSeats values for tourist room create (D4). */
 export type CreateGameMaxSeats = 2 | 3 | 4;
 
+/** Create option grille density presets (D1 / SC-LOBBY-13…15). */
+export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
+
 export interface CreateGameOptions {
   maxSeats?: CreateGameMaxSeats;
+  /** few/medium/many → 25/45/65% of task cells; default medium on server. */
+  grilleDensity?: CreateGameGrilleDensity;
 }
 
 /** Mirrored piece from synced Seat.pieces (keyed by side N|E|S|W on server). */
@@ -36,6 +41,8 @@ export interface GamePiece {
   col: number;
   /** Synced finish flag — finished pieces leave board occupancy (game/finish). */
   finished: boolean;
+  /** Synced trap flag — piece held by a revealed grille (game/move). */
+  trapped: boolean;
 }
 
 /** Synced start phase from MyRoomState.phase. */
@@ -65,6 +72,8 @@ export interface UnfinishedBoardPiece {
   side: string;
   row: number;
   col: number;
+  /** Synced trap flag — piece held by a revealed grille (SC-PIECE-24/27). */
+  trapped: boolean;
 }
 
 /** Seat has a finish place (all four pieces finished). */
@@ -145,6 +154,7 @@ type PieceSync = {
   row: number;
   col: number;
   finished?: boolean;
+  trapped?: boolean;
 };
 
 type SeatSync = {
@@ -173,6 +183,14 @@ type TouristRoomState = {
   turnBudgetSeconds?: number;
   /** Synced removed task cell keys `"r,c"` (holes: not landable; stand OK). */
   removedTaskKeys?: {
+    forEach: (cb: (key: string) => void) => void;
+    length?: number;
+  };
+  /**
+   * Synced revealed grille cells currently holding a trapped piece (`"r,c"`).
+   * Hidden (unspent) grilles are never synced.
+   */
+  holdingGrilleKeys?: {
     forEach: (cb: (key: string) => void) => void;
     length?: number;
   };
@@ -294,6 +312,11 @@ export const useGameStore = defineStore('game', {
      * Mirrored from MyRoomState.removedTaskKeys. Piece may stand on a hole.
      */
     removedTaskKeys: string[];
+    /**
+     * Synced revealed grille cells currently holding a trapped piece (`"r,c"`).
+     * Mirrored from MyRoomState.holdingGrilleKeys (hidden grilles never sync).
+     */
+    holdingGrilleKeys: string[];
     /** Own private steps budget from `budgets` (always finite; 0 for spectators / unset). */
     steps: number;
     /** Own private peeks budget from `budgets` (0 for spectators / unset). */
@@ -313,6 +336,11 @@ export const useGameStore = defineStore('game', {
      * Cleared on answer / room reset (page shows modal in block 3).
      */
     openPeek: OpenPeek | null;
+    /**
+     * Private all-jail warning for this seat only (`allJailWarning`).
+     * Page shows informational modal; clear via `clearAllJailWarning` (SC-MOVE-63).
+     */
+    allJailWarning: boolean;
     /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
     sayEvents: SayEvent[];
     status: GameStatus;
@@ -334,11 +362,13 @@ export const useGameStore = defineStore('game', {
     turnBudgetSeconds: 0,
     seats: [],
     removedTaskKeys: [],
+    holdingGrilleKeys: [],
     steps: 0,
     peeks: 0,
     budgetsInfinite: false,
     peekedThisTurn: false,
     openPeek: null,
+    allJailWarning: false,
     sayEvents: [],
     status: 'idle',
     error: null,
@@ -393,6 +423,7 @@ export const useGameStore = defineStore('game', {
             side: piece.side,
             row: piece.row,
             col: piece.col,
+            trapped: piece.trapped,
           });
         }
       }
@@ -584,6 +615,50 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
+     * Rescue own trapped piece with an adjacent free own piece (−1 step).
+     * Server rejects if not own turn / no adj rescuer / no steps / not trapped.
+     * @returns true if the message was sent.
+     */
+    sendRescue(side: string): boolean {
+      if (
+        !this.room ||
+        this.phase !== 'playing' ||
+        !this.isMyTurn ||
+        this.isMySeatFinished ||
+        this.isMySeatTimeExpired ||
+        this.steps <= 0 ||
+        typeof side !== 'string' ||
+        side.length === 0
+      ) {
+        return false;
+      }
+      this.room.send('rescue', { side });
+      return true;
+    },
+
+    /**
+     * Return a finished own piece onto a legal center-ring cell (−1 step).
+     * Server rejects illegal ring / occupancy / hole / finishPlace ≠ 0.
+     * @returns true if the message was sent.
+     */
+    sendReturnFromFinish(side: string, row: number, col: number): boolean {
+      if (
+        !this.room ||
+        this.phase !== 'playing' ||
+        !this.isMyTurn ||
+        this.isMySeatFinished ||
+        this.isMySeatTimeExpired ||
+        this.steps <= 0 ||
+        typeof side !== 'string' ||
+        side.length === 0
+      ) {
+        return false;
+      }
+      this.room.send('returnFromFinish', { side, row, col });
+      return true;
+    },
+
+    /**
      * Open a peek on own unfinished piece standing on a present task cell.
      * Finite peeks: require peeks > 0; solo peeks∞ skips that gate.
      * Server replies with private `peekOpen` (reward) or rejects silently.
@@ -687,11 +762,13 @@ export const useGameStore = defineStore('game', {
       this.turnBudgetSeconds = 0;
       this.seats = [];
       this.removedTaskKeys = [];
+      this.holdingGrilleKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this.allJailWarning = false;
       this.sayEvents = [];
 
       if (room) {
@@ -702,6 +779,11 @@ export const useGameStore = defineStore('game', {
           // room may already be closed
         }
       }
+    },
+
+    /** Dismiss own all-jail warning modal (informational only). */
+    clearAllJailWarning() {
+      this.allJailWarning = false;
     },
 
     async _enterRoom(connect: () => Promise<Room>) {
@@ -836,6 +918,7 @@ export const useGameStore = defineStore('game', {
             row: Number(piece.row),
             col: Number(piece.col),
             finished: Boolean(piece.finished),
+            trapped: Boolean(piece.trapped),
           });
         });
         next.push({
@@ -856,6 +939,12 @@ export const useGameStore = defineStore('game', {
         removed.push(String(key));
       });
       this.removedTaskKeys = removed;
+
+      const holding: string[] = [];
+      s.holdingGrilleKeys?.forEach((key) => {
+        holding.push(String(key));
+      });
+      this.holdingGrilleKeys = holding;
 
       // Drop stale peek modal if turn moved away (timeout force-wrong / end-turn).
       if (
@@ -881,11 +970,13 @@ export const useGameStore = defineStore('game', {
       this.status = 'waiting';
       this.sayEvents = [];
       this.removedTaskKeys = [];
+      this.holdingGrilleKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this.allJailWarning = false;
 
       // D3: persist tourist reconnection token only (never lobby).
       saveTouristReconnect(room);
@@ -909,6 +1000,10 @@ export const useGameStore = defineStore('game', {
 
       room.onMessage('peekOpen', (message: unknown) => {
         this._onPeekOpenMessage(message);
+      });
+
+      room.onMessage('allJailWarning', () => {
+        this.allJailWarning = true;
       });
 
       room.onError((_code, message) => {
@@ -1011,11 +1106,13 @@ export const useGameStore = defineStore('game', {
       this.turnBudgetSeconds = 0;
       this.seats = [];
       this.removedTaskKeys = [];
+      this.holdingGrilleKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this.allJailWarning = false;
       this.sayEvents = [];
       this.status = 'idle';
     },

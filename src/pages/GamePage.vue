@@ -102,6 +102,28 @@
       </q-card>
     </q-dialog>
 
+    <!-- All-jail warning — own seat only (SC-MOVE-63); informational. -->
+    <q-dialog
+      :model-value="game.allJailWarning"
+      persistent
+      @update:model-value="onAllJailDialogUpdate"
+    >
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-body1 text-center">
+            {{ $t('game.allJailWarningModal') }}
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            color="primary"
+            :label="$t('game.allJailWarningModalOk')"
+            @click="onAllJailDialogUpdate(false)"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <q-banner
       v-if="game.error"
       class="bg-negative text-white q-mb-md"
@@ -271,6 +293,7 @@
               {
                 'tile--selected': isTileSelected(tile),
                 'tile--target': isTileTarget(tile),
+                'tile--return-target': isReturnTarget(tile),
                 'tile--removed': tile.removed,
               },
             ]"
@@ -282,7 +305,8 @@
             :key="`piece-${piece.sessionId}-${piece.side}`"
             class="piece"
             :class="{
-              'piece--own': isOwnPiece(piece) && !piece.disappearing,
+              'piece--own': isOwnPiece(piece) && !piece.disappearing && !piece.trapped,
+              'piece--trapped': piece.trapped,
               'piece--no-transition': !pieceTransitionsReady,
               'piece--disappearing': piece.disappearing,
             }"
@@ -292,7 +316,20 @@
             @click.stop="onPieceClick(piece)"
             @transitionend="onPieceTransitionEnd($event)"
           />
-          <!-- Eye to open peek on selected own piece on present * (SC-BOARD-13). -->
+          <!-- Revealed holding grilles — drop/rise for all clients (SC-BOARD-17…19). -->
+          <img
+            v-for="grille in grilleOverlays"
+            :key="`grille-${grille.key}`"
+            class="grille-overlay"
+            :class="{
+              'grille-overlay--drop': grille.phase === 'drop',
+              'grille-overlay--rise': grille.phase === 'rise',
+            }"
+            :src="grilleSrc"
+            alt=""
+            :style="grilleStyle(grille)"
+          />
+          <!-- Eye to open peek on selected own free piece on present * (SC-BOARD-13/20). -->
           <button
             v-if="canShowPeekAffordance"
             type="button"
@@ -302,6 +339,18 @@
             @click.stop="onPeekClick"
           >
             <q-icon name="visibility" size="18px" />
+          </button>
+          <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
+          <button
+            v-for="rescue in rescueAffordances"
+            :key="`rescue-${rescue.side}`"
+            type="button"
+            class="rescue-affordance"
+            :aria-label="$t('game.rescueAffordance')"
+            :style="rescueAffordanceStyle(rescue)"
+            @click.stop="onRescueClick(rescue.side)"
+          >
+            <q-icon name="lock_open" size="18px" />
           </button>
         </div>
       </template>
@@ -322,6 +371,7 @@
           :class="{
             'my-tourist-slot--finished': isStripSlotFinished(side),
             'my-tourist-slot--selected': selectedSide === side && !isStripSlotFinished(side),
+            'my-tourist-slot--returning': returningSide === side,
           }"
           @click="onStripClick(side)"
         >
@@ -330,6 +380,15 @@
             :src="touristSrc(mySeat.touristId)"
             :alt="`Мои туристы ${side}`"
           />
+          <button
+            v-if="canShowReturnAffordance(side)"
+            type="button"
+            class="my-tourist-return-btn"
+            :aria-label="$t('game.returnAffordance')"
+            @click.stop="onReturnClick(side)"
+          >
+            <q-icon name="undo" size="16px" />
+          </button>
           <q-icon
             v-if="isStripSlotFinished(side)"
             class="my-tourist-finish-icon"
@@ -353,8 +412,10 @@ import tourist1 from '@/assets/tourists/tourist1.png';
 import tourist2 from '@/assets/tourists/tourist2.png';
 import tourist3 from '@/assets/tourists/tourist3.png';
 import tourist4 from '@/assets/tourists/tourist4.png';
+import grilleSrc from '@/assets/grilles/grille.png';
 import {
   useGameStore,
+  type GamePiece,
   type GameSeat,
   type SayEvent,
   type SayPresetId,
@@ -387,6 +448,8 @@ const GRACE_SECONDS = 30;
 const MOVE_ANIM_MS = 250;
 /** Short fade after landing on center before DOM removal (SC-FINISH-01). */
 const FINISH_FADE_MS = 200;
+/** Grille drop / rise animation (SC-BOARD-18/19). */
+const GRILLE_ANIM_MS = 320;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -438,8 +501,25 @@ interface BoardPiece {
   side: string;
   row: number;
   col: number;
+  /** Synced trap flag — visible under grille (SC-PIECE-27). */
+  trapped?: boolean;
   /** True while slide+fade after finish — still in DOM, not selectable. */
   disappearing?: boolean;
+}
+
+type GrillePhase = 'drop' | 'hold' | 'rise';
+
+interface GrilleOverlay {
+  key: string;
+  row: number;
+  col: number;
+  phase: GrillePhase;
+}
+
+interface RescueAffordance {
+  side: string;
+  row: number;
+  col: number;
 }
 
 interface PresenceMarker {
@@ -473,6 +553,51 @@ function isPlayableCell(row: number, col: number): boolean {
 
 function isCenterCell(row: number, col: number): boolean {
   return CENTER_CELLS.some((c) => c.row === row && c.col === col);
+}
+
+function chebyshevDistance(a: Cell, b: Cell): number {
+  return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
+}
+
+/**
+ * Ring around the central 2×2 (incl. diagonal corners) — mirrors server
+ * CENTER_RING_CELLS (SC-MOVE-57/58 / SC-FINISH-13).
+ */
+function buildCenterRingCells(): Cell[] {
+  const centerKeys = new Set(CENTER_CELLS.map((c) => cellKey(c.row, c.col)));
+  const ring = new Map<string, Cell>();
+  for (const center of CENTER_CELLS) {
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) {
+          continue;
+        }
+        const row = center.row + dr;
+        const col = center.col + dc;
+        const key = cellKey(row, col);
+        if (centerKeys.has(key) || !isPlayableCell(row, col)) {
+          continue;
+        }
+        ring.set(key, { row, col });
+      }
+    }
+  }
+  return [...ring.values()];
+}
+
+const CENTER_RING_CELLS = buildCenterRingCells();
+
+function parseCellKey(key: string): Cell | null {
+  const parts = key.split(',');
+  if (parts.length !== 2) {
+    return null;
+  }
+  const row = Number(parts[0]);
+  const col = Number(parts[1]);
+  if (!Number.isInteger(row) || !Number.isInteger(col)) {
+    return null;
+  }
+  return { row, col };
 }
 
 function buildBoardTiles(): BoardTile[] {
@@ -542,7 +667,9 @@ const router = useRouter();
 
 /** Local selection — only meaningful on own turn (D5). */
 const selectedSide = ref<string | null>(null);
-/** Ignore clicks while own piece travel animates (SC-MOVE-15). */
+/** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
+const returningSide = ref<string | null>(null);
+/** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /** Skip first paint transition so pieces do not fly from 0,0. */
 const pieceTransitionsReady = ref(false);
@@ -559,6 +686,17 @@ const timeoutModalOpen = ref(false);
 const endModalKind = ref<'timer' | 'steps'>('timer');
 /** Solo peeks-unlimited modal (SC-PRESENCE-19). */
 const soloUnlimitedModalOpen = ref(false);
+
+/** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
+const grilleOverlays = ref<GrilleOverlay[]>([]);
+const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Temporary rescuer slide toward trapped cell (D5 — server coords unchanged). */
+const rescueAnimOverride = ref<{
+  sessionId: string;
+  side: string;
+  row: number;
+  col: number;
+} | null>(null);
 
 /** +N fall-into-counter animations (SC-PRESENCE-15 / SC-PRESENCE-20). */
 const stepFalls = ref<BudgetFall[]>([]);
@@ -721,9 +859,9 @@ function buildOccupancy(exclude?: Cell): Set<string> {
   return set;
 }
 
-/** Legal one-step destinations for the selected own unfinished piece (D5 / SC-MOVE-12/46). */
+/** Legal one-step destinations for the selected own unfinished free piece (D5 / SC-MOVE-12/46). */
 const legalTargets = computed((): Cell[] => {
-  if (!isInteractive.value || !selectedSide.value || !mySeat.value) {
+  if (!isInteractive.value || !selectedSide.value || !mySeat.value || returningSide.value) {
     return [];
   }
   // Steps always finite (incl. solo): 0 steps → keep selection for peek eye, no move hints.
@@ -731,7 +869,7 @@ const legalTargets = computed((): Cell[] => {
     return [];
   }
   const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
   );
   if (!piece) {
     return [];
@@ -763,22 +901,46 @@ const legalTargetKeys = computed(
   () => new Set(legalTargets.value.map((c) => cellKey(c.row, c.col))),
 );
 
+/** Legal center-ring cells for return-from-finish (SC-MOVE-57/58 / SC-FINISH-13). */
+const legalReturnTargets = computed((): Cell[] => {
+  if (!isInteractive.value || !returningSide.value || !mySeat.value) {
+    return [];
+  }
+  if (game.steps <= 0 || mySeat.value.finishPlace !== 0) {
+    return [];
+  }
+  const occupied = buildOccupancy();
+  return CENTER_RING_CELLS.filter(
+    (c) => isLandableCell(c.row, c.col) && !occupied.has(cellKey(c.row, c.col)),
+  );
+});
+
+const legalReturnTargetKeys = computed(
+  () => new Set(legalReturnTargets.value.map((c) => cellKey(c.row, c.col))),
+);
+
 const selectedCell = computed((): Cell | null => {
   if (!selectedSide.value || !mySeat.value) {
     return null;
   }
   const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
   );
   return piece ? { row: piece.row, col: piece.col } : null;
 });
 
 /**
- * Eye when selected own unfinished piece sits on a still-present task cell
- * (SC-BOARD-13/14). Keep-focus after move reuses selection — no re-click needed.
+ * Eye when selected own free unfinished piece sits on a still-present task cell
+ * (SC-BOARD-13/14/20). Trapped pieces cannot peek (SC-MOVE-53 UX).
  */
 const canShowPeekAffordance = computed(() => {
-  if (!isInteractive.value || !selectedSide.value || !mySeat.value || game.openPeek) {
+  if (
+    !isInteractive.value ||
+    !selectedSide.value ||
+    !mySeat.value ||
+    game.openPeek ||
+    returningSide.value
+  ) {
     return false;
   }
   // Multi peek while peeks remain; solo peeks∞ — no one-peek/turn gate (SC-BOARD-14).
@@ -786,7 +948,7 @@ const canShowPeekAffordance = computed(() => {
     return false;
   }
   const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p),
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
   );
   return Boolean(piece && isPresentTaskCell(piece.row, piece.col));
 });
@@ -802,9 +964,93 @@ const peekAffordanceStyle = computed((): Record<string, string> => {
   };
 });
 
+function hasAdjacentFreeRescuer(trapped: GamePiece): boolean {
+  if (!mySeat.value || !trapped.trapped || trapped.finished) {
+    return false;
+  }
+  const target: Cell = { row: trapped.row, col: trapped.col };
+  for (const piece of mySeat.value.pieces) {
+    if (piece.side === trapped.side || piece.finished || piece.trapped) {
+      continue;
+    }
+    if (chebyshevDistance({ row: piece.row, col: piece.col }, target) === 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function findAdjacentFreeRescuer(trapped: GamePiece): GamePiece | null {
+  if (!mySeat.value || !trapped.trapped || trapped.finished) {
+    return null;
+  }
+  const target: Cell = { row: trapped.row, col: trapped.col };
+  for (const piece of mySeat.value.pieces) {
+    if (piece.side === trapped.side || piece.finished || piece.trapped) {
+      continue;
+    }
+    if (chebyshevDistance({ row: piece.row, col: piece.col }, target) === 1) {
+      return piece;
+    }
+  }
+  return null;
+}
+
+/** Rescue affordances over own trapped pieces with adj free + steps (SC-MOVE-54 UX). */
+const rescueAffordances = computed((): RescueAffordance[] => {
+  if (!isInteractive.value || !mySeat.value || game.steps <= 0 || returningSide.value) {
+    return [];
+  }
+  const out: RescueAffordance[] = [];
+  for (const piece of mySeat.value.pieces) {
+    if (!piece.trapped || piece.finished) {
+      continue;
+    }
+    if (!hasAdjacentFreeRescuer(piece)) {
+      continue;
+    }
+    out.push({ side: piece.side, row: piece.row, col: piece.col });
+  }
+  return out;
+});
+
+function rescueAffordanceStyle(rescue: RescueAffordance): Record<string, string> {
+  return {
+    '--prow': String(rescue.row),
+    '--pcol': String(rescue.col),
+  };
+}
+
+function listLegalReturnCellsHint(): Cell[] {
+  if (!mySeat.value || game.steps <= 0 || mySeat.value.finishPlace !== 0) {
+    return [];
+  }
+  const occupied = buildOccupancy();
+  return CENTER_RING_CELLS.filter(
+    (c) => isLandableCell(c.row, c.col) && !occupied.has(cellKey(c.row, c.col)),
+  );
+}
+
+function canShowReturnAffordance(side: string): boolean {
+  if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
+    return false;
+  }
+  if (mySeat.value.finishPlace !== 0 || !isStripSlotFinished(side)) {
+    return false;
+  }
+  return listLegalReturnCellsHint().length > 0;
+}
+
+function grilleStyle(grille: GrilleOverlay): Record<string, string> {
+  return {
+    '--prow': String(grille.row),
+    '--pcol': String(grille.col),
+  };
+}
+
 function isTileSelected(tile: BoardTile): boolean {
   const sel = selectedCell.value;
-  if (!sel || !isInteractive.value) {
+  if (!sel || !isInteractive.value || returningSide.value) {
     return false;
   }
   if (tile.kind === 'center') {
@@ -814,7 +1060,7 @@ function isTileSelected(tile: BoardTile): boolean {
 }
 
 function isTileTarget(tile: BoardTile): boolean {
-  if (!isInteractive.value || legalTargetKeys.value.size === 0) {
+  if (!isInteractive.value || returningSide.value || legalTargetKeys.value.size === 0) {
     return false;
   }
   if (tile.kind === 'center') {
@@ -827,11 +1073,28 @@ function isTileTarget(tile: BoardTile): boolean {
   return legalTargetKeys.value.has(cellKey(tile.row, tile.col));
 }
 
+function isReturnTarget(tile: BoardTile): boolean {
+  if (!isInteractive.value || !returningSide.value || legalReturnTargetKeys.value.size === 0) {
+    return false;
+  }
+  if (tile.kind === 'center') {
+    return false;
+  }
+  return legalReturnTargetKeys.value.has(cellKey(tile.row, tile.col));
+}
+
 function isOwnPiece(piece: BoardPiece): boolean {
   return Boolean(mySeat.value && piece.sessionId === mySeat.value.sessionId);
 }
 
 function pieceStyle(piece: BoardPiece): Record<string, string> {
+  const override = rescueAnimOverride.value;
+  if (override && override.sessionId === piece.sessionId && override.side === piece.side) {
+    return {
+      '--prow': String(override.row),
+      '--pcol': String(override.col),
+    };
+  }
   return {
     '--prow': String(piece.row),
     '--pcol': String(piece.col),
@@ -843,9 +1106,11 @@ function selectOwnSide(side: string) {
     return;
   }
   const piece = mySeat.value.pieces.find((p) => p.side === side);
-  if (!piece || isFinishedPiece(piece)) {
+  // Finished / trapped: no move or peek selection (SC-MOVE-52/53 UX).
+  if (!piece || isFinishedPiece(piece) || piece.trapped) {
     return;
   }
+  returningSide.value = null;
   selectedSide.value = side;
 }
 
@@ -889,6 +1154,69 @@ function onStripClick(side: string) {
   selectOwnSide(side);
 }
 
+function onReturnClick(side: string) {
+  if (!canShowReturnAffordance(side)) {
+    return;
+  }
+  selectedSide.value = null;
+  returningSide.value = returningSide.value === side ? null : side;
+}
+
+function submitReturn(side: string, row: number, col: number) {
+  if (!isInteractive.value || !returningSide.value) {
+    return;
+  }
+  if (!game.sendReturnFromFinish(side, row, col)) {
+    return;
+  }
+  returningSide.value = null;
+  beginMoveAnimation();
+}
+
+function onRescueClick(side: string) {
+  if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
+    return;
+  }
+  const trapped = mySeat.value.pieces.find((p) => p.side === side && p.trapped && !p.finished);
+  if (!trapped) {
+    return;
+  }
+  const rescuer = findAdjacentFreeRescuer(trapped);
+  if (!rescuer) {
+    return;
+  }
+  if (!game.sendRescue(side)) {
+    return;
+  }
+  returningSide.value = null;
+  // Brief approach-and-back (D5); server does not move the rescuer.
+  beginMoveAnimation();
+  const seatId = mySeat.value.sessionId;
+  rescueAnimOverride.value = {
+    sessionId: seatId,
+    side: rescuer.side,
+    row: trapped.row,
+    col: trapped.col,
+  };
+  window.setTimeout(() => {
+    rescueAnimOverride.value = {
+      sessionId: seatId,
+      side: rescuer.side,
+      row: rescuer.row,
+      col: rescuer.col,
+    };
+    window.setTimeout(() => {
+      rescueAnimOverride.value = null;
+    }, MOVE_ANIM_MS);
+  }, MOVE_ANIM_MS);
+}
+
+function onAllJailDialogUpdate(open: boolean) {
+  if (!open) {
+    game.clearAllJailWarning();
+  }
+}
+
 function resolveCenterClick(event: MouseEvent): Cell {
   const el = event.currentTarget as HTMLElement;
   const rect = el.getBoundingClientRect();
@@ -901,7 +1229,21 @@ function resolveCenterClick(event: MouseEvent): Cell {
 }
 
 function onTileClick(tile: BoardTile, event: MouseEvent) {
-  if (!isInteractive.value || !selectedSide.value) {
+  if (!isInteractive.value) {
+    return;
+  }
+
+  if (returningSide.value) {
+    if (tile.kind === 'center') {
+      return;
+    }
+    if (legalReturnTargetKeys.value.has(cellKey(tile.row, tile.col))) {
+      submitReturn(returningSide.value, tile.row, tile.col);
+    }
+    return;
+  }
+
+  if (!selectedSide.value) {
     return;
   }
 
@@ -1135,8 +1477,102 @@ async function ensureTouristRoom() {
 watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
+    returningSide.value = null;
   }
 });
+
+// Lock move/peek selection if the selected piece becomes trapped (SC-MOVE-52/53 UX).
+watch(
+  () => {
+    if (!selectedSide.value || !mySeat.value) {
+      return false;
+    }
+    return Boolean(mySeat.value.pieces.find((p) => p.side === selectedSide.value)?.trapped);
+  },
+  (trapped) => {
+    if (trapped) {
+      selectedSide.value = null;
+    }
+  },
+);
+
+// Return mode needs steps ≥ 1 (SC-MOVE-59 UX).
+watch(
+  () => game.steps,
+  (steps) => {
+    if (steps <= 0) {
+      returningSide.value = null;
+    }
+  },
+);
+
+/**
+ * Sync revealed holding grilles → drop on appear, rise+vanish on clear (SC-BOARD-18/19).
+ * Mid-join / remount shows hold without drop.
+ */
+watch(
+  () => game.holdingGrilleKeys.slice(),
+  (next, prev) => {
+    const nextSet = new Set(next);
+    const prevSet = new Set(prev ?? []);
+    const isInitial = prev === undefined;
+
+    for (const key of nextSet) {
+      if (prevSet.has(key)) {
+        continue;
+      }
+      const cell = parseCellKey(key);
+      if (!cell) {
+        continue;
+      }
+      grilleOverlays.value = [
+        ...grilleOverlays.value.filter((g) => g.key !== key),
+        {
+          key,
+          row: cell.row,
+          col: cell.col,
+          phase: isInitial ? 'hold' : 'drop',
+        },
+      ];
+      const existing = grilleTimers.get(key);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+      if (!isInitial) {
+        grilleTimers.set(
+          key,
+          setTimeout(() => {
+            grilleTimers.delete(key);
+            grilleOverlays.value = grilleOverlays.value.map((g) =>
+              g.key === key && g.phase === 'drop' ? { ...g, phase: 'hold' } : g,
+            );
+          }, GRILLE_ANIM_MS),
+        );
+      }
+    }
+
+    for (const key of prevSet) {
+      if (nextSet.has(key)) {
+        continue;
+      }
+      grilleOverlays.value = grilleOverlays.value.map((g) =>
+        g.key === key ? { ...g, phase: 'rise' } : g,
+      );
+      const existing = grilleTimers.get(key);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+      grilleTimers.set(
+        key,
+        setTimeout(() => {
+          grilleTimers.delete(key);
+          grilleOverlays.value = grilleOverlays.value.filter((g) => g.key !== key);
+        }, GRILLE_ANIM_MS),
+      );
+    }
+  },
+  { immediate: true },
+);
 
 /** +N falls into own counters on finite budget increases (SC-PRESENCE-15/20). */
 watch(
@@ -1317,6 +1753,11 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   budgetFallTimers.clear();
+  for (const timer of grilleTimers.values()) {
+    clearTimeout(timer);
+  }
+  grilleTimers.clear();
+  rescueAnimOverride.value = null;
 });
 
 /** Confirm only when seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-05/07). */
@@ -1781,6 +2222,11 @@ body.body--dark .say-picker {
   outline-offset: -2px;
 }
 
+.tile--return-target {
+  outline: 3px solid #ff9800;
+  outline-offset: -2px;
+}
+
 .tile--removed.tile--selected {
   /* Piece may stand on a hole with selection chrome; never offer as a red target (SC-BOARD-12/15). */
   background: transparent;
@@ -1813,6 +2259,77 @@ body.body--dark .say-picker {
   background: #1e88e5;
 }
 
+/* Rescue affordance over trapped tourist (SC-MOVE-54 UX). */
+.rescue-affordance {
+  position: absolute;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: #fff;
+  background: rgba(67, 160, 71, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
+}
+
+.rescue-affordance:hover {
+  background: #388e3c;
+}
+
+/* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27). */
+.grille-overlay {
+  position: absolute;
+  z-index: 3;
+  width: var(--cell);
+  height: var(--cell);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)));
+  top: calc(var(--prow) * (var(--cell) + var(--gap)));
+  object-fit: contain;
+  pointer-events: none;
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+.grille-overlay--drop {
+  animation: grille-drop 320ms ease-out both;
+}
+
+.grille-overlay--rise {
+  animation: grille-rise 320ms ease-out both;
+}
+
+@keyframes grille-drop {
+  from {
+    transform: translateY(-45%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes grille-rise {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-50%);
+    opacity: 0;
+  }
+}
+
 .piece {
   /* Absolute offsets (D6): % in left/top resolve against the board, not the piece. */
   position: absolute;
@@ -1841,6 +2358,11 @@ body.body--dark .say-picker {
     left 250ms ease-out,
     top 250ms ease-out,
     opacity 200ms ease-out 250ms;
+}
+
+.piece--trapped {
+  pointer-events: none;
+  cursor: default;
 }
 
 .tourist-board--interactive .piece--own {
@@ -1889,6 +2411,11 @@ body.body--dark .say-picker {
   outline-offset: 2px;
 }
 
+.my-tourist-slot--returning {
+  outline: 3px solid #ff9800;
+  outline-offset: 2px;
+}
+
 .my-tourist-img {
   width: 100%;
   height: 100%;
@@ -1904,5 +2431,32 @@ body.body--dark .say-picker {
   color: #2e7d32;
   filter: drop-shadow(0 0 1px #fff);
   pointer-events: none;
+}
+
+/* Return control beside finish flag (SC-FINISH-13). */
+.my-tourist-return-btn {
+  position: absolute;
+  top: 2px;
+  right: 22px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: #fff;
+  background: rgba(255, 152, 0, 0.95);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.my-tourist-return-btn:hover {
+  background: #fb8c00;
 }
 </style>
