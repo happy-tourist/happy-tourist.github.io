@@ -45,6 +45,8 @@ export default {
     stepsExhaustedModalOk: 'ОК',
     /** a11y for strip finish icon and presence place badge. */
     finishStripAria: 'Финиш',
+    /** a11y for compact tourist chip that opens the picker menu (SC-PIECE-29). */
+    touristChipAria: 'Мои туристы',
     finishPlaceBadgeAria: 'Место {n}',
     /** Own private step/peek counters (SC-PRESENCE-15/16). */
     stepsCounterAria: 'Шаги',

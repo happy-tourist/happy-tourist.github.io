@@ -197,47 +197,115 @@
           :class="isSeatedViewer ? 'game-hud__bar--seated' : 'game-hud__bar--spectator'"
         >
           <template v-for="item in hudItems" :key="item.key">
-            <!-- Strip inside HUD after own budgets; no caption (SC-PIECE-09). -->
-            <div
-              v-if="item.kind === 'strip' && mySeat"
-              class="my-tourist-strip"
-              :class="{ 'my-tourist-strip--interactive': isInteractive }"
-            >
-              <div class="my-tourist-slots">
-                <div
-                  v-for="side in STRIP_SIDES"
-                  :key="`strip-${side}`"
-                  class="my-tourist-slot"
-                  :class="{
-                    'my-tourist-slot--finished': isStripSlotFinished(side),
-                    'my-tourist-slot--selected':
-                      selectedSide === side && !isStripSlotFinished(side),
-                    'my-tourist-slot--returning': returningSide === side,
-                  }"
-                  @click="onStripClick(side)"
-                >
-                  <img
-                    class="my-tourist-img"
-                    :src="touristSrc(mySeat.touristId)"
-                    :alt="`tourist ${side}`"
-                  />
-                  <button
-                    v-if="canShowReturnAffordance(side)"
-                    type="button"
-                    class="my-tourist-return-btn"
-                    :aria-label="$t('game.returnAffordance')"
-                    @click.stop="onReturnClick(side)"
+            <!-- Compact 2×2 chip + q-menu picker (SC-PIECE-09/29/30; D6–D8).
+                 Wrap keeps q-menu outside the chip CSS grid (anchor = wrap). -->
+            <div v-if="item.kind === 'strip' && mySeat" class="my-tourist-strip">
+              <div
+                class="my-tourist-chip-wrap"
+                role="button"
+                tabindex="0"
+                :aria-label="$t('game.touristChipAria')"
+                :aria-expanded="pickerMenuOpen"
+                @keydown.enter.prevent="pickerMenuOpen = true"
+                @keydown.space.prevent="pickerMenuOpen = true"
+              >
+                <div class="my-tourist-chip">
+                  <div
+                    v-for="side in CHIP_SIDES"
+                    :key="`chip-${side}`"
+                    class="my-tourist-chip-slot"
+                    :class="{
+                      'my-tourist-chip-slot--finished': isStripSlotFinished(side),
+                      'my-tourist-chip-slot--selected':
+                        selectedSide === side && !isStripSlotFinished(side),
+                      'my-tourist-chip-slot--returning': returningSide === side,
+                    }"
                   >
-                    <q-icon name="undo" size="16px" />
-                  </button>
-                  <q-icon
-                    v-if="isStripSlotFinished(side)"
-                    class="my-tourist-finish-icon"
-                    name="flag"
-                    size="18px"
-                    :aria-label="$t('game.finishStripAria')"
-                  />
+                    <img
+                      class="my-tourist-chip-img"
+                      :src="touristSrc(mySeat.touristId)"
+                      :alt="`tourist ${side}`"
+                    />
+                    <img
+                      v-if="chromeGrillePhase(side)"
+                      class="my-tourist-chrome-grille"
+                      :class="{
+                        'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
+                        'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
+                      }"
+                      :src="grilleSrc"
+                      :style="chromeGrilleStyle"
+                      alt=""
+                    />
+                    <q-icon
+                      v-if="isStripSlotFinished(side)"
+                      class="my-tourist-chip-finish-icon"
+                      name="flag"
+                      size="12px"
+                      :aria-label="$t('game.finishStripAria')"
+                    />
+                  </div>
                 </div>
+                <q-menu
+                  v-model="pickerMenuOpen"
+                  anchor="top middle"
+                  self="bottom middle"
+                  :offset="[0, 8]"
+                  class="my-tourist-picker-menu"
+                >
+                  <!-- Full-size row; no title. Select closes; Esc/outside keep selection. -->
+                  <div
+                    class="my-tourist-slots"
+                    :class="{ 'my-tourist-slots--interactive': isInteractive }"
+                  >
+                    <div
+                      v-for="side in STRIP_SIDES"
+                      :key="`menu-${side}`"
+                      class="my-tourist-slot"
+                      :class="{
+                        'my-tourist-slot--finished': isStripSlotFinished(side),
+                        'my-tourist-slot--trapped': isStripSlotTrapped(side),
+                        'my-tourist-slot--selected':
+                          selectedSide === side && !isStripSlotFinished(side),
+                        'my-tourist-slot--returning': returningSide === side,
+                      }"
+                      @click="onMenuSlotClick(side)"
+                    >
+                      <img
+                        class="my-tourist-img"
+                        :src="touristSrc(mySeat.touristId)"
+                        :alt="`tourist ${side}`"
+                      />
+                      <img
+                        v-if="chromeGrillePhase(side)"
+                        class="my-tourist-chrome-grille"
+                        :class="{
+                          'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
+                          'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
+                        }"
+                        :src="grilleSrc"
+                        :style="chromeGrilleStyle"
+                        alt=""
+                      />
+                      <button
+                        v-if="canShowReturnAffordance(side)"
+                        type="button"
+                        class="my-tourist-return-btn"
+                        :aria-label="$t('game.returnAffordance')"
+                        @click.stop="onReturnClick(side)"
+                      >
+                        <q-icon name="undo" size="16px" />
+                      </button>
+                      <q-icon
+                        v-if="isStripSlotFinished(side)"
+                        class="my-tourist-finish-icon"
+                        name="flag"
+                        size="18px"
+                        :aria-label="$t('game.finishStripAria')"
+                      />
+                    </div>
+                  </div>
+                </q-menu>
               </div>
             </div>
 
@@ -428,8 +496,10 @@ const LAYOUT = [
   '...1111...',
 ] as const;
 
-/** Strip slot order = board sides (SC-PIECE-09). */
+/** Strip / menu slot order = board sides (SC-PIECE-09). */
 const STRIP_SIDES = ['N', 'E', 'S', 'W'] as const;
+/** Compact chip 2×2: N E / W S (D6 / SC-PIECE-09). */
+const CHIP_SIDES = ['N', 'E', 'W', 'S'] as const;
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -438,8 +508,8 @@ const GRACE_SECONDS = 30;
 const MOVE_ANIM_MS = 250;
 /** Short fade after landing on center before DOM removal (SC-FINISH-01). */
 const FINISH_FADE_MS = 200;
-/** Grille drop / rise animation (SC-BOARD-18/19/21). */
-const GRILLE_ANIM_MS = 1500;
+/** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
+const GRILLE_ANIM_MS = 1000;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -658,6 +728,8 @@ const router = useRouter();
 const selectedSide = ref<string | null>(null);
 /** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
 const returningSide = ref<string | null>(null);
+/** Compact chip picker menu open (SC-PIECE-29/30). */
+const pickerMenuOpen = ref(false);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /** Skip first paint transition so pieces do not fly from 0,0. */
@@ -677,6 +749,10 @@ const soloUnlimitedModalOpen = ref(false);
 /** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
 const grilleOverlays = ref<GrilleOverlay[]>([]);
 const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Chip/menu grille phases keyed by side (SC-PIECE-31) — same timing as board. */
+const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
+const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const chromeGrilleStyle = { '--grille-anim-ms': `${GRILLE_ANIM_MS}ms` };
 /** Temporary rescuer slide toward trapped cell (D5 — server coords unchanged). */
 const rescueAnimOverride = ref<{
   sessionId: string;
@@ -781,6 +857,11 @@ function pushBudgetFall(target: 'steps' | 'peeks', delta: number) {
 
 function isStripSlotFinished(side: string): boolean {
   return myFinishedStripSides.value.includes(side);
+}
+
+function isStripSlotTrapped(side: string): boolean {
+  const piece = mySeat.value?.pieces.find((p) => p.side === side);
+  return Boolean(piece && piece.trapped && !piece.finished);
 }
 
 /** Personal strip only after pieces materialize (SC-PIECE-17). */
@@ -1034,6 +1115,10 @@ function grilleStyle(grille: GrilleOverlay): Record<string, string> {
   };
 }
 
+function chromeGrillePhase(side: string): GrillePhase | undefined {
+  return chromeGrilleBySide.value[side];
+}
+
 function isTileSelected(tile: BoardTile): boolean {
   const sel = selectedCell.value;
   if (!sel || !isInteractive.value || returningSide.value) {
@@ -1133,11 +1218,13 @@ function onPieceClick(piece: BoardPiece) {
   selectOwnSide(piece.side);
 }
 
-function onStripClick(side: string) {
-  if (isStripSlotFinished(side)) {
+/** Menu full-size slot: select unfinished non-trapped then close (SC-PIECE-30). */
+function onMenuSlotClick(side: string) {
+  if (!isInteractive.value || isStripSlotFinished(side) || isStripSlotTrapped(side)) {
     return;
   }
   selectOwnSide(side);
+  pickerMenuOpen.value = false;
 }
 
 function onReturnClick(side: string) {
@@ -1146,6 +1233,7 @@ function onReturnClick(side: string) {
   }
   selectedSide.value = null;
   returningSide.value = returningSide.value === side ? null : side;
+  pickerMenuOpen.value = false;
 }
 
 function submitReturn(side: string, row: number, col: number) {
@@ -1538,6 +1626,79 @@ watch(
   { immediate: true },
 );
 
+/**
+ * Mirror trapped → chrome grille drop/rise on chip + menu (SC-PIECE-31 / D8).
+ * Mid-join / remount shows hold without drop (same as board).
+ */
+watch(
+  () => {
+    if (!mySeat.value) {
+      return '';
+    }
+    return mySeat.value.pieces
+      .filter((p) => p.trapped && !p.finished)
+      .map((p) => p.side)
+      .sort()
+      .join(',');
+  },
+  (nextStr, prevStr) => {
+    const nextSet = new Set(nextStr ? nextStr.split(',') : []);
+    const prevSet = new Set(prevStr ? prevStr.split(',') : []);
+    const isInitial = prevStr === undefined;
+    const nextMap: Partial<Record<string, GrillePhase>> = {
+      ...chromeGrilleBySide.value,
+    };
+
+    for (const side of nextSet) {
+      if (prevSet.has(side)) {
+        continue;
+      }
+      nextMap[side] = isInitial ? 'hold' : 'drop';
+      const existing = chromeGrilleTimers.get(side);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+      if (!isInitial) {
+        chromeGrilleTimers.set(
+          side,
+          setTimeout(() => {
+            chromeGrilleTimers.delete(side);
+            if (chromeGrilleBySide.value[side] === 'drop') {
+              chromeGrilleBySide.value = {
+                ...chromeGrilleBySide.value,
+                [side]: 'hold',
+              };
+            }
+          }, GRILLE_ANIM_MS),
+        );
+      }
+    }
+
+    for (const side of prevSet) {
+      if (nextSet.has(side)) {
+        continue;
+      }
+      nextMap[side] = 'rise';
+      const existing = chromeGrilleTimers.get(side);
+      if (existing !== undefined) {
+        clearTimeout(existing);
+      }
+      chromeGrilleTimers.set(
+        side,
+        setTimeout(() => {
+          chromeGrilleTimers.delete(side);
+          const rest = { ...chromeGrilleBySide.value };
+          delete rest[side];
+          chromeGrilleBySide.value = rest;
+        }, GRILLE_ANIM_MS),
+      );
+    }
+
+    chromeGrilleBySide.value = nextMap;
+  },
+  { immediate: true },
+);
+
 /** +N falls into own counters on finite budget increases (SC-PRESENCE-15/20). */
 watch(
   () => game.steps,
@@ -1721,6 +1882,10 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   grilleTimers.clear();
+  for (const timer of chromeGrilleTimers.values()) {
+    clearTimeout(timer);
+  }
+  chromeGrilleTimers.clear();
   rescueAnimOverride.value = null;
 });
 </script>
@@ -2261,11 +2426,11 @@ body.body--dark .say-picker {
 }
 
 .grille-overlay--drop {
-  animation: grille-drop var(--grille-anim-ms, 1500ms) ease-out both;
+  animation: grille-drop var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
 .grille-overlay--rise {
-  animation: grille-rise var(--grille-anim-ms, 1500ms) ease-out both;
+  animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
 @keyframes grille-drop {
@@ -2335,11 +2500,88 @@ body.body--dark .say-picker {
   flex-direction: row;
   align-items: flex-end;
   flex-shrink: 0;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
-.my-tourist-strip--interactive {
-  pointer-events: auto;
+/* Anchor for q-menu (not a CSS grid — keeps chip 2×2 pure). */
+.my-tourist-chip-wrap {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Compact ~avatar 2×2 chip — opens picker only (SC-PIECE-09/29). */
+.my-tourist-chip {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  width: 72px;
+  height: 72px;
+  padding: 2px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.my-tourist-chip-slot {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.my-tourist-chip-slot--finished {
+  opacity: 0.55;
+}
+
+.my-tourist-chip-slot--selected {
+  outline: 2px solid #ffffff;
+  outline-offset: 0;
+}
+
+.my-tourist-chip-slot--returning {
+  outline: 2px solid #ff9800;
+  outline-offset: 0;
+}
+
+.my-tourist-chip-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.my-tourist-chip-finish-icon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  color: #2e7d32;
+  filter: drop-shadow(0 0 1px #fff);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.my-tourist-chrome-grille {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 1;
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+.my-tourist-chrome-grille--drop {
+  animation: grille-drop var(--grille-anim-ms, 1000ms) ease-out both;
+}
+
+.my-tourist-chrome-grille--rise {
+  animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
 .my-tourist-slots {
@@ -2347,6 +2589,7 @@ body.body--dark .say-picker {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  padding: 8px;
 }
 
 .my-tourist-slot {
@@ -2357,7 +2600,8 @@ body.body--dark .say-picker {
   pointer-events: none;
 }
 
-.my-tourist-strip--interactive .my-tourist-slot:not(.my-tourist-slot--finished) {
+.my-tourist-slots--interactive
+  .my-tourist-slot:not(.my-tourist-slot--finished):not(.my-tourist-slot--trapped) {
   pointer-events: auto;
   cursor: pointer;
 }
@@ -2391,9 +2635,10 @@ body.body--dark .say-picker {
   color: #2e7d32;
   filter: drop-shadow(0 0 1px #fff);
   pointer-events: none;
+  z-index: 2;
 }
 
-/* Return control beside finish flag (SC-FINISH-13). */
+/* Return control beside finish flag — menu only (SC-FINISH-13). */
 .my-tourist-return-btn {
   position: absolute;
   top: 2px;
