@@ -45,14 +45,12 @@ export default {
     stepsExhaustedModalOk: 'ОК',
     /** a11y for strip finish icon and presence place badge. */
     finishStripAria: 'Финиш',
-    /** a11y for compact tourist chip that opens the picker menu (SC-PIECE-29). */
-    touristChipAria: 'Мои туристы',
     finishPlaceBadgeAria: 'Место {n}',
     /** Own private step/peek counters (SC-PRESENCE-15/16). */
     stepsCounterAria: 'Шаги',
     peeksCounterAria: 'Просмотры',
     budgetInfinity: '∞',
-    /** Multiplayer end-turn beside own marker (SC-PRESENCE-17/18). */
+    /** Multiplayer end-turn dock above HUD (SC-PRESENCE-17/18/25). */
     endTurn: 'Завершить ход',
     /** Peek modal — reward amount + Correct/Wrong (SC-BOARD-08/09). */
     peekModal: 'Под плиткой награда: {n}. Ответьте правильно, чтобы получить шаги.',
@@ -65,7 +63,11 @@ export default {
     /** Rescue adjacent trapped tourist (SC-MOVE-54 UX). */
     rescueAffordance: 'Освободить туриста',
     /** Return finished tourist onto center ring (SC-FINISH-13). */
-    returnAffordance: 'Вернуть с финиша',
+    returnAffordance: 'Вернуть на поле',
+    /** Confirm return-from-finish before ring highlights (SC-FINISH-13 / D5). */
+    returnConfirmModal: 'Вернуть на поле?',
+    returnConfirmYes: 'Да',
+    returnConfirmCancel: 'Нет',
     /** All-jail reset warning — own seat only (SC-MOVE-63). */
     allJailWarningModal: 'Все туристы попали в решётки. Они отправлены на стартовые клетки.',
     allJailWarningModalOk: 'ОК',

@@ -27,6 +27,23 @@
       </q-card>
     </q-dialog>
 
+    <!-- Return-from-finish confirm before ring highlights (SC-FINISH-13 / D5). -->
+    <q-dialog v-model="returnConfirmOpen" @hide="returnConfirmSide = null">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-body1 text-center">{{ $t('game.returnConfirmModal') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('game.returnConfirmCancel')" v-close-popup />
+          <q-btn
+            color="primary"
+            :label="$t('game.returnConfirmYes')"
+            @click="confirmReturnFromFinish"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
     <!-- Solo end: timer vs steps-exhausted (SC-PRESENCE-21 / SC-MOVE-45/48). -->
     <q-dialog v-model="timeoutModalOpen" persistent>
       <q-card style="min-width: 280px">
@@ -114,8 +131,63 @@
       {{ game.error }}
     </q-banner>
 
-    <!-- Board scrolls above sticky bottom HUD (SC-PRESENCE-22 / D2/D3). -->
+    <!-- Board scrolls above sticky bottom HUD; opponents/spectator markers above board (SC-PRESENCE-02/03/22 / D2). -->
     <div class="game-board-region">
+      <div
+        v-if="topPresenceMarkers.length > 0"
+        class="presence-row presence-row--top"
+        aria-label="presence"
+      >
+        <div
+          v-for="marker in topPresenceMarkers"
+          :key="`top-presence-${marker.sessionId}`"
+          class="presence-slot"
+        >
+          <div class="presence-marker">
+            <q-circular-progress
+              :min="0"
+              :max="turnRingMax"
+              :value="turnRingValue(marker)"
+              :size="`${PRESENCE_OUTER_PX}px`"
+              :thickness="0.12"
+              :color="turnRingColor(marker)"
+              :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
+              class="presence-progress presence-progress--outer"
+            />
+            <q-circular-progress
+              :min="0"
+              :max="GRACE_SECONDS"
+              :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+              :size="`${PRESENCE_INNER_PX}px`"
+              :thickness="0.18"
+              :color="showGraceRing(marker) ? 'warning' : 'transparent'"
+              :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+              class="presence-progress presence-progress--inner"
+            />
+            <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+
+            <span
+              v-if="marker.finishPlace > 0"
+              class="presence-place-badge"
+              :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
+            >
+              {{ marker.finishPlace }}
+            </span>
+
+            <!-- Top markers: bubbles stack down toward board (SC-SAY-11). -->
+            <div class="say-bubbles say-bubbles--top" aria-live="polite">
+              <div
+                v-for="bubble in liveSaysFor(marker.sessionId)"
+                :key="`say-top-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
+                class="say-bubble"
+              >
+                {{ $t(`game.say.${bubble.presetId}`) }}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
         <div
           v-for="(tile, i) in boardTiles"
@@ -126,12 +198,11 @@
             {
               'tile--selected': isTileSelected(tile),
               'tile--target': isTileTarget(tile),
-              'tile--return-target': isReturnTarget(tile),
               'tile--removed': tile.removed,
             },
           ]"
           :style="tile.style"
-          @click="onTileClick(tile, $event)"
+          @click="onTileClick(tile)"
         />
         <img
           v-for="piece in boardPieces"
@@ -186,137 +257,125 @@
           <q-icon name="lock_open" size="18px" />
         </button>
       </div>
+
+      <!-- End-turn above sticky HUD, right-aligned — not in budgets row (SC-PRESENCE-17/25 / D3). -->
+      <div v-if="canSendEndTurn" class="end-turn-dock">
+        <q-btn
+          dense
+          unelevated
+          color="primary"
+          size="sm"
+          class="end-turn-btn"
+          :label="$t('game.endTurn')"
+          @click.stop="onEndTurnClick"
+        />
+      </div>
     </div>
 
-    <!-- Sticky bottom HUD: seated own→strip→opponents; spectator occupied centered (SC-PRESENCE-02/03). -->
-    <div class="game-hud" :class="isSeatedViewer ? 'game-hud--seated' : 'game-hud--spectator'">
+    <!-- Sticky bottom HUD: seated own + strip only; spectator has no bottom presence (SC-PRESENCE-02/03/22). -->
+    <div v-if="isSeatedViewer" class="game-hud game-hud--seated">
       <!-- Scroll wrapper (not the bar) so overflow-x does not clip say chrome (SC-SAY-15). -->
       <div class="game-hud__scroll">
-        <div
-          class="game-hud__bar"
-          :class="isSeatedViewer ? 'game-hud__bar--seated' : 'game-hud__bar--spectator'"
-        >
-          <template v-for="item in hudItems" :key="item.key">
-            <!-- Compact 2×2 chip + q-menu picker (SC-PIECE-09/29/30; D6–D8).
-                 Wrap keeps q-menu outside the chip CSS grid (anchor = wrap). -->
+        <div class="game-hud__bar game-hud__bar--seated">
+          <template v-for="item in bottomHudItems" :key="item.key">
+            <!-- Four strip slots in HUD: row N,E,W,S / narrow 2×2 (SC-PIECE-09/32; D4).
+                 No compact chip / q-menu (SC-PIECE-29/30 removed). -->
             <div v-if="item.kind === 'strip' && mySeat" class="my-tourist-strip">
               <div
-                class="my-tourist-chip-wrap"
-                role="button"
-                tabindex="0"
-                :aria-label="$t('game.touristChipAria')"
-                :aria-expanded="pickerMenuOpen"
-                @keydown.enter.prevent="pickerMenuOpen = true"
-                @keydown.space.prevent="pickerMenuOpen = true"
+                class="my-tourist-slots"
+                :class="{ 'my-tourist-slots--interactive': isInteractive }"
               >
-                <div class="my-tourist-chip">
-                  <div
-                    v-for="side in CHIP_SIDES"
-                    :key="`chip-${side}`"
-                    class="my-tourist-chip-slot"
-                    :class="{
-                      'my-tourist-chip-slot--finished': isStripSlotFinished(side),
-                      'my-tourist-chip-slot--selected':
-                        selectedSide === side && !isStripSlotFinished(side),
-                      'my-tourist-chip-slot--returning': returningSide === side,
-                    }"
-                  >
-                    <img
-                      class="my-tourist-chip-img"
-                      :src="touristSrc(mySeat.touristId)"
-                      :alt="`tourist ${side}`"
-                    />
-                    <img
-                      v-if="chromeGrillePhase(side)"
-                      class="my-tourist-chrome-grille"
-                      :class="{
-                        'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
-                        'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
-                      }"
-                      :src="grilleSrc"
-                      :style="chromeGrilleStyle"
-                      alt=""
-                    />
-                    <q-icon
-                      v-if="isStripSlotFinished(side)"
-                      class="my-tourist-chip-finish-icon"
-                      name="flag"
-                      size="12px"
-                      :aria-label="$t('game.finishStripAria')"
-                    />
-                  </div>
-                </div>
-                <q-menu
-                  v-model="pickerMenuOpen"
-                  anchor="top middle"
-                  self="bottom middle"
-                  :offset="[0, 8]"
-                  class="my-tourist-picker-menu"
+                <div
+                  v-for="side in STRIP_SIDES"
+                  :key="`strip-${side}`"
+                  class="my-tourist-slot"
+                  :class="{
+                    'my-tourist-slot--finished': isStripSlotFinished(side),
+                    'my-tourist-slot--dimmed': isStripSlotFinished(side) && !canReturn(side),
+                    'my-tourist-slot--trapped': isStripSlotTrapped(side),
+                    'my-tourist-slot--selected':
+                      selectedSide === side && !isStripSlotFinished(side),
+                    'my-tourist-slot--returning': returningSide === side,
+                    'my-tourist-slot--returnable': canReturn(side),
+                  }"
+                  :aria-label="canReturn(side) ? $t('game.returnAffordance') : undefined"
+                  @click="onStripSlotClick(side)"
                 >
-                  <!-- Full-size row; no title. Select closes; Esc/outside keep selection. -->
-                  <div
-                    class="my-tourist-slots"
-                    :class="{ 'my-tourist-slots--interactive': isInteractive }"
-                  >
-                    <div
-                      v-for="side in STRIP_SIDES"
-                      :key="`menu-${side}`"
-                      class="my-tourist-slot"
-                      :class="{
-                        'my-tourist-slot--finished': isStripSlotFinished(side),
-                        'my-tourist-slot--trapped': isStripSlotTrapped(side),
-                        'my-tourist-slot--selected':
-                          selectedSide === side && !isStripSlotFinished(side),
-                        'my-tourist-slot--returning': returningSide === side,
-                      }"
-                      @click="onMenuSlotClick(side)"
-                    >
-                      <img
-                        class="my-tourist-img"
-                        :src="touristSrc(mySeat.touristId)"
-                        :alt="`tourist ${side}`"
-                      />
-                      <img
-                        v-if="chromeGrillePhase(side)"
-                        class="my-tourist-chrome-grille"
-                        :class="{
-                          'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
-                          'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
-                        }"
-                        :src="grilleSrc"
-                        :style="chromeGrilleStyle"
-                        alt=""
-                      />
-                      <button
-                        v-if="canShowReturnAffordance(side)"
-                        type="button"
-                        class="my-tourist-return-btn"
-                        :aria-label="$t('game.returnAffordance')"
-                        @click.stop="onReturnClick(side)"
-                      >
-                        <q-icon name="undo" size="16px" />
-                      </button>
-                      <q-icon
-                        v-if="isStripSlotFinished(side)"
-                        class="my-tourist-finish-icon"
-                        name="flag"
-                        size="18px"
-                        :aria-label="$t('game.finishStripAria')"
-                      />
-                    </div>
-                  </div>
-                </q-menu>
+                  <img
+                    class="my-tourist-img"
+                    :src="touristSrc(mySeat.touristId)"
+                    :alt="`tourist ${side}`"
+                  />
+                  <img
+                    v-if="chromeGrillePhase(side)"
+                    class="my-tourist-chrome-grille"
+                    :class="{
+                      'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
+                      'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
+                    }"
+                    :src="grilleSrc"
+                    :style="chromeGrilleStyle"
+                    alt=""
+                  />
+                  <q-icon
+                    v-if="isStripSlotFinished(side)"
+                    class="my-tourist-finish-icon"
+                    name="flag"
+                    size="18px"
+                    :aria-label="$t('game.finishStripAria')"
+                  />
+                </div>
               </div>
             </div>
 
             <div
               v-else-if="item.kind === 'marker'"
-              class="presence-slot"
+              class="presence-slot presence-slot--own"
               :class="{
                 'presence-slot--own-budgets': showOwnBudgets(item.marker),
-                'presence-slot--push-right': item.pushRight,
               }"
             >
+              <!-- Own bottom: bubbles stack up toward board above budgets (SC-SAY-12). -->
+              <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
+                <div
+                  v-for="bubble in liveSaysFor(item.marker.sessionId)"
+                  :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
+                  class="say-bubble"
+                >
+                  {{ $t(`game.say.${bubble.presetId}`) }}
+                </div>
+              </div>
+
+              <!-- Budgets row above own avatar (SC-PRESENCE-15 / D3); end-turn is in end-turn-dock. -->
+              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
+                <div class="budget-counters">
+                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
+                    <q-icon name="directions_walk" size="16px" />
+                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
+                    <span
+                      v-for="fall in stepFalls"
+                      :key="`step-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
+                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
+                    <q-icon name="visibility" size="16px" />
+                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
+                    <span
+                      v-for="fall in peekFalls"
+                      :key="`peek-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               <div
                 class="presence-marker"
                 :class="{
@@ -383,17 +442,6 @@
                   <q-icon name="chat_bubble_outline" size="18px" />
                 </button>
 
-                <!-- Bubbles above avatar toward board for all markers (SC-SAY-11/12). -->
-                <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
-                  <div
-                    v-for="bubble in liveSaysFor(item.marker.sessionId)"
-                    :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
-                    class="say-bubble"
-                  >
-                    {{ $t(`game.say.${bubble.presetId}`) }}
-                  </div>
-                </div>
-
                 <div
                   v-if="sayPickerOpen && canSendSay(item.marker)"
                   class="say-picker"
@@ -411,46 +459,6 @@
                     {{ $t(`game.say.${presetId}`) }}
                   </button>
                 </div>
-              </div>
-
-              <!-- Own steps/peeks + end-turn (SC-PRESENCE-15…18); never on opponents. -->
-              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
-                <div class="budget-counters">
-                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
-                    <q-icon name="directions_walk" size="16px" />
-                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in stepFalls"
-                      :key="`step-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
-                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
-                    <q-icon name="visibility" size="16px" />
-                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in peekFalls"
-                      :key="`peek-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
-                </div>
-                <q-btn
-                  v-if="canSendEndTurn"
-                  dense
-                  unelevated
-                  color="primary"
-                  size="sm"
-                  class="end-turn-btn"
-                  :label="$t('game.endTurn')"
-                  @click.stop="onEndTurnClick"
-                />
               </div>
             </div>
           </template>
@@ -496,10 +504,8 @@ const LAYOUT = [
   '...1111...',
 ] as const;
 
-/** Strip / menu slot order = board sides (SC-PIECE-09). */
-const STRIP_SIDES = ['N', 'E', 'S', 'W'] as const;
-/** Compact chip 2×2: N E / W S (D6 / SC-PIECE-09). */
-const CHIP_SIDES = ['N', 'E', 'W', 'S'] as const;
+/** Strip slot order: row N,E,W,S; 2×2 grid N,E / W,S (SC-PIECE-09/32). */
+const STRIP_SIDES = ['N', 'E', 'W', 'S'] as const;
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -579,7 +585,7 @@ interface RescueAffordance {
   col: number;
 }
 
-/** Bottom HUD presence — no top/side slots (SC-PRESENCE-02/03). */
+/** Occupied-seat presence marker (top row and/or bottom HUD). */
 interface PresenceMarker {
   sessionId: string;
   touristId: number;
@@ -591,10 +597,9 @@ interface PresenceMarker {
   finishPlace: number;
 }
 
-/** Flat HUD items: seated own → strip → opponents; spectator markers only. */
+/** Bottom HUD items: seated own marker + optional strip (SC-PRESENCE-02/22). */
 type HudItem =
-  | { kind: 'marker'; key: string; marker: PresenceMarker; pushRight?: boolean }
-  | { kind: 'strip'; key: 'strip' };
+  { kind: 'marker'; key: string; marker: PresenceMarker } | { kind: 'strip'; key: 'strip' };
 
 interface Cell {
   row: number;
@@ -616,6 +621,47 @@ function isCenterCell(row: number, col: number): boolean {
 
 function chebyshevDistance(a: Cell, b: Cell): number {
   return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
+}
+
+/** Nearest of four center cells to `to` (Chebyshev; tie lower row, then col — SC-FINISH-15). */
+function nearestCenterCell(to: Cell): Cell {
+  let best: Cell = { row: CENTER_CELLS[0].row, col: CENTER_CELLS[0].col };
+  let bestDist = Infinity;
+  for (const c of CENTER_CELLS) {
+    const d = chebyshevDistance(c, to);
+    if (
+      d < bestDist ||
+      (d === bestDist && (c.row < best.row || (c.row === best.row && c.col < best.col)))
+    ) {
+      bestDist = d;
+      best = { row: c.row, col: c.col };
+    }
+  }
+  return best;
+}
+
+/**
+ * Nearest legal center among CENTER_CELLS ∩ legalKeys relative to `from`
+ * (Chebyshev; tie lower row, then col — SC-MOVE-63). No quadrant mapping.
+ */
+function nearestLegalCenterCell(from: Cell, legalKeys: Set<string>): Cell | null {
+  let best: Cell | null = null;
+  let bestDist = Infinity;
+  for (const c of CENTER_CELLS) {
+    if (!legalKeys.has(cellKey(c.row, c.col))) {
+      continue;
+    }
+    const d = chebyshevDistance(from, c);
+    if (
+      best === null ||
+      d < bestDist ||
+      (d === bestDist && (c.row < best.row || (c.row === best.row && c.col < best.col)))
+    ) {
+      bestDist = d;
+      best = { row: c.row, col: c.col };
+    }
+  }
+  return best;
 }
 
 /**
@@ -728,12 +774,18 @@ const router = useRouter();
 const selectedSide = ref<string | null>(null);
 /** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
 const returningSide = ref<string | null>(null);
-/** Compact chip picker menu open (SC-PIECE-29/30). */
-const pickerMenuOpen = ref(false);
+/** Confirm dialog before entering return-mode (SC-FINISH-13 / D5). */
+const returnConfirmOpen = ref(false);
+const returnConfirmSide = ref<string | null>(null);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /** Skip first paint transition so pieces do not fly from 0,0. */
 const pieceTransitionsReady = ref(false);
+/**
+ * Return-from-finish travel: start cell (nearest center) keyed by pieceKey (SC-FINISH-15).
+ * First paint uses this; nextTick clears so CSS slides to ring coords.
+ */
+const returnAnimFromByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
 /** Own place congratulation modal (SC-FINISH-03/04). */
@@ -749,7 +801,7 @@ const soloUnlimitedModalOpen = ref(false);
 /** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
 const grilleOverlays = ref<GrilleOverlay[]>([]);
 const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
-/** Chip/menu grille phases keyed by side (SC-PIECE-31) — same timing as board. */
+/** Strip-slot grille phases keyed by side (SC-PIECE-31) — same timing as board. */
 const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
 const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleStyle = { '--grille-anim-ms': `${GRILLE_ANIM_MS}ms` };
@@ -1097,7 +1149,7 @@ function listLegalReturnCellsHint(): Cell[] {
   );
 }
 
-function canShowReturnAffordance(side: string): boolean {
+function canReturn(side: string): boolean {
   if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
     return false;
   }
@@ -1131,7 +1183,20 @@ function isTileSelected(tile: BoardTile): boolean {
 }
 
 function isTileTarget(tile: BoardTile): boolean {
-  if (!isInteractive.value || returningSide.value || legalTargetKeys.value.size === 0) {
+  if (!isInteractive.value) {
+    return false;
+  }
+  // Return-mode: same red outline as ordinary move targets (SC-FINISH-13 / SC-MOVE-12).
+  if (returningSide.value) {
+    if (legalReturnTargetKeys.value.size === 0) {
+      return false;
+    }
+    if (tile.kind === 'center') {
+      return false;
+    }
+    return legalReturnTargetKeys.value.has(cellKey(tile.row, tile.col));
+  }
+  if (legalTargetKeys.value.size === 0) {
     return false;
   }
   if (tile.kind === 'center') {
@@ -1144,21 +1209,19 @@ function isTileTarget(tile: BoardTile): boolean {
   return legalTargetKeys.value.has(cellKey(tile.row, tile.col));
 }
 
-function isReturnTarget(tile: BoardTile): boolean {
-  if (!isInteractive.value || !returningSide.value || legalReturnTargetKeys.value.size === 0) {
-    return false;
-  }
-  if (tile.kind === 'center') {
-    return false;
-  }
-  return legalReturnTargetKeys.value.has(cellKey(tile.row, tile.col));
-}
-
 function isOwnPiece(piece: BoardPiece): boolean {
   return Boolean(mySeat.value && piece.sessionId === mySeat.value.sessionId);
 }
 
 function pieceStyle(piece: BoardPiece): Record<string, string> {
+  const key = pieceKey(piece.sessionId, piece.side);
+  const returnFrom = returnAnimFromByKey.value.get(key);
+  if (returnFrom) {
+    return {
+      '--prow': String(returnFrom.row),
+      '--pcol': String(returnFrom.col),
+    };
+  }
   const override = rescueAnimOverride.value;
   if (override && override.sessionId === piece.sessionId && override.side === piece.side) {
     return {
@@ -1218,22 +1281,34 @@ function onPieceClick(piece: BoardPiece) {
   selectOwnSide(piece.side);
 }
 
-/** Menu full-size slot: select unfinished non-trapped then close (SC-PIECE-30). */
-function onMenuSlotClick(side: string) {
-  if (!isInteractive.value || isStripSlotFinished(side) || isStripSlotTrapped(side)) {
+/** Strip slot: select unfinished non-trapped, or confirm return on finished (SC-PIECE-09/10, SC-FINISH-13). */
+function onStripSlotClick(side: string) {
+  if (!isInteractive.value) {
+    return;
+  }
+  if (isStripSlotFinished(side)) {
+    if (canReturn(side)) {
+      returnConfirmSide.value = side;
+      returnConfirmOpen.value = true;
+    }
+    return;
+  }
+  if (isStripSlotTrapped(side)) {
     return;
   }
   selectOwnSide(side);
-  pickerMenuOpen.value = false;
 }
 
-function onReturnClick(side: string) {
-  if (!canShowReturnAffordance(side)) {
+/** Confirm modal → enter return-mode (no step spend yet — SC-FINISH-13 / SC-MOVE-57). */
+function confirmReturnFromFinish() {
+  const side = returnConfirmSide.value;
+  returnConfirmOpen.value = false;
+  returnConfirmSide.value = null;
+  if (!side || !canReturn(side)) {
     return;
   }
   selectedSide.value = null;
-  returningSide.value = returningSide.value === side ? null : side;
-  pickerMenuOpen.value = false;
+  returningSide.value = side;
 }
 
 function submitReturn(side: string, row: number, col: number) {
@@ -1291,18 +1366,7 @@ function onAllJailDialogUpdate(open: boolean) {
   }
 }
 
-function resolveCenterClick(event: MouseEvent): Cell {
-  const el = event.currentTarget as HTMLElement;
-  const rect = el.getBoundingClientRect();
-  const x = rect.width > 0 ? (event.clientX - rect.left) / rect.width : 0;
-  const y = rect.height > 0 ? (event.clientY - rect.top) / rect.height : 0;
-  return {
-    row: y < 0.5 ? 4 : 5,
-    col: x < 0.5 ? 4 : 5,
-  };
-}
-
-function onTileClick(tile: BoardTile, event: MouseEvent) {
+function onTileClick(tile: BoardTile) {
   if (!isInteractive.value) {
     return;
   }
@@ -1322,8 +1386,13 @@ function onTileClick(tile: BoardTile, event: MouseEvent) {
   }
 
   if (tile.kind === 'center') {
-    const cell = resolveCenterClick(event);
-    if (legalTargetKeys.value.has(cellKey(cell.row, cell.col))) {
+    // Any click on visual 2×2 → nearest legal center vs selected piece (SC-MOVE-63).
+    const from = selectedCell.value;
+    if (!from) {
+      return;
+    }
+    const cell = nearestLegalCenterCell(from, legalTargetKeys.value);
+    if (cell) {
       submitMove(selectedSide.value, cell.row, cell.col);
     }
     return;
@@ -1351,46 +1420,40 @@ function onPieceTransitionEnd(event: TransitionEvent) {
 /**
  * Occupied seats only (store mirrors MapSchema — no empty slots).
  * Join order = array order from sync map forEach (design D9).
- * Seated HUD: own → strip → opponents (push-right); spectator: all centered.
+ * Seated: opponents above board; bottom HUD = own + strip.
+ * Spectator: all markers above board; no bottom presence HUD.
  */
 const isSeatedViewer = computed((): boolean => {
   const selfId = game.sessionId;
   return Boolean(selfId && game.seats.some((s) => s.sessionId === selfId));
 });
 
-const hudItems = computed((): HudItem[] => {
+/** Markers above the board — opponents (seated) or all occupied (spectator). */
+const topPresenceMarkers = computed((): PresenceMarker[] => {
   const seats = game.seats;
   const selfId = game.sessionId;
   const self = seats.find((s) => s.sessionId === selfId);
-
   if (self) {
-    const items: HudItem[] = [
-      { kind: 'marker', key: `presence-${self.sessionId}`, marker: toMarker(self) },
-    ];
-    if (hasOwnPieces.value) {
-      items.push({ kind: 'strip', key: 'strip' });
-    }
-    let firstOpponent = true;
-    for (const seat of seats) {
-      if (seat.sessionId === selfId) {
-        continue;
-      }
-      items.push({
-        kind: 'marker',
-        key: `presence-${seat.sessionId}`,
-        marker: toMarker(seat),
-        pushRight: firstOpponent,
-      });
-      firstOpponent = false;
-    }
-    return items;
+    return seats.filter((s) => s.sessionId !== selfId).map(toMarker);
   }
+  return seats.map(toMarker);
+});
 
-  return seats.map((seat) => ({
-    kind: 'marker' as const,
-    key: `presence-${seat.sessionId}`,
-    marker: toMarker(seat),
-  }));
+/** Sticky bottom HUD: own marker + strip only when seated (SC-PRESENCE-02/22). */
+const bottomHudItems = computed((): HudItem[] => {
+  const seats = game.seats;
+  const selfId = game.sessionId;
+  const self = seats.find((s) => s.sessionId === selfId);
+  if (!self) {
+    return [];
+  }
+  const items: HudItem[] = [
+    { kind: 'marker', key: `presence-${self.sessionId}`, marker: toMarker(self) },
+  ];
+  if (hasOwnPieces.value) {
+    items.push({ kind: 'strip', key: 'strip' });
+  }
+  return items;
 });
 
 function toMarker(seat: GameSeat): PresenceMarker {
@@ -1530,6 +1593,8 @@ watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
     returningSide.value = null;
+    returnConfirmOpen.value = false;
+    returnConfirmSide.value = null;
   }
 });
 
@@ -1627,7 +1692,7 @@ watch(
 );
 
 /**
- * Mirror trapped → chrome grille drop/rise on chip + menu (SC-PIECE-31 / D8).
+ * Mirror trapped → chrome grille drop/rise on strip slots (SC-PIECE-31 / D8).
  * Mid-join / remount shows hold without drop (same as board).
  */
 watch(
@@ -1760,8 +1825,9 @@ watch(isMySeatTimeExpired, (expired, prev) => {
 
 /**
  * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01).
- * flush sync so disappearingKeys updates before boardPieces re-render (no one-frame gap).
- * Initial sync skipped — already-finished pieces stay off the board.
+ * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
+ * flush sync so disappearingKeys / returnAnimFrom update before boardPieces re-render.
+ * Initial sync skipped — already-finished / mid-join pieces stay as-is.
  */
 watch(
   () =>
@@ -1773,6 +1839,8 @@ watch(
       return;
     }
     const prev = new Set(prevKeys);
+    const nextFinished = new Set(finishedKeys);
+
     for (const key of finishedKeys) {
       if (prev.has(key) || disappearingKeys.value.has(key)) {
         continue;
@@ -1794,6 +1862,49 @@ watch(
           disappearingKeys.value = cleared;
         }, MOVE_ANIM_MS + FINISH_FADE_MS),
       );
+    }
+
+    // Return-from-finish: piece left finished set → animate from nearest center (all clients).
+    for (const key of prev) {
+      if (nextFinished.has(key)) {
+        continue;
+      }
+      // Cancel any in-flight finish disappear for this piece.
+      const fadeTimer = finishFadeTimers.get(key);
+      if (fadeTimer !== undefined) {
+        clearTimeout(fadeTimer);
+        finishFadeTimers.delete(key);
+      }
+      if (disappearingKeys.value.has(key)) {
+        const cleared = new Set(disappearingKeys.value);
+        cleared.delete(key);
+        disappearingKeys.value = cleared;
+      }
+
+      const colon = key.indexOf(':');
+      if (colon <= 0) {
+        continue;
+      }
+      const sessionId = key.slice(0, colon);
+      const side = key.slice(colon + 1);
+      const seat = game.seats.find((s) => s.sessionId === sessionId);
+      const piece = seat?.pieces.find((p) => p.side === side && !p.finished);
+      if (!piece) {
+        continue;
+      }
+      const from = nearestCenterCell({ row: piece.row, col: piece.col });
+      const nextFrom = new Map(returnAnimFromByKey.value);
+      nextFrom.set(key, from);
+      returnAnimFromByKey.value = nextFrom;
+      // Paint at nearest center first, then slide to ring (SC-FINISH-15).
+      void nextTick(() => {
+        requestAnimationFrame(() => {
+          const cleared = new Map(returnAnimFromByKey.value);
+          if (cleared.delete(key)) {
+            returnAnimFromByKey.value = cleared;
+          }
+        });
+      });
     }
 
     // Drop selection if the selected piece just finished (SC-MOVE-24).
@@ -1907,10 +2018,46 @@ onUnmounted(() => {
   overflow: auto;
   width: 100%;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Board region sits above sibling HUD; keep a small inset. */
+  padding-bottom: 8px;
+}
+
+/* Opponents (seated) / all seats (spectator) above the board (SC-PRESENCE-02/03). */
+.presence-row--top {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-start;
-  /* Board region sits above sibling HUD; keep a small inset (say chrome uses HUD scroll padding). */
-  padding-bottom: 8px;
+  gap: 48px;
+  width: 100%;
+  min-height: 96px;
+  /* Room for bubbles stacking below markers toward the board (SC-SAY-11). */
+  padding-bottom: 88px;
+  margin-bottom: 4px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.presence-row--top .presence-slot {
+  pointer-events: auto;
+}
+
+/* End-turn above sticky HUD, right edge (SC-PRESENCE-17/25). */
+.end-turn-dock {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: calc(10 * 60px + 9 * 2px);
+  padding: 4px 0 8px;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.end-turn-dock .end-turn-btn {
+  pointer-events: auto;
 }
 
 .game-hud {
@@ -1924,6 +2071,9 @@ onUnmounted(() => {
   pointer-events: none;
   /* Opaque bar so board does not show through under markers. */
   background-color: #fff;
+  /* Narrow strip 2×2 vs wide row (SC-PIECE-32). */
+  container-type: inline-size;
+  container-name: game-hud;
 }
 
 body.body--dark .game-hud {
@@ -1931,12 +2081,12 @@ body.body--dark .game-hud {
 }
 
 /* Horizontal scroll on a wrapper — not on the bar — so Y chrome (say affordance /
-   picker / bubbles) is not clipped by browsers forcing overflow-y with overflow-x (SC-SAY-15). */
+   bubbles) is not clipped by browsers forcing overflow-y with overflow-x (SC-SAY-15). */
 .game-hud__scroll {
   width: 100%;
   overflow-x: auto;
-  padding-top: 120px;
-  margin-top: -120px;
+  padding-top: 160px;
+  margin-top: -160px;
   padding-bottom: 8px;
   pointer-events: none;
 }
@@ -1954,12 +2104,13 @@ body.body--dark .game-hud {
   pointer-events: none;
 }
 
-.game-hud__bar--spectator {
-  justify-content: center;
-}
-
 .game-hud__bar--seated {
   justify-content: flex-start;
+  /* Own + strip only — tight gap; 2×2 kicks in under ~420 so no primary scroll (SC-PIECE-32). */
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .presence-slot {
@@ -1972,20 +2123,24 @@ body.body--dark .game-hud {
   pointer-events: auto;
 }
 
-/* First opponent group starts at the right edge (SC-PRESENCE-02). */
-.presence-slot--push-right {
-  margin-left: auto;
+/* Own cluster: bubbles → budgets → avatar (toward board upward) (SC-PRESENCE-15 / SC-SAY-12). */
+.presence-slot--own {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .presence-slot--own-budgets {
-  gap: 10px;
+  gap: 6px;
 }
 
-/* Own private budgets beside avatar (SC-PRESENCE-15…18). */
+/* Own private budgets horizontal row above avatar (SC-PRESENCE-15 / D3). */
 .presence-budgets {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
   pointer-events: auto;
   z-index: 3;
@@ -1993,8 +2148,9 @@ body.body--dark .game-hud {
 
 .budget-counters {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .budget-counter {
@@ -2178,7 +2334,7 @@ body.body--dark .countdown-overlay__card {
   pointer-events: none;
 }
 
-/* Comic say bubbles above avatar toward board (SC-SAY-11/12) — not Notify toasts. */
+/* Comic say bubbles toward board (SC-SAY-11/12) — not Notify toasts. */
 .say-bubbles {
   position: absolute;
   z-index: 2;
@@ -2191,10 +2347,26 @@ body.body--dark .countdown-overlay__card {
   align-items: center;
 }
 
-/* All markers in bottom HUD: stack above avatar; newer closer (column + oldest→newest). */
+/* Top-row markers: stack below avatar toward board; newer closer (column-reverse + oldest→newest). */
+.say-bubbles--top {
+  top: calc(100% + 4px);
+  bottom: auto;
+  flex-direction: column-reverse;
+}
+
+/* Own bottom HUD: stack above avatar toward board; newer closer (column + oldest→newest). */
 .say-bubbles--bottom {
   bottom: calc(100% + 4px);
   flex-direction: column;
+}
+
+/* Own cluster uses flow layout so bubbles sit above budgets without absolute overlap. */
+.presence-slot--own > .say-bubbles--bottom {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  flex-shrink: 0;
 }
 
 .say-bubble {
@@ -2344,11 +2516,6 @@ body.body--dark .say-picker {
 
 .tile--target {
   outline: 3px solid #f44336;
-  outline-offset: -2px;
-}
-
-.tile--return-target {
-  outline: 3px solid #ff9800;
   outline-offset: -2px;
 }
 
@@ -2503,61 +2670,57 @@ body.body--dark .say-picker {
   pointer-events: auto;
 }
 
-/* Anchor for q-menu (not a CSS grid — keeps chip 2×2 pure). */
-.my-tourist-chip-wrap {
+/* Wide: row N,E,W,S; when own(96)+gap(12)+4×72+gaps won't fit (~420) → 2×2 (SC-PIECE-09/32). */
+.my-tourist-slots {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.my-tourist-slot {
   position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  pointer-events: none;
   flex-shrink: 0;
+}
+
+.my-tourist-slots--interactive
+  .my-tourist-slot:not(.my-tourist-slot--finished):not(.my-tourist-slot--trapped),
+.my-tourist-slots--interactive .my-tourist-slot--returnable {
+  pointer-events: auto;
   cursor: pointer;
 }
 
-/* Compact ~avatar 2×2 chip — opens picker only (SC-PIECE-09/29). */
-.my-tourist-chip {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1fr;
-  gap: 2px;
-  width: 72px;
-  height: 72px;
-  padding: 2px;
-  border-radius: 8px;
-  box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.my-tourist-chip-slot {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.my-tourist-chip-slot--finished {
+.my-tourist-slot--dimmed {
   opacity: 0.55;
 }
 
-.my-tourist-chip-slot--selected {
-  outline: 2px solid #ffffff;
-  outline-offset: 0;
+.my-tourist-slot--selected {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
 }
 
-.my-tourist-chip-slot--returning {
-  outline: 2px solid #ff9800;
-  outline-offset: 0;
+.my-tourist-slot--returning {
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
 }
 
-.my-tourist-chip-img {
+.my-tourist-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  border-radius: 8px;
 }
 
-.my-tourist-chip-finish-icon {
+.my-tourist-finish-icon {
   position: absolute;
-  top: 0;
-  right: 0;
+  top: 2px;
+  right: 2px;
   color: #2e7d32;
   filter: drop-shadow(0 0 1px #fff);
   pointer-events: none;
@@ -2584,84 +2747,31 @@ body.body--dark .say-picker {
   animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
-.my-tourist-slots {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-}
+/*
+ * Switch when a single row would force horizontal scroll as primary UX (SC-PIECE-32).
+ * own 96 + gap 12 + 4×72 + 3×8 ≈ 420; ≤320/300 target is covered by this breakpoint.
+ */
+@container game-hud (max-width: 420px) {
+  .my-tourist-slots {
+    display: grid;
+    grid-template-columns: repeat(2, 40px);
+    grid-template-rows: repeat(2, 40px);
+    gap: 4px;
+  }
 
-.my-tourist-slot {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 8px;
-  pointer-events: none;
-}
+  .my-tourist-slot {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+  }
 
-.my-tourist-slots--interactive
-  .my-tourist-slot:not(.my-tourist-slot--finished):not(.my-tourist-slot--trapped) {
-  pointer-events: auto;
-  cursor: pointer;
-}
+  .my-tourist-img {
+    border-radius: 6px;
+  }
 
-.my-tourist-slot--finished {
-  opacity: 0.55;
-}
-
-.my-tourist-slot--selected {
-  outline: 3px solid #ffffff;
-  outline-offset: 2px;
-}
-
-.my-tourist-slot--returning {
-  outline: 3px solid #ff9800;
-  outline-offset: 2px;
-}
-
-.my-tourist-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  border-radius: 8px;
-}
-
-.my-tourist-finish-icon {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  color: #2e7d32;
-  filter: drop-shadow(0 0 1px #fff);
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Return control beside finish flag — menu only (SC-FINISH-13). */
-.my-tourist-return-btn {
-  position: absolute;
-  top: 2px;
-  right: 22px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  pointer-events: auto;
-  color: #fff;
-  background: rgba(255, 152, 0, 0.95);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-
-.my-tourist-return-btn:hover {
-  background: #fb8c00;
+  .my-tourist-finish-icon {
+    top: 0;
+    right: 0;
+  }
 }
 </style>
