@@ -448,8 +448,8 @@ const GRACE_SECONDS = 30;
 const MOVE_ANIM_MS = 250;
 /** Short fade after landing on center before DOM removal (SC-FINISH-01). */
 const FINISH_FADE_MS = 200;
-/** Grille drop / rise animation (SC-BOARD-18/19). */
-const GRILLE_ANIM_MS = 320;
+/** Grille drop / rise animation (SC-BOARD-18/19/21). */
+const GRILLE_ANIM_MS = 1500;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -1045,6 +1045,7 @@ function grilleStyle(grille: GrilleOverlay): Record<string, string> {
   return {
     '--prow': String(grille.row),
     '--pcol': String(grille.col),
+    '--grille-anim-ms': `${GRILLE_ANIM_MS}ms`,
   };
 }
 
@@ -2301,11 +2302,11 @@ body.body--dark .say-picker {
 }
 
 .grille-overlay--drop {
-  animation: grille-drop 320ms ease-out both;
+  animation: grille-drop var(--grille-anim-ms, 1500ms) ease-out both;
 }
 
 .grille-overlay--rise {
-  animation: grille-rise 320ms ease-out both;
+  animation: grille-rise var(--grille-anim-ms, 1500ms) ease-out both;
 }
 
 @keyframes grille-drop {

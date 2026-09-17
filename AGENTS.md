@@ -142,7 +142,7 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 - **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game; create modal maxSeats + `grilleDensity` (few/medium/many, default medium).
 - **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` (+ `finished`/`trapped`) + `connected` / `reconnectUntil` / `ready` / `finishPlace` / `timeExpired` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds` / `removedTaskKeys` / `holdingGrilleKeys` / `sessionId`; private `steps`/`peeks`/`budgetsInfinite` (peeks∞ only)/`peekedThisTurn` (legacy)/`openPeek`/`allJailWarning` from `budgets`/`peekOpen`/`allJailWarning`; `isMyTurn` / `isPlaying` / `isMySeatFinished` / `isMySeatTimeExpired` / `canSendEndTurn` / `sendMove` / `sendRescue` / `sendReturnFromFinish` / `sendPeek` / `sendPeekAnswer` / `sendEndTurn` / `sendReady`; create `{ maxSeats, grilleDensity }`) + `pages/GamePage` tourist board (unfinished pieces + disappear + holes + grille overlays + rescue/return) + presence rows + dual rings + own counters + end-turn + corner affordances + strip×4 once pieces exist + countdown overlay + leave confirm when seated ∧ `playing` ∧ `!finishPlace` ∧ `!timeExpired`.
-- **Tourist board** - client layout constant on GamePage (start/task/center tiles; holes for `removedTaskKeys` — not landable; piece may stand on hole); grille overlay from `holdingGrilleKeys` (`grille.png` drop/rise); trapped pieces visible, no move/peek; rescue affordance when adj free + steps; strip return beside flag → ring highlights → `sendReturnFromFinish`; overlay unfinished pieces only after materialize; occupied presence in top/bottom rows with dual rings; finish/ready top-left, say top-right; own steps/peeks + «Завершить ход»; peek eye (non-trapped on live `*`); all-jail warning modal (own seat only); on own turn while `playing` local select/hints + `sendMove` (does not end turn; hints exclude holes); center finish → fade + strip icon + place modal.
+- **Tourist board** - client layout constant on GamePage (start/task/center tiles; holes for `removedTaskKeys` — not landable; piece may stand on hole); grille overlay from `holdingGrilleKeys` (`grille.png` drop/rise **`GRILLE_ANIM_MS = 1500`** / `--grille-anim-ms`, incl. leave-clear rise); trapped pieces visible, no move/peek; rescue affordance when adj free + steps; strip return beside flag → ring highlights → `sendReturnFromFinish`; overlay unfinished pieces only after materialize; occupied presence in top/bottom rows with dual rings; finish/ready top-left, say top-right; own steps/peeks + «Завершить ход»; peek eye (non-trapped on live `*`); all-jail warning modal (own seat only); on own turn while `playing` local select/hints + `sendMove` (does not end turn; hints exclude holes); center finish → fade + strip icon + place modal.
 - **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 
 ## Pages (routes)
@@ -198,24 +198,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                                                                                |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (`move`/`rescue`/`returnFromFinish`/`peek`/`endTurn`/`say` + private `budgets`/`peekOpen`/`allJailWarning`; not axios/BFF) |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)            |
-| `client-locate-change-points` | Where to edit/add without changing code                                                                                |
-| `client-verify-code`          | Branch diff vs all client code skills                                                                                  |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                                |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                                         |
-| `client-work-with-structure`  | pages / components / boot / stores / assets (`grilles/`) placement (incl. theme shell)                                 |
-| `work-with-forms`             | LoginPage `q-form` / rules                                                                                             |
-| `work-with-pages`             | Routes + guards; App theme header; Lobby grilleDensity; GamePage presence/budgets/peek / holes / grilles / dual end + all-jail modals |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn)       |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board holes + grille overlays + presence/budgets/peek CSS |
+| Skill                         | Use for                                                                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (`move`/`rescue`/`returnFromFinish`/`peek`/`endTurn`/`say` + private `budgets`/`peekOpen`/`allJailWarning`; not axios/BFF)         |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)                                                      |
+| `client-locate-change-points` | Where to edit/add without changing code                                                                                                                          |
+| `client-verify-code`          | Branch diff vs all client code skills                                                                                                                            |
+| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                                                                          |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`                                                                                                   |
+| `client-work-with-structure`  | pages / components / boot / stores / assets (`grilles/`) placement (incl. theme shell)                                                                           |
+| `work-with-forms`             | LoginPage `q-form` / rules                                                                                                                                       |
+| `work-with-pages`             | Routes + guards; App theme header; Lobby grilleDensity; GamePage presence/budgets/peek / holes / grilles / dual end + all-jail modals                            |
+| `work-with-stores`            | Pinia `auth` / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn)                                                  |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board holes + grille overlays (`--grille-anim-ms` 1500) + presence/budgets/peek CSS                                             |
 | `work-with-localization`      | vue-i18n boot; `game.say` / ready / leave / finish / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille density + rescue/return/all-jail keys |
-| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity modal (no Play), quiet resubscribe                           |
-| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                                       |
-| `work-with-game-board`        | Board + presence + grille overlay + trap/rescue/return + budgets/end-turn + peek eye/modals + holes + dual rings + strip + move/say |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                                    |
+| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity modal (12/22/35% seed; no Play), quiet resubscribe                                                                     |
+| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm is page-local)                                                                                 |
+| `work-with-game-board`        | Board + presence + grille overlay (`GRILLE_ANIM_MS=1500`) + trap/rescue/return + budgets/end-turn + peek eye/modals + holes + dual rings + strip + move/say                              |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                                                                              |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 
