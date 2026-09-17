@@ -1,5 +1,5 @@
 <template>
-  <q-page class="q-pa-md flex flex-center column">
+  <q-page class="q-pa-md column game-page">
     <div
       v-if="showCountdownOverlay"
       class="countdown-overlay"
@@ -12,26 +12,6 @@
         <div class="countdown-overlay__seconds">{{ game.countdownRemaining }}</div>
       </div>
     </div>
-
-    <div class="row items-center justify-between full-width q-mb-md game-header">
-      <q-btn flat dense icon="logout" :aria-label="$t('game.leave')" @click="onExitClick" />
-      <div class="text-center">
-        <div class="text-subtitle1">{{ statusLabel }}</div>
-      </div>
-      <div class="text-caption text-muted">{{ game.roomId?.slice(0, 8) }}</div>
-    </div>
-
-    <q-dialog v-model="leaveConfirmOpen">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-body1">{{ $t('game.leaveConfirm') }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('game.leaveCancel')" v-close-popup />
-          <q-btn color="primary" :label="$t('game.leaveExit')" @click="onConfirmLeave" />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
 
     <!-- Own finish place 0→N (SC-FINISH-03/04); close keeps player in room. -->
     <q-dialog v-model="placeModalOpen" persistent>
@@ -134,25 +114,148 @@
       {{ game.error }}
     </q-banner>
 
-    <div class="presence-frame">
-      <template v-for="(row, ri) in presenceLayout" :key="`presence-row-${ri}`">
+    <!-- Board scrolls above sticky bottom HUD (SC-PRESENCE-22 / D2/D3). -->
+    <div class="game-board-region">
+      <div class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
         <div
-          v-if="row.kind === 'markers'"
-          class="presence-row-scroll"
-          :class="`presence-row-scroll--${row.slot}`"
+          v-for="(tile, i) in boardTiles"
+          :key="`tile-${i}`"
+          class="tile"
+          :class="[
+            `tile-${tile.kind}`,
+            {
+              'tile--selected': isTileSelected(tile),
+              'tile--target': isTileTarget(tile),
+              'tile--return-target': isReturnTarget(tile),
+              'tile--removed': tile.removed,
+            },
+          ]"
+          :style="tile.style"
+          @click="onTileClick(tile, $event)"
+        />
+        <img
+          v-for="piece in boardPieces"
+          :key="`piece-${piece.sessionId}-${piece.side}`"
+          class="piece"
+          :class="{
+            'piece--own': isOwnPiece(piece) && !piece.disappearing && !piece.trapped,
+            'piece--trapped': piece.trapped,
+            'piece--no-transition': !pieceTransitionsReady,
+            'piece--disappearing': piece.disappearing,
+          }"
+          :src="touristSrc(piece.touristId)"
+          alt=""
+          :style="pieceStyle(piece)"
+          @click.stop="onPieceClick(piece)"
+          @transitionend="onPieceTransitionEnd($event)"
+        />
+        <!-- Revealed holding grilles — drop/rise for all clients (SC-BOARD-17…19). -->
+        <img
+          v-for="grille in grilleOverlays"
+          :key="`grille-${grille.key}`"
+          class="grille-overlay"
+          :class="{
+            'grille-overlay--drop': grille.phase === 'drop',
+            'grille-overlay--rise': grille.phase === 'rise',
+          }"
+          :src="grilleSrc"
+          alt=""
+          :style="grilleStyle(grille)"
+        />
+        <!-- Eye to open peek on selected own free piece on present * (SC-BOARD-13/20). -->
+        <button
+          v-if="canShowPeekAffordance"
+          type="button"
+          class="peek-affordance"
+          :aria-label="$t('game.peekAffordance')"
+          :style="peekAffordanceStyle"
+          @click.stop="onPeekClick"
         >
-          <div class="presence-row" :class="`presence-row--${row.slot}`">
+          <q-icon name="visibility" size="18px" />
+        </button>
+        <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
+        <button
+          v-for="rescue in rescueAffordances"
+          :key="`rescue-${rescue.side}`"
+          type="button"
+          class="rescue-affordance"
+          :aria-label="$t('game.rescueAffordance')"
+          :style="rescueAffordanceStyle(rescue)"
+          @click.stop="onRescueClick(rescue.side)"
+        >
+          <q-icon name="lock_open" size="18px" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Sticky bottom HUD: seated own→strip→opponents; spectator occupied centered (SC-PRESENCE-02/03). -->
+    <div class="game-hud" :class="isSeatedViewer ? 'game-hud--seated' : 'game-hud--spectator'">
+      <!-- Scroll wrapper (not the bar) so overflow-x does not clip say chrome (SC-SAY-15). -->
+      <div class="game-hud__scroll">
+        <div
+          class="game-hud__bar"
+          :class="isSeatedViewer ? 'game-hud__bar--seated' : 'game-hud__bar--spectator'"
+        >
+          <template v-for="item in hudItems" :key="item.key">
+            <!-- Strip inside HUD after own budgets; no caption (SC-PIECE-09). -->
             <div
-              v-for="marker in row.markers"
-              :key="`presence-${marker.sessionId}`"
+              v-if="item.kind === 'strip' && mySeat"
+              class="my-tourist-strip"
+              :class="{ 'my-tourist-strip--interactive': isInteractive }"
+            >
+              <div class="my-tourist-slots">
+                <div
+                  v-for="side in STRIP_SIDES"
+                  :key="`strip-${side}`"
+                  class="my-tourist-slot"
+                  :class="{
+                    'my-tourist-slot--finished': isStripSlotFinished(side),
+                    'my-tourist-slot--selected':
+                      selectedSide === side && !isStripSlotFinished(side),
+                    'my-tourist-slot--returning': returningSide === side,
+                  }"
+                  @click="onStripClick(side)"
+                >
+                  <img
+                    class="my-tourist-img"
+                    :src="touristSrc(mySeat.touristId)"
+                    :alt="`tourist ${side}`"
+                  />
+                  <button
+                    v-if="canShowReturnAffordance(side)"
+                    type="button"
+                    class="my-tourist-return-btn"
+                    :aria-label="$t('game.returnAffordance')"
+                    @click.stop="onReturnClick(side)"
+                  >
+                    <q-icon name="undo" size="16px" />
+                  </button>
+                  <q-icon
+                    v-if="isStripSlotFinished(side)"
+                    class="my-tourist-finish-icon"
+                    name="flag"
+                    size="18px"
+                    :aria-label="$t('game.finishStripAria')"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-else-if="item.kind === 'marker'"
               class="presence-slot"
-              :class="{ 'presence-slot--own-budgets': showOwnBudgets(marker) }"
+              :class="{
+                'presence-slot--own-budgets': showOwnBudgets(item.marker),
+                'presence-slot--push-right': item.pushRight,
+              }"
             >
               <div
                 class="presence-marker"
                 :class="{
                   'presence-marker--sayable':
-                    canSendSay(marker) || canShowReady(marker) || showOwnBudgets(marker),
+                    canSendSay(item.marker) ||
+                    canShowReady(item.marker) ||
+                    showOwnBudgets(item.marker),
                 }"
               >
                 <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
@@ -160,37 +263,39 @@
                 <q-circular-progress
                   :min="0"
                   :max="turnRingMax"
-                  :value="turnRingValue(marker)"
+                  :value="turnRingValue(item.marker)"
                   :size="`${PRESENCE_OUTER_PX}px`"
                   :thickness="0.12"
-                  :color="turnRingColor(marker)"
-                  :track-color="showTurnRing(marker) ? 'grey-4' : 'transparent'"
+                  :color="turnRingColor(item.marker)"
+                  :track-color="showTurnRing(item.marker) ? 'grey-4' : 'transparent'"
                   class="presence-progress presence-progress--outer"
                 />
                 <q-circular-progress
                   :min="0"
                   :max="GRACE_SECONDS"
-                  :value="showGraceRing(marker) ? graceRemaining(marker.reconnectUntil) : 0"
+                  :value="
+                    showGraceRing(item.marker) ? graceRemaining(item.marker.reconnectUntil) : 0
+                  "
                   :size="`${PRESENCE_INNER_PX}px`"
                   :thickness="0.18"
-                  :color="showGraceRing(marker) ? 'warning' : 'transparent'"
-                  :track-color="showGraceRing(marker) ? 'grey-4' : 'transparent'"
+                  :color="showGraceRing(item.marker) ? 'warning' : 'transparent'"
+                  :track-color="showGraceRing(item.marker) ? 'grey-4' : 'transparent'"
                   class="presence-progress presence-progress--inner"
                 />
-                <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+                <img class="presence-avatar" :src="touristSrc(item.marker.touristId)" alt="" />
 
                 <!-- Finish badge top-left (SC-PRESENCE-14) -->
                 <span
-                  v-if="marker.finishPlace > 0"
+                  v-if="item.marker.finishPlace > 0"
                   class="presence-place-badge"
-                  :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
+                  :aria-label="$t('game.finishPlaceBadgeAria', { n: item.marker.finishPlace })"
                 >
-                  {{ marker.finishPlace }}
+                  {{ item.marker.finishPlace }}
                 </span>
 
                 <!-- Ready top-left own only (SC-PRESENCE-14); phases do not overlap finish -->
                 <button
-                  v-if="canShowReady(marker)"
+                  v-if="canShowReady(item.marker)"
                   type="button"
                   class="ready-affordance"
                   :aria-label="$t('game.readyButton')"
@@ -201,7 +306,7 @@
 
                 <!-- Say top-right own only (SC-PRESENCE-14 / SC-SAY-07) -->
                 <button
-                  v-if="canSendSay(marker)"
+                  v-if="canSendSay(item.marker)"
                   type="button"
                   class="say-affordance"
                   :aria-label="$t('game.say.affordance')"
@@ -210,10 +315,10 @@
                   <q-icon name="chat_bubble_outline" size="18px" />
                 </button>
 
-                <!-- Bubbles toward board: top below / bottom above (SC-SAY-11/12) -->
-                <div class="say-bubbles" :class="`say-bubbles--${row.slot}`" aria-live="polite">
+                <!-- Bubbles above avatar toward board for all markers (SC-SAY-11/12). -->
+                <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
                   <div
-                    v-for="bubble in liveSaysFor(marker.sessionId)"
+                    v-for="bubble in liveSaysFor(item.marker.sessionId)"
                     :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
                     class="say-bubble"
                   >
@@ -222,7 +327,7 @@
                 </div>
 
                 <div
-                  v-if="sayPickerOpen && canSendSay(marker)"
+                  v-if="sayPickerOpen && canSendSay(item.marker)"
                   class="say-picker"
                   role="menu"
                   @click.stop
@@ -241,7 +346,7 @@
               </div>
 
               <!-- Own steps/peeks + end-turn (SC-PRESENCE-15…18); never on opponents. -->
-              <div v-if="showOwnBudgets(marker)" class="presence-budgets">
+              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
                 <div class="budget-counters">
                   <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
                     <q-icon name="directions_walk" size="16px" />
@@ -280,122 +385,7 @@
                 />
               </div>
             </div>
-          </div>
-        </div>
-
-        <div v-else class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
-          <div
-            v-for="(tile, i) in boardTiles"
-            :key="`tile-${i}`"
-            class="tile"
-            :class="[
-              `tile-${tile.kind}`,
-              {
-                'tile--selected': isTileSelected(tile),
-                'tile--target': isTileTarget(tile),
-                'tile--return-target': isReturnTarget(tile),
-                'tile--removed': tile.removed,
-              },
-            ]"
-            :style="tile.style"
-            @click="onTileClick(tile, $event)"
-          />
-          <img
-            v-for="piece in boardPieces"
-            :key="`piece-${piece.sessionId}-${piece.side}`"
-            class="piece"
-            :class="{
-              'piece--own': isOwnPiece(piece) && !piece.disappearing && !piece.trapped,
-              'piece--trapped': piece.trapped,
-              'piece--no-transition': !pieceTransitionsReady,
-              'piece--disappearing': piece.disappearing,
-            }"
-            :src="touristSrc(piece.touristId)"
-            alt=""
-            :style="pieceStyle(piece)"
-            @click.stop="onPieceClick(piece)"
-            @transitionend="onPieceTransitionEnd($event)"
-          />
-          <!-- Revealed holding grilles — drop/rise for all clients (SC-BOARD-17…19). -->
-          <img
-            v-for="grille in grilleOverlays"
-            :key="`grille-${grille.key}`"
-            class="grille-overlay"
-            :class="{
-              'grille-overlay--drop': grille.phase === 'drop',
-              'grille-overlay--rise': grille.phase === 'rise',
-            }"
-            :src="grilleSrc"
-            alt=""
-            :style="grilleStyle(grille)"
-          />
-          <!-- Eye to open peek on selected own free piece on present * (SC-BOARD-13/20). -->
-          <button
-            v-if="canShowPeekAffordance"
-            type="button"
-            class="peek-affordance"
-            :aria-label="$t('game.peekAffordance')"
-            :style="peekAffordanceStyle"
-            @click.stop="onPeekClick"
-          >
-            <q-icon name="visibility" size="18px" />
-          </button>
-          <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
-          <button
-            v-for="rescue in rescueAffordances"
-            :key="`rescue-${rescue.side}`"
-            type="button"
-            class="rescue-affordance"
-            :aria-label="$t('game.rescueAffordance')"
-            :style="rescueAffordanceStyle(rescue)"
-            @click.stop="onRescueClick(rescue.side)"
-          >
-            <q-icon name="lock_open" size="18px" />
-          </button>
-        </div>
-      </template>
-    </div>
-
-    <!-- Strip only once own pieces exist (SC-PIECE-09/17 — empty before playing). -->
-    <div
-      v-if="mySeat && hasOwnPieces"
-      class="my-tourist-strip q-mt-md"
-      :class="{ 'my-tourist-strip--interactive': isInteractive }"
-    >
-      <div class="text-caption text-muted">Мои туристы</div>
-      <div class="my-tourist-slots">
-        <div
-          v-for="side in STRIP_SIDES"
-          :key="`strip-${side}`"
-          class="my-tourist-slot"
-          :class="{
-            'my-tourist-slot--finished': isStripSlotFinished(side),
-            'my-tourist-slot--selected': selectedSide === side && !isStripSlotFinished(side),
-            'my-tourist-slot--returning': returningSide === side,
-          }"
-          @click="onStripClick(side)"
-        >
-          <img
-            class="my-tourist-img"
-            :src="touristSrc(mySeat.touristId)"
-            :alt="`Мои туристы ${side}`"
-          />
-          <button
-            v-if="canShowReturnAffordance(side)"
-            type="button"
-            class="my-tourist-return-btn"
-            :aria-label="$t('game.returnAffordance')"
-            @click.stop="onReturnClick(side)"
-          >
-            <q-icon name="undo" size="16px" />
-          </button>
-          <q-icon
-            v-if="isStripSlotFinished(side)"
-            class="my-tourist-finish-icon"
-            name="flag"
-            size="18px"
-            :aria-label="$t('game.finishStripAria')"
-          />
+          </template>
         </div>
       </div>
     </div>
@@ -465,9 +455,6 @@ const TOURIST_SRC: Record<number, string> = {
   4: tourist4,
 };
 
-/** Presence row slots — top opponents / bottom self (SC-PRESENCE-02/03). No left/right. */
-type PresenceSlot = 'top' | 'bottom';
-
 /**
  * Presence chrome sizes (SC-PRESENCE-11/13): avatar matches strip tourist (72px);
  * rings scale around avatar; reserved marker box = outer ring.
@@ -522,20 +509,22 @@ interface RescueAffordance {
   col: number;
 }
 
+/** Bottom HUD presence — no top/side slots (SC-PRESENCE-02/03). */
 interface PresenceMarker {
   sessionId: string;
   touristId: number;
   connected: boolean;
   reconnectUntil: number;
-  slot: PresenceSlot;
   /** Synced current-turn seat (SC-MOVE-01 indicator). */
   isCurrentTurn: boolean;
   /** Finish place; 0 = none (SC-PRESENCE-06/07). */
   finishPlace: number;
 }
 
-type PresenceLayoutRow =
-  { kind: 'markers'; slot: PresenceSlot; markers: PresenceMarker[] } | { kind: 'board' };
+/** Flat HUD items: seated own → strip → opponents; spectator markers only. */
+type HudItem =
+  | { kind: 'marker'; key: string; marker: PresenceMarker; pushRight?: boolean }
+  | { kind: 'strip'; key: 'strip' };
 
 interface Cell {
   row: number;
@@ -675,8 +664,6 @@ const moveAnimating = ref(false);
 const pieceTransitionsReady = ref(false);
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
-/** Leave confirm for seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-02…07). */
-const leaveConfirmOpen = ref(false);
 /** Own place congratulation modal (SC-FINISH-03/04). */
 const placeModalOpen = ref(false);
 const celebratedPlace = ref(0);
@@ -711,8 +698,6 @@ let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 const nowMs = ref(Date.now());
 let graceTick: ReturnType<typeof setInterval> | undefined;
 
-/** Consented exit — do not auto-rejoin after leaveGame clears the room. */
-const consentedLeaving = ref(false);
 /** Avoid overlapping remount / soft-fail rejoin attempts. */
 let rejoinInFlight = false;
 
@@ -1278,49 +1263,54 @@ function onPieceTransitionEnd(event: TransitionEvent) {
 /**
  * Occupied seats only (store mirrors MapSchema — no empty slots).
  * Join order = array order from sync map forEach (design D9).
- * Seated: self bottom; opponents one top row L→R. Spectator: all top L→R.
+ * Seated HUD: own → strip → opponents (push-right); spectator: all centered.
  */
-const presenceMarkers = computed((): PresenceMarker[] => {
+const isSeatedViewer = computed((): boolean => {
+  const selfId = game.sessionId;
+  return Boolean(selfId && game.seats.some((s) => s.sessionId === selfId));
+});
+
+const hudItems = computed((): HudItem[] => {
   const seats = game.seats;
   const selfId = game.sessionId;
   const self = seats.find((s) => s.sessionId === selfId);
 
   if (self) {
-    const markers: PresenceMarker[] = [toMarker(self, 'bottom')];
-    for (const seat of seats) {
-      if (seat.sessionId !== selfId) {
-        markers.push(toMarker(seat, 'top'));
-      }
+    const items: HudItem[] = [
+      { kind: 'marker', key: `presence-${self.sessionId}`, marker: toMarker(self) },
+    ];
+    if (hasOwnPieces.value) {
+      items.push({ kind: 'strip', key: 'strip' });
     }
-    return markers;
+    let firstOpponent = true;
+    for (const seat of seats) {
+      if (seat.sessionId === selfId) {
+        continue;
+      }
+      items.push({
+        kind: 'marker',
+        key: `presence-${seat.sessionId}`,
+        marker: toMarker(seat),
+        pushRight: firstOpponent,
+      });
+      firstOpponent = false;
+    }
+    return items;
   }
 
-  return seats.map((seat) => toMarker(seat, 'top'));
+  return seats.map((seat) => ({
+    kind: 'marker' as const,
+    key: `presence-${seat.sessionId}`,
+    marker: toMarker(seat),
+  }));
 });
 
-/** Top row → board → bottom row (omit empty rows). */
-const presenceLayout = computed((): PresenceLayoutRow[] => {
-  const markers = presenceMarkers.value;
-  const top = markers.filter((m) => m.slot === 'top');
-  const bottom = markers.filter((m) => m.slot === 'bottom');
-  const rows: PresenceLayoutRow[] = [];
-  if (top.length > 0) {
-    rows.push({ kind: 'markers', slot: 'top', markers: top });
-  }
-  rows.push({ kind: 'board' });
-  if (bottom.length > 0) {
-    rows.push({ kind: 'markers', slot: 'bottom', markers: bottom });
-  }
-  return rows;
-});
-
-function toMarker(seat: GameSeat, slot: PresenceSlot): PresenceMarker {
+function toMarker(seat: GameSeat): PresenceMarker {
   return {
     sessionId: seat.sessionId,
     touristId: seat.touristId,
     connected: seat.connected,
     reconnectUntil: seat.reconnectUntil,
-    slot,
     isCurrentTurn:
       Boolean(game.currentTurnSessionId) && seat.sessionId === game.currentTurnSessionId,
     finishPlace: seat.finishPlace,
@@ -1423,35 +1413,8 @@ function graceRemaining(reconnectUntil: number): number {
   return Math.max(0, Math.min(GRACE_SECONDS, (reconnectUntil - nowMs.value) / 1000));
 }
 
-const statusLabel = computed(() => {
-  if (game.phase === 'countdown') {
-    return 'Старт…';
-  }
-  switch (game.status) {
-    case 'connecting':
-      return 'Подключение…';
-    case 'waiting':
-    case 'playing': {
-      if (game.phase === 'playing' && game.currentTurnSessionId) {
-        if (isMyTurn.value) {
-          return 'Ваш ход';
-        }
-        if (mySeat.value) {
-          return 'Ход соперника';
-        }
-        return 'Ход игрока';
-      }
-      return game.phase === 'playing' ? 'Игра идёт' : 'Ожидание соперника';
-    }
-    case 'finished':
-      return 'Игра окончена';
-    default:
-      return 'Нет комнаты';
-  }
-});
-
 async function ensureTouristRoom() {
-  if (consentedLeaving.value || rejoinInFlight || game.room) {
+  if (game.consentedLeaving || rejoinInFlight || game.room) {
     return;
   }
 
@@ -1466,7 +1429,7 @@ async function ensureTouristRoom() {
   try {
     await game.rejoinGame(roomId);
   } catch {
-    if (!consentedLeaving.value) {
+    if (!game.consentedLeaving) {
       await router.replace({ name: 'lobby' });
     }
   } finally {
@@ -1728,7 +1691,7 @@ onMounted(async () => {
 watch(
   () => game.room,
   async (room, prev) => {
-    if (room || !prev || consentedLeaving.value) {
+    if (room || !prev || game.consentedLeaving) {
       return;
     }
     sayPickerOpen.value = false;
@@ -1760,81 +1723,78 @@ onUnmounted(() => {
   grilleTimers.clear();
   rescueAnimOverride.value = null;
 });
-
-/** Confirm only when seated ∧ playing ∧ !finishPlace ∧ !timeExpired (SC-LEAVE-05/07). */
-const needsLeaveConfirm = computed(
-  () => isSeated.value && isPlaying.value && !isMySeatFinished.value && !isMySeatTimeExpired.value,
-);
-
-function onExitClick() {
-  if (needsLeaveConfirm.value) {
-    leaveConfirmOpen.value = true;
-    return;
-  }
-  void onLeave();
-}
-
-function onConfirmLeave() {
-  leaveConfirmOpen.value = false;
-  void onLeave();
-}
-
-async function onLeave() {
-  consentedLeaving.value = true;
-  await game.leaveGame();
-  await router.push({ name: 'lobby' });
-}
 </script>
 
 <style scoped>
-.game-header {
-  /* Cap to board max-width — no side presence gutters (D9 / SC-PRESENCE-02 / SC-BOARD-03). */
-  max-width: calc(10 * 60px + 9 * 2px);
+/* Page column: board scroll region + sticky bottom HUD (D2/D3 / SC-PRESENCE-22). */
+.game-page {
+  flex: 1 1 auto;
+  min-height: 100%;
   width: 100%;
+  max-width: calc(10 * 60px + 9 * 2px);
+  margin-inline: auto;
+  align-items: stretch;
 }
 
-/* Presence rows above/below board — no left/right columns (SC-PRESENCE-02/03). */
-.presence-frame {
+.game-board-region {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  width: 100%;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: calc(10 * 60px + 9 * 2px);
-  pointer-events: none;
+  justify-content: center;
+  align-items: flex-start;
+  /* Board region sits above sibling HUD; keep a small inset (say chrome uses HUD scroll padding). */
+  padding-bottom: 8px;
 }
 
-/* Horizontal scroll on a wrapper — not on the row — so Y chrome (say affordance /
-   picker / bubbles) is not clipped by browsers forcing overflow-y with overflow-x (D15 / SC-SAY-15). */
-.presence-row-scroll {
+.game-hud {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  width: 100%;
+  max-width: calc(10 * 60px + 9 * 2px);
+  margin-inline: auto;
+  overflow: visible;
+  pointer-events: none;
+  /* Opaque bar so board does not show through under markers. */
+  background-color: #fff;
+}
+
+body.body--dark .game-hud {
+  background-color: #121212;
+}
+
+/* Horizontal scroll on a wrapper — not on the bar — so Y chrome (say affordance /
+   picker / bubbles) is not clipped by browsers forcing overflow-y with overflow-x (SC-SAY-15). */
+.game-hud__scroll {
   width: 100%;
   overflow-x: auto;
-  /* Absorb Y overflow inside the scroll box so forced overflow-y does not hide chrome. */
-  padding-block: 120px;
-  margin-block: -120px;
-  /* Frame is pointer-events:none so board stays clickable under padding overlap;
-     keep the scroll port non-interactive too — only the row/markers receive hits. */
+  padding-top: 120px;
+  margin-top: -120px;
+  padding-bottom: 8px;
   pointer-events: none;
 }
 
-.presence-row {
+.game-hud__bar {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  align-items: flex-start;
-  justify-content: center;
-  /* Gap keeps neighbor say-bubbles from overlapping (SC-SAY-11/12 / D9). */
+  align-items: flex-end;
   gap: 48px;
   width: max-content;
   min-width: 100%;
+  min-height: 96px;
   overflow: visible;
-  min-height: 96px; /* = PRESENCE_OUTER_PX */
-  /* Enable marker chrome + touch-drag scroll without reactivating padded overlap. */
-  pointer-events: auto;
+  pointer-events: none;
 }
 
-.presence-row--bottom {
-  align-items: flex-end;
+.game-hud__bar--spectator {
+  justify-content: center;
+}
+
+.game-hud__bar--seated {
+  justify-content: flex-start;
 }
 
 .presence-slot {
@@ -1844,6 +1804,12 @@ async function onLeave() {
   position: relative;
   overflow: visible;
   flex-shrink: 0;
+  pointer-events: auto;
+}
+
+/* First opponent group starts at the right edge (SC-PRESENCE-02). */
+.presence-slot--push-right {
+  margin-left: auto;
 }
 
 .presence-slot--own-budgets {
@@ -2047,7 +2013,7 @@ body.body--dark .countdown-overlay__card {
   pointer-events: none;
 }
 
-/* Comic say bubbles toward board (SC-SAY-11/12) — not Notify toasts. */
+/* Comic say bubbles above avatar toward board (SC-SAY-11/12) — not Notify toasts. */
 .say-bubbles {
   position: absolute;
   z-index: 2;
@@ -2060,13 +2026,7 @@ body.body--dark .countdown-overlay__card {
   align-items: center;
 }
 
-/* Top row: stack below avatar toward board; newer closer (column-reverse + oldest→newest). */
-.say-bubbles--top {
-  top: calc(100% + 4px);
-  flex-direction: column-reverse;
-}
-
-/* Bottom self: stack above avatar toward board; newer closer (column + oldest→newest). */
+/* All markers in bottom HUD: stack above avatar; newer closer (column + oldest→newest). */
 .say-bubbles--bottom {
   bottom: calc(100% + 4px);
   flex-direction: column;
@@ -2176,7 +2136,6 @@ body.body--dark .say-picker {
   aspect-ratio: 1;
   /* Holes show page background — no board chrome fill */
   background: transparent;
-  /* Re-enable clicks on board inside non-interactive presence-frame */
   pointer-events: auto;
 }
 
@@ -2373,9 +2332,9 @@ body.body--dark .say-picker {
 
 .my-tourist-strip {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-shrink: 0;
   pointer-events: none;
 }
 

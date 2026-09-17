@@ -343,6 +343,11 @@ export const useGameStore = defineStore('game', {
     allJailWarning: boolean;
     /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
     sayEvents: SayEvent[];
+    /**
+     * Consented leave in progress — GamePage must not auto-rejoin after leaveGame
+     * clears the room (header leave lives in App.vue; D1 / redesign-game-hud).
+     */
+    consentedLeaving: boolean;
     status: GameStatus;
     error: string | null;
     listing: boolean;
@@ -370,6 +375,7 @@ export const useGameStore = defineStore('game', {
     openPeek: null,
     allJailWarning: false,
     sayEvents: [],
+    consentedLeaving: false,
     status: 'idle',
     error: null,
     listing: false,
@@ -576,20 +582,29 @@ export const useGameStore = defineStore('game', {
     },
 
     async leaveGame() {
-      // Consented leave: clear tourist reconnect token (D3).
-      clearTouristReconnect();
-      // logout / leave screen: drop lobby subscription with any session reset
-      await this.unsubscribeLobby();
+      // Gate GamePage soft-drop rejoin while room is cleared (App header leave).
+      // Flag must not stay true after leave — unlike the old page-local ref, store
+      // state survives remount and would block browser-back / deep-link rejoin.
+      this.consentedLeaving = true;
+      try {
+        // Consented leave: clear tourist reconnect token (D3).
+        clearTouristReconnect();
+        // logout / leave screen: drop lobby subscription with any session reset
+        await this.unsubscribeLobby();
 
-      const room = this.room;
-      this._resetRoomState();
+        const room = this.room;
+        this._resetRoomState();
 
-      if (room) {
-        try {
-          await room.leave();
-        } catch {
-          // room may already be closed
+        if (room) {
+          try {
+            await room.leave();
+          } catch {
+            // room may already be closed
+          }
         }
+      } finally {
+        // Soft-drop watch already saw room→null with the flag set (sync).
+        this.consentedLeaving = false;
       }
     },
 
@@ -964,6 +979,7 @@ export const useGameStore = defineStore('game', {
     },
 
     _attachRoom(room: Room) {
+      this.consentedLeaving = false;
       this.room = room;
       this.roomId = room.roomId;
       this.sessionId = room.sessionId;
