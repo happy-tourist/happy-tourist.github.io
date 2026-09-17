@@ -328,54 +328,7 @@
               </div>
             </div>
 
-            <div
-              v-else-if="item.kind === 'marker'"
-              class="presence-slot presence-slot--own"
-              :class="{
-                'presence-slot--own-budgets': showOwnBudgets(item.marker),
-              }"
-            >
-              <!-- Own bottom: bubbles stack up toward board above budgets (SC-SAY-12). -->
-              <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
-                <div
-                  v-for="bubble in liveSaysFor(item.marker.sessionId)"
-                  :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
-                  class="say-bubble"
-                >
-                  {{ $t(`game.say.${bubble.presetId}`) }}
-                </div>
-              </div>
-
-              <!-- Budgets row above own avatar (SC-PRESENCE-15 / D3); end-turn is in end-turn-dock. -->
-              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
-                <div class="budget-counters">
-                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
-                    <q-icon name="directions_walk" size="16px" />
-                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in stepFalls"
-                      :key="`step-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
-                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
-                    <q-icon name="visibility" size="16px" />
-                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in peekFalls"
-                      :key="`peek-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
+            <div v-else-if="item.kind === 'marker'" class="presence-slot presence-slot--own">
               <div
                 class="presence-marker"
                 :class="{
@@ -410,6 +363,17 @@
                   class="presence-progress presence-progress--inner"
                 />
                 <img class="presence-avatar" :src="touristSrc(item.marker.touristId)" alt="" />
+
+                <!-- Own bottom: bubbles stack up toward board (SC-SAY-12). -->
+                <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
+                  <div
+                    v-for="bubble in liveSaysFor(item.marker.sessionId)"
+                    :key="`say-${bubble.sessionId}-${bubble.at}-${bubble.presetId}`"
+                    class="say-bubble"
+                  >
+                    {{ $t(`game.say.${bubble.presetId}`) }}
+                  </div>
+                </div>
 
                 <!-- Finish badge top-left (SC-PRESENCE-14) -->
                 <span
@@ -458,6 +422,36 @@
                   >
                     {{ $t(`game.say.${presetId}`) }}
                   </button>
+                </div>
+              </div>
+
+              <!-- Budgets to the right of own avatar (SC-PRESENCE-15 / D3); end-turn in end-turn-dock. -->
+              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
+                <div class="budget-counters">
+                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
+                    <q-icon name="directions_walk" size="16px" />
+                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
+                    <span
+                      v-for="fall in stepFalls"
+                      :key="`step-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
+                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
+                    <q-icon name="visibility" size="16px" />
+                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
+                    <span
+                      v-for="fall in peekFalls"
+                      :key="`peek-fall-${fall.id}`"
+                      class="budget-fall"
+                      aria-hidden="true"
+                    >
+                      +{{ fall.n }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2024,7 +2018,8 @@ onUnmounted(() => {
   padding-bottom: 8px;
 }
 
-/* Opponents (seated) / all seats (spectator) above the board (SC-PRESENCE-02/03). */
+/* Opponents (seated) / all seats (spectator) above the board (SC-PRESENCE-02/03).
+   Bubbles are absolute and may overlay the top of the board — no reserved gap. */
 .presence-row--top {
   display: flex;
   flex-direction: row;
@@ -2034,9 +2029,7 @@ onUnmounted(() => {
   gap: 48px;
   width: 100%;
   min-height: 96px;
-  /* Room for bubbles stacking below markers toward the board (SC-SAY-11). */
-  padding-bottom: 88px;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   overflow: visible;
   pointer-events: none;
 }
@@ -2123,19 +2116,15 @@ body.body--dark .game-hud {
   pointer-events: auto;
 }
 
-/* Own cluster: bubbles → budgets → avatar (toward board upward) (SC-PRESENCE-15 / SC-SAY-12). */
+/* Own cluster: avatar | budgets to the right (SC-PRESENCE-15 / D3). */
 .presence-slot--own {
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
-.presence-slot--own-budgets {
-  gap: 6px;
-}
-
-/* Own private budgets horizontal row above avatar (SC-PRESENCE-15 / D3). */
+/* Own private budgets beside avatar (SC-PRESENCE-15 / D3). */
 .presence-budgets {
   display: flex;
   flex-direction: row;
@@ -2144,6 +2133,7 @@ body.body--dark .game-hud {
   gap: 6px;
   pointer-events: auto;
   z-index: 3;
+  flex-shrink: 0;
 }
 
 .budget-counters {
@@ -2358,15 +2348,6 @@ body.body--dark .countdown-overlay__card {
 .say-bubbles--bottom {
   bottom: calc(100% + 4px);
   flex-direction: column;
-}
-
-/* Own cluster uses flow layout so bubbles sit above budgets without absolute overlap. */
-.presence-slot--own > .say-bubbles--bottom {
-  position: relative;
-  left: auto;
-  bottom: auto;
-  transform: none;
-  flex-shrink: 0;
 }
 
 .say-bubble {
