@@ -2138,9 +2138,10 @@ body.body--dark .game-hud {
 
 .budget-counters {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   flex-wrap: nowrap;
-  gap: 6px;
+  align-items: stretch;
+  gap: 4px;
 }
 
 .budget-counter {
