@@ -63,6 +63,15 @@
 
       <q-card-actions vertical class="q-gutter-sm q-px-md q-pb-md">
         <q-btn
+          v-if="!isRegister"
+          flat
+          dense
+          color="primary"
+          class="full-width"
+          :label="$t('auth.forgotLink')"
+          :to="{ name: 'forgot-password' }"
+        />
+        <q-btn
           outline
           color="primary"
           class="full-width"

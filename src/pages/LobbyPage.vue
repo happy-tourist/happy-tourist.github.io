@@ -7,6 +7,13 @@
       </div>
 
       <div class="q-gutter-sm">
+        <q-btn
+          v-if="!auth.user?.anonymous"
+          flat
+          icon="manage_accounts"
+          :label="$t('auth.accountNav')"
+          :to="{ name: 'account' }"
+        />
         <q-btn flat icon="logout" label="Выйти" @click="onLogout" />
       </div>
     </div>

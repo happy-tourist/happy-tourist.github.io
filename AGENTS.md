@@ -12,8 +12,9 @@ This repository (`happy-tourist.github.io`) is the client-only frontend. The sib
 
 Main scenarios:
 
-- Register / sign in with email and password (Colyseus Auth).
-- Sign in anonymously as a guest.
+- Register / sign in with email and password (Colyseus Auth); soft email verify via cabinet (no auto mail on register).
+- Sign in anonymously as a guest; Google one-click.
+- Request password reset from forgot-password page.
 - Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`).
 - Create a game with chosen `maxSeats` (2|3|4), or join by room id.
 - Open Game and view the tourist board with synced seats (pieces appear only in `playing`) and a four-slot tourist strip inside the seated sticky bottom HUD once own pieces exist (wide row N,E,W,S; HUD ≤~420 (covers ≤320/300) → 2×2; **no** chip/`q-menu`); after phase `playing`, on own turn select an unfinished piece from the strip or board and submit a one-step `move` via the game store; landing on center finishes a piece (disappear + finish flag on strip; any finish 2×2 click → nearest legal center); finishing all four shows a place modal and presence badge while the seat stays (say allowed, no moves, leave without confirm); solo five-minute timer expiry or steps exhaustion (no live task tile) shows a distinct end modal + locks moves (`timeExpired`); presence: opponents (or spectator all) above the board; seated bottom HUD = own + strip only; dual circular countdowns (outer turn blue/red, inner reconnect warning) around avatar; say bubbles: top markers down toward board, own bottom up; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
@@ -26,7 +27,7 @@ Main users:
 - Casual players who want a short online board game «Счастливый турист» match in the browser.
 - Guests (anonymous Colyseus auth), registered users (email/password), and Google one-click (`loginWithGoogle` / `signInWithProvider('google')`).
 
-There is no admin cabinet or content CMS in this app.
+There is no admin CMS in this app. Registered users have a personal cabinet (`/account`) for email confirm / change-email; confirm and password-reset HTML live on the API host (not SPA pages).
 
 ## Important
 
@@ -50,8 +51,8 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 - Quasar components (`q-page`, `q-card`, `q-btn`, `q-list`, …) with Material Icons + Roboto extras.
 - Quasar `Dark` plugin for chrome light/dark; Sass variables in `src/css/quasar.variables.scss`; global styles in `src/css/app.scss` (includes `.text-muted` for dark-friendly secondary text).
 - Shared `q-header` in `App.vue` (theme toggle on all pages; on Game also icon-only leave + centered match status). Guest preference → `localStorage` (`ht-theme`); registered → `GET /api/theme` restore (not JWT-only) + `POST /api/theme` on toggle. Tourist board scoped CSS is independent of chrome Dark.
-- Route pages under `src/pages/` (`LoginPage`, `LobbyPage`, `GamePage`).
-- Scaffold leftovers may remain (`EssentialLink.vue`, `example-store.ts`, unused `pages/index*`) — prefer the login/lobby/game flow above.
+- Route pages under `src/pages/` (`LoginPage`, `ForgotPasswordPage`, `AccountPage`, `LobbyPage`, `GamePage`).
+- Scaffold leftovers may remain (`EssentialLink.vue`, `example-store.ts`, unused `pages/index*`) — prefer the login/forgot/account/lobby/game flow above.
 
 ## Data And Utilities
 
@@ -61,7 +62,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 
 ## Specific Tasks
 
-- Colyseus Auth — register, email/password login, anonymous login, Google one-click, logout via `stores/auth`.
+- Colyseus Auth — register, email/password login, anonymous, Google, forgot-password, cabinet send-confirm / change-email, logout via `stores/auth`.
 - Tourist room name constant `TOURIST_ROOM = 'tourist'` in `stores/game`.
 - Live lobby listing via `subscribeLobby` / `unsubscribeLobby` (`joinOrCreate('lobby', { filter: { name: 'tourist' } })`); HTTP `GET /rooms/tourist` remains unused fallback.
 - Room lifecycle: `create({ maxSeats, grilleDensity })` / `joinById`, `onStateChange`, `leave`, `sendMove` → `move`, `sendRescue` → `rescue`, `sendReturnFromFinish` → `returnFromFinish`, `sendReady` → `ready`, `sendSay` → `say` + `onMessage('say'|'budgets'|'peekOpen'|'allJailWarning')`.
@@ -139,7 +140,7 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 ## Business Entities And Areas
 
-- **Auth** - `stores/auth` + `pages/LoginPage`. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signOut`, `onChange`.
+- **Auth** - `stores/auth` + `pages/LoginPage` + `ForgotPasswordPage` + `AccountPage` + App verify reminder. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signInWithProvider('google')`, `sendPasswordResetEmail`, `signOut`, `onChange`; HTTP send-confirm / change-email.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game; create modal maxSeats + `grilleDensity` (few/medium/many, default medium).
 - **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` (+ `finished`/`trapped`) + `connected` / `reconnectUntil` / `ready` / `finishPlace` / `timeExpired` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds` / `removedTaskKeys` / `holdingGrilleKeys` / `sessionId`; private `steps`/`peeks`/`budgetsInfinite` (peeks∞ only)/`peekedThisTurn` (legacy)/`openPeek`/`allJailWarning` from `budgets`/`peekOpen`/`allJailWarning`; `isMyTurn` / `isPlaying` / `isMySeatFinished` / `isMySeatTimeExpired` / `canSendEndTurn` / `sendMove` / `sendRescue` / `sendReturnFromFinish` / `sendPeek` / `sendPeekAnswer` / `sendEndTurn` / `sendReady`; create `{ maxSeats, grilleDensity }`) + `pages/GamePage` tourist board (unfinished pieces + disappear + return anim from nearest center + holes + grille overlays + rescue/return-modal) + top presence + seated sticky `.game-hud` (own + strip) + dual rings + budgets beside avatar + end-turn dock + corner affordances + countdown overlay; leave confirm + match status live in `App.vue` header on Game (when seated ∧ `playing` ∧ `!finishPlace` ∧ `!timeExpired`).
 - **Tourist board** - client layout constant on GamePage (start/task/center tiles; holes for `removedTaskKeys` — not landable; piece may stand on hole); grille overlay from `holdingGrilleKeys` (`grille.png` drop/rise **`GRILLE_ANIM_MS = 1000`** / `--grille-anim-ms`, incl. leave-clear rise + chrome grille on strip when trapped); trapped pieces visible, no move/peek; rescue affordance when adj free + steps; return: confirm modal «Вернуть на поле?» → same red `.tile--target` ring → `sendReturnFromFinish` (dim finished only if `!canReturn`; no undo btn); overlay unfinished pieces only after materialize; opponents/spectator markers above board; seated bottom HUD = own + strip (row / narrow 2×2); finish/ready top-left, say top-right (top bubbles↓ / own↑); budgets beside own avatar; «Завершить ход» in end-turn dock above HUD right; peek eye (non-trapped on live `*`); all-jail warning modal (own seat only); on own turn while `playing` local select/hints + `sendMove` (does not end turn; hints exclude holes); finish 2×2 click → nearest legal center; center finish → fade + finish flag on strip + place modal.
@@ -149,19 +150,21 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 From `src/router/routes.ts`:
 
-| Path              | Name    | Purpose                                        |
-| ----------------- | ------- | ---------------------------------------------- |
-| `/` → `/lobby`    | —       | redirect                                       |
-| `/login`          | `login` | auth; `meta.guest`                             |
-| `/lobby`          | `lobby` | room list / create / join; `meta.requiresAuth` |
-| `/game/:roomId`   | `game`  | tourist board; `meta.requiresAuth`             |
-| `/:catchAll(.*)*` | —       | redirect to `/lobby`                           |
+| Path              | Name              | Purpose                                        |
+| ----------------- | ----------------- | ---------------------------------------------- |
+| `/` → `/lobby`    | —                 | redirect                                       |
+| `/login`          | `login`           | auth; `meta.guest`                             |
+| `/forgot-password`| `forgot-password` | reset request; `meta.guest`                    |
+| `/lobby`          | `lobby`           | room list / create / join; `meta.requiresAuth` |
+| `/account`        | `account`         | cabinet (confirm / change email); `meta.requiresAuth` |
+| `/game/:roomId`   | `game`            | tourist board; `meta.requiresAuth`             |
+| `/:catchAll(.*)*` | —                 | redirect to `/lobby`                           |
 
 Router mode: hash (`/#/lobby`, `/#/game/...`).
 
 ## Pinia Stores
 
-- **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme` from userdata), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`; actions `register` / `login` / `loginAnonymously` / `logout` / `whenReady`. Syncs from `client.auth.onChange`.
+- **`auth`** (`stores/auth.ts`, setup store) — `user` (optional `theme`, `emailVerified`), `token`, `loading`, `error`, `ready`; computed `isAuthenticated`, `displayName`, `needsEmailVerification`; actions `register` / `login` / `loginAnonymously` / `loginWithGoogle` / `logout` / `forgotPassword` / `sendEmailConfirmation` / `changeEmail` / `refreshUserData` / `whenReady`. Syncs from `client.auth.onChange`.
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
 - **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity + `ready` + `finishPlace` + `timeExpired` + piece `trapped`), `phase`, `maxSeats`, `countdownRemaining`, legacy `started`, `currentTurnSessionId`, `turnUntil`, `turnBudgetSeconds`, `removedTaskKeys`, `holdingGrilleKeys`, private `steps`/`peeks`/`budgetsInfinite`/`peekedThisTurn`/`openPeek`/`allJailWarning`, ephemeral `sayEvents`, `consentedLeaving` (gates GamePage soft-drop rejoin during App header `leaveGame`), `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated` / `isMyTurn` / `isPlaying` / `canSendReady` / `canSendEndTurn` / `isMySeatFinished` / `isMySeatTimeExpired` / `isSoloBudget`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame({ maxSeats, grilleDensity })`, `joinGame`, `rejoinGame`, `leaveGame`, `sendMove`, `sendRescue`, `sendReturnFromFinish`, `sendPeek`, `sendPeekAnswer`, `sendEndTurn`, `sendReady`, `sendSay` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
@@ -204,12 +207,12 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)                                                                                                                                  |
 | `client-locate-change-points` | Where to edit/add without changing code                                                                                                                                                                                                      |
 | `client-verify-code`          | Branch diff vs all client code skills                                                                                                                                                                                                        |
-| `client-work-with-auth`       | Colyseus Auth, `onChange`, route guards                                                                                                                                                                                                      |
+| `client-work-with-auth`       | Colyseus Auth, forgot/cabinet/`emailVerified`, `onChange`, route guards                                                                                                                                                                       |
 | `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`; soft-drop gated by `consentedLeaving`                                                                                                                                        |
 | `client-work-with-structure`  | pages / components / boot / stores / assets (`grilles/`) placement (theme shell + Game leave/status in App)                                                                                                                                  |
 | `work-with-forms`             | LoginPage `q-form` / rules                                                                                                                                                                                                                   |
-| `work-with-pages`             | Routes + guards; App header (theme + Game leave/status); Lobby grilleDensity; GamePage top presence + seated strip HUD / budgets / end-turn dock / return modal / holes / grilles / dual end + all-jail                                      |
-| `work-with-stores`            | Pinia `auth` / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn / `consentedLeaving`)                                                                                                         |
+| `work-with-pages`             | Routes + guards login/forgot/account/lobby/game; App header (theme + verify reminder + Game leave/status); Lobby grilleDensity; GamePage top presence + seated strip HUD / budgets / end-turn dock / return modal / holes / grilles / dual end + all-jail |
+| `work-with-stores`            | Pinia `auth` (forgot/confirm/change-email) / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn / `consentedLeaving`)                                                                           |
 | `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board holes + grille overlays (`--grille-anim-ms` 1000) + top presence + seated strip HUD / budgets / end-turn dock CSS                                                           |
 | `work-with-localization`      | vue-i18n boot; `game.say` / ready / leave / finish / returnConfirm* / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille density + rescue/return/all-jail keys                                                            |
 | `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity modal (12/22/35% seed; no Play), quiet resubscribe                                                                                                                                 |

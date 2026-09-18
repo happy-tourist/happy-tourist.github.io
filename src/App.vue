@@ -15,6 +15,15 @@
         <div v-if="isGameRoute" class="text-subtitle1 text-center">{{ statusLabel }}</div>
         <q-space />
         <q-btn
+          v-if="showAccountNav"
+          flat
+          round
+          dense
+          icon="manage_accounts"
+          :aria-label="t('auth.accountNavAria')"
+          :to="{ name: 'account' }"
+        />
+        <q-btn
           flat
           round
           dense
@@ -33,6 +42,27 @@
         <q-card-actions align="right">
           <q-btn flat :label="t('game.leaveCancel')" v-close-popup />
           <q-btn color="primary" :label="t('game.leaveExit')" @click="onConfirmLeave" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="emailVerifyReminderOpen" persistent>
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6 q-mb-sm">{{ t('auth.verifyReminderTitle') }}</div>
+          <div class="text-body1">{{ t('auth.verifyReminderText') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn
+            flat
+            :label="t('auth.verifyReminderDismiss')"
+            @click="dismissEmailVerifyReminder"
+          />
+          <q-btn
+            color="primary"
+            :label="t('auth.verifyReminderGoCabinet')"
+            @click="goToCabinetFromReminder"
+          />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -58,6 +88,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useGameStore } from '@/stores/game';
 import { useThemeStore } from '@/stores/theme';
 
+const EMAIL_VERIFY_REMINDER_KEY = 'ht-email-verify-reminder';
+
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
@@ -66,8 +98,17 @@ const game = useGameStore();
 const theme = useThemeStore();
 
 const leaveConfirmOpen = ref(false);
+const emailVerifyReminderOpen = ref(false);
+/** Fallback when sessionStorage is unavailable (private mode). */
+let emailVerifyReminderShown = false;
 
 const isGameRoute = computed(() => route.name === 'game');
+const isLoginRoute = computed(() => route.name === 'login' || route.name === 'forgot-password');
+
+/** Registered non-anonymous — cabinet link in header (design D7). */
+const showAccountNav = computed(
+  () => auth.isAuthenticated && auth.user && !auth.user.anonymous && !isLoginRoute.value,
+);
 
 /** Same branches as former GamePage statusLabel (SC-PRESENCE-23). */
 const statusLabel = computed(() => {
@@ -115,6 +156,33 @@ watch(
   { immediate: true },
 );
 
+/** Once-per-session reminder → cabinet (SC-EMAIL-08/09); not that mail was already sent. */
+watch(
+  [() => auth.ready, () => auth.needsEmailVerification, () => route.name],
+  () => {
+    if (!auth.ready || !auth.needsEmailVerification) {
+      return;
+    }
+    if (route.name === 'login' || route.name === 'forgot-password') {
+      return;
+    }
+    if (emailVerifyReminderShown) {
+      return;
+    }
+    try {
+      if (sessionStorage.getItem(EMAIL_VERIFY_REMINDER_KEY) === '1') {
+        emailVerifyReminderShown = true;
+        return;
+      }
+    } catch {
+      // private mode — use in-memory flag below
+    }
+    emailVerifyReminderShown = true;
+    emailVerifyReminderOpen.value = true;
+  },
+  { immediate: true },
+);
+
 watch(isGameRoute, (onGame) => {
   if (!onGame) {
     leaveConfirmOpen.value = false;
@@ -122,6 +190,25 @@ watch(isGameRoute, (onGame) => {
     game.consentedLeaving = false;
   }
 });
+
+function markEmailVerifyReminderSeen() {
+  try {
+    sessionStorage.setItem(EMAIL_VERIFY_REMINDER_KEY, '1');
+  } catch {
+    // ignore
+  }
+}
+
+function dismissEmailVerifyReminder() {
+  markEmailVerifyReminderSeen();
+  emailVerifyReminderOpen.value = false;
+}
+
+function goToCabinetFromReminder() {
+  markEmailVerifyReminderSeen();
+  emailVerifyReminderOpen.value = false;
+  void router.push({ name: 'account' });
+}
 
 function onToggleTheme() {
   void theme.toggle();

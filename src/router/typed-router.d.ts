@@ -9,7 +9,14 @@ declare module 'vue-router' {
   interface TypesConfig {
     RouteNamedMap: {
       login: RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>;
+      'forgot-password': RouteRecordInfo<
+        'forgot-password',
+        '/forgot-password',
+        Record<never, never>,
+        Record<never, never>
+      >;
       lobby: RouteRecordInfo<'lobby', '/lobby', Record<never, never>, Record<never, never>>;
+      account: RouteRecordInfo<'account', '/account', Record<never, never>, Record<never, never>>;
       game: RouteRecordInfo<'game', '/game/:roomId', { roomId: string }, { roomId: string }>;
     };
   }

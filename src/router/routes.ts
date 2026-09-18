@@ -9,9 +9,21 @@ const routes: RouteRecordRaw[] = [
     meta: { guest: true },
   },
   {
+    path: '/forgot-password',
+    name: 'forgot-password',
+    component: () => import('@/pages/ForgotPasswordPage.vue'),
+    meta: { guest: true },
+  },
+  {
     path: '/lobby',
     name: 'lobby',
     component: () => import('@/pages/LobbyPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/account',
+    name: 'account',
+    component: () => import('@/pages/AccountPage.vue'),
     meta: { requiresAuth: true },
   },
   {
