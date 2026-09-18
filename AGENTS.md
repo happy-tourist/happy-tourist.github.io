@@ -171,7 +171,7 @@ Router mode: hash (`/#/lobby`, `/#/game/...`).
 - `src/boot/colyseus.ts` - `new Client(import.meta.env.VITE_COLYSEUS_URL)`.
 - Auth and rooms go through that client (no separate axios layer).
 - Lobby listing uses LobbyRoom messages (`rooms` / `+` / `-`); HTTP list is fallback only.
-- Production defaults point at `happy-tourist.duckdns.org` (WSS/HTTPS); local defaults `localhost:2567`.
+- Production defaults point at `api.happy-tourist.ru` (WSS/HTTPS); local defaults `localhost:2567`.
 
 ## Errors, Requests, Async
 
