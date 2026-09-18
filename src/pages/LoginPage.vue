@@ -36,7 +36,7 @@
             outlined
             dense
             autocomplete="current-password"
-            :rules="[(v) => (v && v.length >= 6) || 'Минимум 6 символов']"
+            :rules="[(v) => (v && v.length >= 6) || $t('auth.passwordMin')]"
           >
             <template #append>
               <q-icon

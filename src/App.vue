@@ -103,7 +103,13 @@ const emailVerifyReminderOpen = ref(false);
 let emailVerifyReminderShown = false;
 
 const isGameRoute = computed(() => route.name === 'game');
-const isLoginRoute = computed(() => route.name === 'login' || route.name === 'forgot-password');
+const isLoginRoute = computed(
+  () =>
+    route.name === 'login' ||
+    route.name === 'forgot-password' ||
+    route.name === 'confirm-email' ||
+    route.name === 'reset-password',
+);
 
 /** Registered non-anonymous — cabinet link in header (design D7). */
 const showAccountNav = computed(
@@ -163,7 +169,12 @@ watch(
     if (!auth.ready || !auth.needsEmailVerification) {
       return;
     }
-    if (route.name === 'login' || route.name === 'forgot-password') {
+    if (
+      route.name === 'login' ||
+      route.name === 'forgot-password' ||
+      route.name === 'confirm-email' ||
+      route.name === 'reset-password'
+    ) {
       return;
     }
     if (emailVerifyReminderShown) {

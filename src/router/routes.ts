@@ -15,6 +15,19 @@ const routes: RouteRecordRaw[] = [
     meta: { guest: true },
   },
   {
+    // Public: works logged-in or not (cabinet mail while session exists — SC-EMAIL-02).
+    // Not meta.guest — guest would redirect authenticated users away before confirm.
+    path: '/confirm-email',
+    name: 'confirm-email',
+    component: () => import('@/pages/ConfirmEmailPage.vue'),
+  },
+  {
+    // Public reset form (SPA + JSON); success → login (SC-RESET-02/08).
+    path: '/reset-password',
+    name: 'reset-password',
+    component: () => import('@/pages/ResetPasswordPage.vue'),
+  },
+  {
     path: '/lobby',
     name: 'lobby',
     component: () => import('@/pages/LobbyPage.vue'),

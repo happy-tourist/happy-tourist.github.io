@@ -28,7 +28,8 @@ export interface AuthUser {
  * - client.auth.sendPasswordResetEmail(email)
  * - client.auth.signOut()
  * - client.auth.token / onChange — token persisted under "colyseus-auth-token"
- * - client.http POST /api/auth/send-email-confirmation, /api/auth/email
+ * - client.http POST /api/auth/send-email-confirmation, /api/auth/email,
+ *   /api/auth/confirm-email, /api/auth/reset-password
  */
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null);
@@ -137,7 +138,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  /** Forgot-password — Colyseus `/auth/forgot-password` (SC-RESET-01/05). */
+  /** Map SDK / API error bodies to a stable code string. */
+  function authErrorCode(e: unknown): string {
+    if (!e || typeof e !== 'object') {
+      return '';
+    }
+    const anyErr = e as {
+      message?: string;
+      data?: { error?: string; message?: string };
+    };
+    const fromData = anyErr.data?.error ?? anyErr.data?.message;
+    if (typeof fromData === 'string' && fromData) {
+      return fromData;
+    }
+    return typeof anyErr.message === 'string' ? anyErr.message : '';
+  }
+
+  /** Forgot-password — Colyseus `/auth/forgot-password` (SC-RESET-01/05/07). */
   async function forgotPassword(email: string) {
     loading.value = true;
     error.value = null;
@@ -145,7 +162,76 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await client.auth.sendPasswordResetEmail(email);
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e);
+      const code = authErrorCode(e);
+      if (code.includes('email_not_found')) {
+        error.value = 'email_not_found';
+      } else {
+        error.value = e instanceof Error ? e.message : String(e);
+      }
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /**
+   * SPA confirm — POST JSON `/api/auth/confirm-email` (SC-EMAIL-02/12).
+   * No session required; refresh userdata when already signed in.
+   */
+  async function confirmEmail(token: string) {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      await client.http.post('/api/auth/confirm-email', {
+        body: { token },
+      });
+      if (client.auth.token) {
+        await refreshUserData();
+      }
+    } catch (e) {
+      const code = authErrorCode(e);
+      if (code.includes('token_expired') || code.toLowerCase().includes('expired')) {
+        error.value = 'token_expired';
+      } else if (
+        code.includes('token_invalid') ||
+        code.toLowerCase().includes('jwt') ||
+        code.toLowerCase().includes('token')
+      ) {
+        error.value = 'token_invalid';
+      } else {
+        error.value = e instanceof Error ? e.message : String(e);
+      }
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** SPA reset — POST JSON `/api/auth/reset-password` (SC-RESET-02). */
+  async function resetPassword(token: string, password: string) {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      await client.http.post('/api/auth/reset-password', {
+        body: { token, password },
+      });
+    } catch (e) {
+      const code = authErrorCode(e);
+      if (code.includes('token_expired') || code.toLowerCase().includes('expired')) {
+        error.value = 'token_expired';
+      } else if (code.includes('token_already_used')) {
+        error.value = 'token_already_used';
+      } else if (
+        code.includes('token_invalid') ||
+        code.toLowerCase().includes('jwt') ||
+        code.toLowerCase().includes('token')
+      ) {
+        error.value = 'token_invalid';
+      } else {
+        error.value = e instanceof Error ? e.message : String(e);
+      }
       throw e;
     } finally {
       loading.value = false;
@@ -230,6 +316,8 @@ export const useAuthStore = defineStore('auth', () => {
     loginWithGoogle,
     logout,
     forgotPassword,
+    confirmEmail,
+    resetPassword,
     sendEmailConfirmation,
     changeEmail,
     refreshUserData,

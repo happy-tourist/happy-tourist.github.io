@@ -20,8 +20,8 @@
             :rules="[(v) => !!v || $t('auth.emailRequired')]"
           />
 
-          <q-banner v-if="auth.error" dense class="bg-negative text-white">
-            {{ auth.error }}
+          <q-banner v-if="pageError" dense class="bg-negative text-white">
+            {{ pageError }}
           </q-banner>
 
           <q-banner v-if="successMessage" dense class="bg-positive text-white">
@@ -56,14 +56,18 @@ const { t } = useI18n();
 
 const email = ref('');
 const successMessage = ref<string | null>(null);
+const pageError = ref<string | null>(null);
 
 async function onSubmit() {
   successMessage.value = null;
+  pageError.value = null;
   try {
     await auth.forgotPassword(email.value);
     successMessage.value = t('auth.forgotSuccess');
   } catch {
-    // error already in store
+    // SC-RESET-07: map store code → RU not-found without mutating auth.error.
+    pageError.value =
+      auth.error === 'email_not_found' ? t('auth.forgotNotFound') : (auth.error ?? t('failed'));
   }
 }
 </script>

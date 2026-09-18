@@ -15,6 +15,18 @@ declare module 'vue-router' {
         Record<never, never>,
         Record<never, never>
       >;
+      'confirm-email': RouteRecordInfo<
+        'confirm-email',
+        '/confirm-email',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'reset-password': RouteRecordInfo<
+        'reset-password',
+        '/reset-password',
+        Record<never, never>,
+        Record<never, never>
+      >;
       lobby: RouteRecordInfo<'lobby', '/lobby', Record<never, never>, Record<never, never>>;
       account: RouteRecordInfo<'account', '/account', Record<never, never>, Record<never, never>>;
       game: RouteRecordInfo<'game', '/game/:roomId', { roomId: string }, { roomId: string }>;
