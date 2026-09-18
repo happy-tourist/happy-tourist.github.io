@@ -177,7 +177,10 @@ watch(
     } catch {
       // private mode — use in-memory flag below
     }
+    // Mark seen when shown so a new tab in the same browser session does not
+    // re-open the reminder (SC-EMAIL-08 once-per-session).
     emailVerifyReminderShown = true;
+    markEmailVerifyReminderSeen();
     emailVerifyReminderOpen.value = true;
   },
   { immediate: true },

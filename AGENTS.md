@@ -27,7 +27,7 @@ Main users:
 - Casual players who want a short online board game «Счастливый турист» match in the browser.
 - Guests (anonymous Colyseus auth), registered users (email/password), and Google one-click (`loginWithGoogle` / `signInWithProvider('google')`).
 
-There is no admin CMS in this app. Registered users have a personal cabinet (`/account`) for email confirm / change-email; confirm and password-reset HTML live on the API host (not SPA pages).
+There is no admin CMS in this app. Registered users have a personal cabinet (`/account`) for email confirm / change-email; confirm and password-reset HTML live on the API host (not SPA pages). Auth-email human-facing copy (dialogs after send, forgot success) is **Russian** and mentions checking the spam folder.
 
 ## Important
 
@@ -140,7 +140,7 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 ## Business Entities And Areas
 
-- **Auth** - `stores/auth` + `pages/LoginPage` + `ForgotPasswordPage` + `AccountPage` + App verify reminder. SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signInWithProvider('google')`, `sendPasswordResetEmail`, `signOut`, `onChange`; HTTP send-confirm / change-email.
+- **Auth** - `stores/auth` + `pages/LoginPage` + `ForgotPasswordPage` + `AccountPage` + App verify reminder (once per `sessionStorage`, mark seen when shown). SDK: `registerWithEmailAndPassword`, `signInWithEmailAndPassword`, `signInAnonymously`, `signInWithProvider('google')`, `sendPasswordResetEmail`, `signOut`, `onChange`; HTTP send-confirm / change-email. Post-send UI RU + spam hint.
 - **Lobby / rooms** - `stores/game.subscribeLobby` / `unsubscribeLobby` + `pages/LobbyPage`. Live Colyseus `LobbyRoom` (filter `tourist`); quiet resubscribe on drop; leave lobby before enter game; create modal maxSeats + `grilleDensity` (few/medium/many, default medium).
 - **Game session** - `stores/game` room attach (mirror `seats` with `touristId` + `pieces[]` (+ `finished`/`trapped`) + `connected` / `reconnectUntil` / `ready` / `finishPlace` / `timeExpired` / `phase` / `maxSeats` / `countdownRemaining` / `currentTurnSessionId` / `turnUntil` / `turnBudgetSeconds` / `removedTaskKeys` / `holdingGrilleKeys` / `sessionId`; private `steps`/`peeks`/`budgetsInfinite` (peeks∞ only)/`peekedThisTurn` (legacy)/`openPeek`/`allJailWarning` from `budgets`/`peekOpen`/`allJailWarning`; `isMyTurn` / `isPlaying` / `isMySeatFinished` / `isMySeatTimeExpired` / `canSendEndTurn` / `sendMove` / `sendRescue` / `sendReturnFromFinish` / `sendPeek` / `sendPeekAnswer` / `sendEndTurn` / `sendReady`; create `{ maxSeats, grilleDensity }`) + `pages/GamePage` tourist board (unfinished pieces + disappear + return anim from nearest center + holes + grille overlays + rescue/return-modal) + top presence + seated sticky `.game-hud` (own + strip) + dual rings + budgets beside avatar + end-turn dock + corner affordances + countdown overlay; leave confirm + match status live in `App.vue` header on Game (when seated ∧ `playing` ∧ `!finishPlace` ∧ `!timeExpired`).
 - **Tourist board** - client layout constant on GamePage (start/task/center tiles; holes for `removedTaskKeys` — not landable; piece may stand on hole); grille overlay from `holdingGrilleKeys` (`grille.png` drop/rise **`GRILLE_ANIM_MS = 1000`** / `--grille-anim-ms`, incl. leave-clear rise + chrome grille on strip when trapped); trapped pieces visible, no move/peek; rescue affordance when adj free + steps; return: confirm modal «Вернуть на поле?» → same red `.tile--target` ring → `sendReturnFromFinish` (dim finished only if `!canReturn`; no undo btn); overlay unfinished pieces only after materialize; opponents/spectator markers above board; seated bottom HUD = own + strip (row / narrow 2×2); finish/ready top-left, say top-right (top bubbles↓ / own↑); budgets beside own avatar; «Завершить ход» in end-turn dock above HUD right; peek eye (non-trapped on live `*`); all-jail warning modal (own seat only); on own turn while `playing` local select/hints + `sendMove` (does not end turn; hints exclude holes); finish 2×2 click → nearest legal center; center finish → fade + finish flag on strip + place modal.
@@ -150,15 +150,15 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 
 From `src/router/routes.ts`:
 
-| Path              | Name              | Purpose                                        |
-| ----------------- | ----------------- | ---------------------------------------------- |
-| `/` → `/lobby`    | —                 | redirect                                       |
-| `/login`          | `login`           | auth; `meta.guest`                             |
-| `/forgot-password`| `forgot-password` | reset request; `meta.guest`                    |
-| `/lobby`          | `lobby`           | room list / create / join; `meta.requiresAuth` |
-| `/account`        | `account`         | cabinet (confirm / change email); `meta.requiresAuth` |
-| `/game/:roomId`   | `game`            | tourist board; `meta.requiresAuth`             |
-| `/:catchAll(.*)*` | —                 | redirect to `/lobby`                           |
+| Path               | Name              | Purpose                                               |
+| ------------------ | ----------------- | ----------------------------------------------------- |
+| `/` → `/lobby`     | —                 | redirect                                              |
+| `/login`           | `login`           | auth; `meta.guest`                                    |
+| `/forgot-password` | `forgot-password` | reset request; `meta.guest`                           |
+| `/lobby`           | `lobby`           | room list / create / join; `meta.requiresAuth`        |
+| `/account`         | `account`         | cabinet (confirm / change email); `meta.requiresAuth` |
+| `/game/:roomId`    | `game`            | tourist board; `meta.requiresAuth`                    |
+| `/:catchAll(.*)*`  | —                 | redirect to `/lobby`                                  |
 
 Router mode: hash (`/#/lobby`, `/#/game/...`).
 
@@ -201,24 +201,24 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 
 ### Client skills index
 
-| Skill                         | Use for                                                                                                                                                                                                                                      |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `colyseus-client`             | `client.http` + room messages (`move`/`rescue`/`returnFromFinish`/`peek`/`endTurn`/`say` + private `budgets`/`peekOpen`/`allJailWarning`; not axios/BFF)                                                                                     |
-| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)                                                                                                                                  |
-| `client-locate-change-points` | Where to edit/add without changing code                                                                                                                                                                                                      |
-| `client-verify-code`          | Branch diff vs all client code skills                                                                                                                                                                                                        |
-| `client-work-with-auth`       | Colyseus Auth, forgot/cabinet/`emailVerified`, `onChange`, route guards                                                                                                                                                                       |
-| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`; soft-drop gated by `consentedLeaving`                                                                                                                                        |
-| `client-work-with-structure`  | pages / components / boot / stores / assets (`grilles/`) placement (theme shell + Game leave/status in App)                                                                                                                                  |
-| `work-with-forms`             | LoginPage `q-form` / rules                                                                                                                                                                                                                   |
+| Skill                         | Use for                                                                                                                                                                                                                                                   |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `colyseus-client`             | `client.http` + room messages (`move`/`rescue`/`returnFromFinish`/`peek`/`endTurn`/`say` + private `budgets`/`peekOpen`/`allJailWarning`; not axios/BFF)                                                                                                  |
+| `client-align-code`           | Read-only requirements/codebase/test/regression audit (incl. async races + Quasar nested-slot/overlay hide)                                                                                                                                               |
+| `client-locate-change-points` | Where to edit/add without changing code                                                                                                                                                                                                                   |
+| `client-verify-code`          | Branch diff vs all client code skills                                                                                                                                                                                                                     |
+| `client-work-with-auth`       | Colyseus Auth, forgot/cabinet/`emailVerified`, once-per-session verify reminder (mark seen when shown), `onChange`, route guards                                                                                                                                                                                   |
+| `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`; soft-drop gated by `consentedLeaving`                                                                                                                                                     |
+| `client-work-with-structure`  | pages / components / boot / stores / assets (`grilles/`) placement (theme shell + Game leave/status in App)                                                                                                                                               |
+| `work-with-forms`             | LoginPage `q-form` / rules                                                                                                                                                                                                                                |
 | `work-with-pages`             | Routes + guards login/forgot/account/lobby/game; App header (theme + verify reminder + Game leave/status); Lobby grilleDensity; GamePage top presence + seated strip HUD / budgets / end-turn dock / return modal / holes / grilles / dual end + all-jail |
-| `work-with-stores`            | Pinia `auth` (forgot/confirm/change-email) / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn / `consentedLeaving`)                                                                           |
-| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board holes + grille overlays (`--grille-anim-ms` 1000) + top presence + seated strip HUD / budgets / end-turn dock CSS                                                           |
-| `work-with-localization`      | vue-i18n boot; `game.say` / ready / leave / finish / returnConfirm* / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille density + rescue/return/all-jail keys                                                            |
-| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity modal (12/22/35% seed; no Play), quiet resubscribe                                                                                                                                 |
-| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm in App header on Game)                                                                                                                                                     |
-| `work-with-game-board`        | Board + top opponents / spectator presence + seated strip (row/2×2; no chip/`q-menu`) + grille (`GRILLE_ANIM_MS=1000`) + trap/rescue/return modal + budgets/end-turn dock + dual rings + say top↓/own↑ + nearest-center finish + return anim |
-| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                                                                                                                                                          |
+| `work-with-stores`            | Pinia `auth` (forgot/confirm/change-email) / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/return / grilleDensity / end-turn / `consentedLeaving`)                                                                                        |
+| `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header, muted chrome, board holes + grille overlays (`--grille-anim-ms` 1000) + top presence + seated strip HUD / budgets / end-turn dock CSS                                                                        |
+| `work-with-localization`      | vue-i18n boot; auth-email RU (`confirmSentDialog` / `forgotSuccess` + spam); `game.say` / ready / leave / finish / returnConfirm* / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille density + rescue/return/all-jail keys           |
+| `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity modal (12/22/35% seed; no Play), quiet resubscribe                                                                                                                                              |
+| `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (confirm in App header on Game)                                                                                                                                                                  |
+| `work-with-game-board`        | Board + top opponents / spectator presence + seated strip (row/2×2; no chip/`q-menu`) + grille (`GRILLE_ANIM_MS=1000`) + trap/rescue/return modal + budgets/end-turn dock + dual rings + say top↓/own↑ + nearest-center finish + return anim              |
+| `work-with-env-deploy`        | `VITE_*`, hash router, GitHub Pages                                                                                                                                                                                                                       |
 
 Typical Cursor chat workflow: `/opsx-explore` → `/opsx-propose` → artifact review → `/opsx-apply` → `/opsx-sync` → `/opsx-archive`. OpenSpec artifacts are created and archived in **happy-tourist-meta**, not in this repo.
 
