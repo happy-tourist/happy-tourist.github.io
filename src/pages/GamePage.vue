@@ -27,23 +27,6 @@
       </q-card>
     </q-dialog>
 
-    <!-- Return-from-finish confirm before ring highlights (SC-FINISH-13 / D5). -->
-    <q-dialog v-model="returnConfirmOpen" @hide="returnConfirmSide = null">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-body1 text-center">{{ $t('game.returnConfirmModal') }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('game.returnConfirmCancel')" v-close-popup />
-          <q-btn
-            color="primary"
-            :label="$t('game.returnConfirmYes')"
-            @click="confirmReturnFromFinish"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-
     <!-- Solo end: timer vs steps-exhausted (SC-PRESENCE-21 / SC-MOVE-45/48). -->
     <q-dialog v-model="timeoutModalOpen" persistent>
       <q-card style="min-width: 280px">
@@ -256,6 +239,18 @@
         >
           <q-icon name="lock_open" size="18px" />
         </button>
+        <!-- Push over pushable free neighbors of selected pusher (SC-MOVE-74/75). -->
+        <button
+          v-for="push in pushAffordances"
+          :key="`push-${push.targetSessionId}-${push.targetSide}`"
+          type="button"
+          class="push-affordance"
+          :aria-label="$t('game.pushAffordance')"
+          :style="pushAffordanceStyle(push)"
+          @click.stop="onPushClick(push)"
+        >
+          <q-icon name="swipe" size="18px" />
+        </button>
       </div>
 
       <!-- End-turn above sticky HUD, right-aligned — not in budgets row (SC-PRESENCE-17/25 / D3). -->
@@ -296,9 +291,7 @@
                     'my-tourist-slot--selected':
                       selectedSide === side && !isStripSlotFinished(side),
                     'my-tourist-slot--returning': returningSide === side,
-                    'my-tourist-slot--returnable': canReturn(side),
                   }"
-                  :aria-label="canReturn(side) ? $t('game.returnAffordance') : undefined"
                   @click="onStripSlotClick(side)"
                 >
                   <img
@@ -324,6 +317,16 @@
                     size="18px"
                     :aria-label="$t('game.finishStripAria')"
                   />
+                  <!-- Green return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
+                  <button
+                    v-if="canReturn(side)"
+                    type="button"
+                    class="return-affordance"
+                    :aria-label="$t('game.returnAffordance')"
+                    @click.stop="onReturnAffordanceClick(side)"
+                  >
+                    <q-icon name="undo" size="18px" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -579,6 +582,19 @@ interface RescueAffordance {
   col: number;
 }
 
+/** Push affordance over a legal target of the selected pusher (SC-MOVE-74). */
+interface PushAffordance {
+  pusherSide: string;
+  targetSessionId: string;
+  targetSide: string;
+  /** Far-side destination for the target. */
+  row: number;
+  col: number;
+  /** Icon position = target’s current cell. */
+  targetRow: number;
+  targetCol: number;
+}
+
 /** Occupied-seat presence marker (top row and/or bottom HUD). */
 interface PresenceMarker {
   sessionId: string;
@@ -615,6 +631,14 @@ function isCenterCell(row: number, col: number): boolean {
 
 function chebyshevDistance(a: Cell, b: Cell): number {
   return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
+}
+
+/** Far-side cell through target: `target + (target − pusher)` (SC-MOVE-67). */
+function farSideCell(pusher: Cell, target: Cell): Cell {
+  return {
+    row: target.row + (target.row - pusher.row),
+    col: target.col + (target.col - pusher.col),
+  };
 }
 
 /** Nearest of four center cells to `to` (Chebyshev; tie lower row, then col — SC-FINISH-15). */
@@ -768,9 +792,6 @@ const router = useRouter();
 const selectedSide = ref<string | null>(null);
 /** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
 const returningSide = ref<string | null>(null);
-/** Confirm dialog before entering return-mode (SC-FINISH-13 / D5). */
-const returnConfirmOpen = ref(false);
-const returnConfirmSide = ref<string | null>(null);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /** Skip first paint transition so pieces do not fly from 0,0. */
@@ -1133,6 +1154,68 @@ function rescueAffordanceStyle(rescue: RescueAffordance): Record<string, string>
   };
 }
 
+/**
+ * Push affordances over free neighbors the selected own free pusher can push
+ * (own turn + steps≥1; SC-MOVE-74).
+ */
+const pushAffordances = computed((): PushAffordance[] => {
+  if (
+    !isInteractive.value ||
+    !mySeat.value ||
+    !selectedSide.value ||
+    game.steps <= 0 ||
+    returningSide.value
+  ) {
+    return [];
+  }
+  const pusher = mySeat.value.pieces.find(
+    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
+  );
+  if (!pusher) {
+    return [];
+  }
+  const pusherCell: Cell = { row: pusher.row, col: pusher.col };
+  const out: PushAffordance[] = [];
+  for (const target of game.unfinishedBoardPieces) {
+    if (target.trapped) {
+      continue;
+    }
+    if (target.row === pusher.row && target.col === pusher.col) {
+      continue;
+    }
+    const targetCell: Cell = { row: target.row, col: target.col };
+    if (chebyshevDistance(pusherCell, targetCell) !== 1) {
+      continue;
+    }
+    const dest = farSideCell(pusherCell, targetCell);
+    if (!isLandableCell(dest.row, dest.col)) {
+      continue;
+    }
+    // Target leaves its cell; exclude it from occupancy (mirrors server).
+    const occupied = buildOccupancy(targetCell);
+    if (occupied.has(cellKey(dest.row, dest.col))) {
+      continue;
+    }
+    out.push({
+      pusherSide: pusher.side,
+      targetSessionId: target.sessionId,
+      targetSide: target.side,
+      row: dest.row,
+      col: dest.col,
+      targetRow: target.row,
+      targetCol: target.col,
+    });
+  }
+  return out;
+});
+
+function pushAffordanceStyle(push: PushAffordance): Record<string, string> {
+  return {
+    '--prow': String(push.targetRow),
+    '--pcol': String(push.targetCol),
+  };
+}
+
 function listLegalReturnCellsHint(): Cell[] {
   if (!mySeat.value || game.steps <= 0 || mySeat.value.finishPlace !== 0) {
     return [];
@@ -1242,7 +1325,8 @@ function selectOwnSide(side: string) {
   selectedSide.value = side;
 }
 
-function beginMoveAnimation() {
+/** Lock board chrome for travel (default) or approach+back (rescue/push = 2×). */
+function beginMoveAnimation(durationMs: number = MOVE_ANIM_MS) {
   moveAnimating.value = true;
   if (moveAnimTimer !== undefined) {
     clearTimeout(moveAnimTimer);
@@ -1250,7 +1334,7 @@ function beginMoveAnimation() {
   moveAnimTimer = setTimeout(() => {
     moveAnimating.value = false;
     moveAnimTimer = undefined;
-  }, MOVE_ANIM_MS + 50);
+  }, durationMs + 50);
 }
 
 function submitMove(side: string, row: number, col: number) {
@@ -1275,30 +1359,20 @@ function onPieceClick(piece: BoardPiece) {
   selectOwnSide(piece.side);
 }
 
-/** Strip slot: select unfinished non-trapped, or confirm return on finished (SC-PIECE-09/10, SC-FINISH-13). */
+/** Strip slot: select unfinished non-trapped; finished body alone does not start return (SC-FINISH-16). */
 function onStripSlotClick(side: string) {
   if (!isInteractive.value) {
     return;
   }
-  if (isStripSlotFinished(side)) {
-    if (canReturn(side)) {
-      returnConfirmSide.value = side;
-      returnConfirmOpen.value = true;
-    }
-    return;
-  }
-  if (isStripSlotTrapped(side)) {
+  if (isStripSlotFinished(side) || isStripSlotTrapped(side)) {
     return;
   }
   selectOwnSide(side);
 }
 
-/** Confirm modal → enter return-mode (no step spend yet — SC-FINISH-13 / SC-MOVE-57). */
-function confirmReturnFromFinish() {
-  const side = returnConfirmSide.value;
-  returnConfirmOpen.value = false;
-  returnConfirmSide.value = null;
-  if (!side || !canReturn(side)) {
+/** Return affordance → enter return-mode without confirm (SC-FINISH-13 / SC-MOVE-57). */
+function onReturnAffordanceClick(side: string) {
+  if (!canReturn(side)) {
     return;
   }
   selectedSide.value = null;
@@ -1333,7 +1407,7 @@ function onRescueClick(side: string) {
   }
   returningSide.value = null;
   // Brief approach-and-back (D5); server does not move the rescuer.
-  beginMoveAnimation();
+  beginMoveAnimation(MOVE_ANIM_MS * 2);
   const seatId = mySeat.value.sessionId;
   rescueAnimOverride.value = {
     sessionId: seatId,
@@ -1347,6 +1421,43 @@ function onRescueClick(side: string) {
       side: rescuer.side,
       row: rescuer.row,
       col: rescuer.col,
+    };
+    window.setTimeout(() => {
+      rescueAnimOverride.value = null;
+    }, MOVE_ANIM_MS);
+  }, MOVE_ANIM_MS);
+}
+
+function onPushClick(push: PushAffordance) {
+  if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
+    return;
+  }
+  const pusher = mySeat.value.pieces.find(
+    (p) => p.side === push.pusherSide && !isFinishedPiece(p) && !p.trapped,
+  );
+  if (!pusher) {
+    return;
+  }
+  if (!game.sendPush(push.pusherSide, push.targetSessionId, push.targetSide, push.row, push.col)) {
+    return;
+  }
+  returningSide.value = null;
+  // Keep selection on the pusher (SC-MOVE-75); approach/back via rescueAnimOverride.
+  selectedSide.value = push.pusherSide;
+  beginMoveAnimation(MOVE_ANIM_MS * 2);
+  const seatId = mySeat.value.sessionId;
+  rescueAnimOverride.value = {
+    sessionId: seatId,
+    side: pusher.side,
+    row: push.targetRow,
+    col: push.targetCol,
+  };
+  window.setTimeout(() => {
+    rescueAnimOverride.value = {
+      sessionId: seatId,
+      side: pusher.side,
+      row: pusher.row,
+      col: pusher.col,
     };
     window.setTimeout(() => {
       rescueAnimOverride.value = null;
@@ -1587,8 +1698,6 @@ watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
     returningSide.value = null;
-    returnConfirmOpen.value = false;
-    returnConfirmSide.value = null;
   }
 });
 
@@ -2560,6 +2669,33 @@ body.body--dark .say-picker {
   background: #388e3c;
 }
 
+/* Push affordance over pushable target (SC-MOVE-74 — same green family as rescue). */
+.push-affordance {
+  position: absolute;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: #fff;
+  background: rgba(67, 160, 71, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
+}
+
+.push-affordance:hover {
+  background: #388e3c;
+}
+
 /* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27). */
 .grille-overlay {
   position: absolute;
@@ -2671,8 +2807,7 @@ body.body--dark .say-picker {
 }
 
 .my-tourist-slots--interactive
-  .my-tourist-slot:not(.my-tourist-slot--finished):not(.my-tourist-slot--trapped),
-.my-tourist-slots--interactive .my-tourist-slot--returnable {
+  .my-tourist-slot:not(.my-tourist-slot--finished):not(.my-tourist-slot--trapped) {
   pointer-events: auto;
   cursor: pointer;
 }
@@ -2707,6 +2842,34 @@ body.body--dark .say-picker {
   filter: drop-shadow(0 0 1px #fff);
   pointer-events: none;
   z-index: 2;
+}
+
+/* Return affordance over finished strip tourist (SC-FINISH-13 — same green family as rescue/push). */
+.return-affordance {
+  position: absolute;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  color: #fff;
+  background: rgba(67, 160, 71, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  left: 50%;
+  top: -10px;
+  transform: translateX(-50%);
+}
+
+.return-affordance:hover {
+  background: #388e3c;
 }
 
 .my-tourist-chrome-grille {
@@ -2754,6 +2917,14 @@ body.body--dark .say-picker {
   .my-tourist-finish-icon {
     top: 0;
     right: 0;
+  }
+
+  .return-affordance {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+    top: -8px;
   }
 }
 </style>

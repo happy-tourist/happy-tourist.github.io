@@ -106,12 +106,10 @@ export default {
     soloUnlimitedModalOk: 'ОК',
     /** Rescue adjacent trapped tourist (SC-MOVE-54 UX). */
     rescueAffordance: 'Освободить туриста',
+    /** Push adjacent free tourist through far-side cell (SC-MOVE-74 UX). */
+    pushAffordance: 'Толкнуть туриста',
     /** Return finished tourist onto center ring (SC-FINISH-13). */
     returnAffordance: 'Вернуть на поле',
-    /** Confirm return-from-finish before ring highlights (SC-FINISH-13 / D5). */
-    returnConfirmModal: 'Вернуть на поле?',
-    returnConfirmYes: 'Да',
-    returnConfirmCancel: 'Нет',
     /** All-jail reset warning — own seat only (SC-MOVE-63). */
     allJailWarningModal: 'Все туристы попали в решётки. Они отправлены на стартовые клетки.',
     allJailWarningModalOk: 'ОК',

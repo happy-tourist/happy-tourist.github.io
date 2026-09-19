@@ -652,6 +652,48 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
+     * Push an adjacent free piece through its far-side cell (−1 step).
+     * Relocates the target only; pusher stays. Server validates geometry / landable.
+     * @returns true if the message was sent.
+     */
+    sendPush(
+      pusherSide: string,
+      targetSessionId: string,
+      targetSide: string,
+      row: number,
+      col: number,
+    ): boolean {
+      if (
+        !this.room ||
+        this.phase !== 'playing' ||
+        !this.isMyTurn ||
+        this.isMySeatFinished ||
+        this.isMySeatTimeExpired ||
+        this.steps <= 0 ||
+        typeof pusherSide !== 'string' ||
+        pusherSide.length === 0 ||
+        typeof targetSessionId !== 'string' ||
+        targetSessionId.length === 0 ||
+        typeof targetSide !== 'string' ||
+        targetSide.length === 0 ||
+        typeof row !== 'number' ||
+        typeof col !== 'number' ||
+        !Number.isInteger(row) ||
+        !Number.isInteger(col)
+      ) {
+        return false;
+      }
+      this.room.send('push', {
+        pusherSide,
+        targetSessionId,
+        targetSide,
+        row,
+        col,
+      });
+      return true;
+    },
+
+    /**
      * Return a finished own piece onto a legal center-ring cell (−1 step).
      * Server rejects illegal ring / occupancy / hole / finishPlace ≠ 0.
      * @returns true if the message was sent.
