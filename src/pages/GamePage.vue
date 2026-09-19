@@ -879,6 +879,11 @@ const soloUnlimitedModalOpen = ref(false);
 /** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
 const grilleOverlays = ref<GrilleOverlay[]>([]);
 const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/**
+ * Holding grille keys deferred until catapult hop queue idle (SC-BOARD-29/30).
+ * Prevents early empty grille on final cell during prior catapult presentation.
+ */
+const pendingGrilleDropKeys = ref(new Set<string>());
 /** Strip-slot grille phases keyed by side (SC-PIECE-31) — same timing as board. */
 const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
 const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1059,10 +1064,13 @@ const boardPieces = computed((): BoardPiece[] => {
 /**
  * Move chrome / submit only in playing; lock when finished, time-expired, or any
  * board presentation anim (land-before-catapult / move / grille / catapult / finish /
- * fling — SC-BOARD-27).
+ * fling / deferred grille — SC-BOARD-27/29/30).
  */
 const isBoardBusy = computed(() => {
   if (moveAnimating.value || flingTravelActive.value || catapultPresentationBusy.value) {
+    return true;
+  }
+  if (pendingGrilleDropKeys.value.size > 0) {
     return true;
   }
   if (catapultPinByPieceKey.value.size > 0 || catapultVisualByKey.value.size > 0) {
@@ -1902,6 +1910,7 @@ watch(
 /**
  * Sync revealed holding grilles → drop on appear, rise+vanish on clear (SC-BOARD-18/19).
  * Mid-join / remount shows hold without drop.
+ * While catapult hop queue is presenting, defer new drops (SC-BOARD-29/30).
  */
 watch(
   () => game.holdingGrilleKeys.slice(),
@@ -1918,35 +1927,28 @@ watch(
       if (!cell) {
         continue;
       }
-      grilleOverlays.value = [
-        ...grilleOverlays.value.filter((g) => g.key !== key),
-        {
-          key,
-          row: cell.row,
-          col: cell.col,
-          phase: isInitial ? 'hold' : 'drop',
-        },
-      ];
-      const existing = grilleTimers.get(key);
-      if (existing !== undefined) {
-        clearTimeout(existing);
+      // Defer grille drop until catapult hops finish (SC-BOARD-29/30).
+      if (
+        !isInitial &&
+        (catapultPlaying || catapultQueue.length > 0 || catapultOverlays.value.length > 0)
+      ) {
+        const pending = new Set(pendingGrilleDropKeys.value);
+        pending.add(key);
+        pendingGrilleDropKeys.value = pending;
+        continue;
       }
-      if (!isInitial) {
-        grilleTimers.set(
-          key,
-          setTimeout(() => {
-            grilleTimers.delete(key);
-            grilleOverlays.value = grilleOverlays.value.map((g) =>
-              g.key === key && g.phase === 'drop' ? { ...g, phase: 'hold' } : g,
-            );
-          }, GRILLE_ANIM_MS),
-        );
-      }
+      startGrilleDropOverlay(key, cell, isInitial ? 'hold' : 'drop');
     }
 
     for (const key of prevSet) {
       if (nextSet.has(key)) {
         continue;
+      }
+      // Cleared before deferred drop — drop the pending entry.
+      if (pendingGrilleDropKeys.value.has(key)) {
+        const pending = new Set(pendingGrilleDropKeys.value);
+        pending.delete(key);
+        pendingGrilleDropKeys.value = pending;
       }
       grilleOverlays.value = grilleOverlays.value.map((g) =>
         g.key === key ? { ...g, phase: 'rise' } : g,
@@ -1966,6 +1968,59 @@ watch(
   },
   { immediate: true },
 );
+
+function startGrilleDropOverlay(key: string, cell: Cell, phase: GrillePhase) {
+  grilleOverlays.value = [
+    ...grilleOverlays.value.filter((g) => g.key !== key),
+    {
+      key,
+      row: cell.row,
+      col: cell.col,
+      phase,
+    },
+  ];
+  const existing = grilleTimers.get(key);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+  }
+  if (phase === 'drop') {
+    grilleTimers.set(
+      key,
+      setTimeout(() => {
+        grilleTimers.delete(key);
+        grilleOverlays.value = grilleOverlays.value.map((g) =>
+          g.key === key && g.phase === 'drop' ? { ...g, phase: 'hold' } : g,
+        );
+      }, GRILLE_ANIM_MS),
+    );
+  }
+}
+
+/** Flush deferred grille drops after catapult queue drains (SC-BOARD-29/30). */
+function flushPendingGrilleDrops() {
+  if (catapultPlaying || catapultQueue.length > 0 || catapultOverlays.value.length > 0) {
+    return;
+  }
+  const pending = pendingGrilleDropKeys.value;
+  if (pending.size === 0) {
+    return;
+  }
+  const stillHolding = new Set(game.holdingGrilleKeys);
+  pendingGrilleDropKeys.value = new Set();
+  for (const key of pending) {
+    if (!stillHolding.has(key)) {
+      continue;
+    }
+    if (grilleOverlays.value.some((g) => g.key === key)) {
+      continue;
+    }
+    const cell = parseCellKey(key);
+    if (!cell) {
+      continue;
+    }
+    startGrilleDropOverlay(key, cell, 'drop');
+  }
+}
 
 /**
  * Sync revealing catapults → sequential queue: land → overlay → (travel) → next
@@ -2286,8 +2341,7 @@ function enqueueCatapultPresentations(
   const brokenSet = new Set(next.broken);
   const prevPos = pk ? prev.pieces.find((p) => p.key === pk) : undefined;
   const nextPos = pk ? next.pieces.find((p) => p.key === pk) : undefined;
-  const finishes =
-    pk !== null && next.finished.includes(pk) && !prev.finished.includes(pk);
+  const finishes = pk !== null && next.finished.includes(pk) && !prev.finished.includes(pk);
   let finalPos: Cell | null = nextPos ? { row: nextPos.row, col: nextPos.col } : null;
   if (!finalPos && finishes && pk) {
     finalPos = syncCellForPieceKey(pk);
@@ -2375,6 +2429,7 @@ async function pumpCatapultQueue() {
   const item = catapultQueue[0];
   if (!item) {
     refreshCatapultPresentationBusy();
+    flushPendingGrilleDrops();
     return;
   }
   catapultPlaying = true;
@@ -2924,6 +2979,7 @@ onUnmounted(() => {
   suppressPieceTransitionKeys.value = new Set();
   catapultDeferFinishKeys.value = new Set();
   flingTravelActive.value = false;
+  pendingGrilleDropKeys.value = new Set();
   rescueAnimOverride.value = null;
 });
 </script>
