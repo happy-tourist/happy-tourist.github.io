@@ -194,7 +194,7 @@
           :class="{
             'piece--own': isOwnPiece(piece) && !piece.disappearing && !piece.trapped,
             'piece--trapped': piece.trapped,
-            'piece--no-transition': !pieceTransitionsReady,
+            'piece--no-transition': !pieceTransitionsReady || suppressPieceTransition(piece),
             'piece--disappearing': piece.disappearing,
           }"
           :src="touristSrc(piece.touristId)"
@@ -216,11 +216,17 @@
           alt=""
           :style="grilleStyle(grille)"
         />
-        <!-- Catapult reveal — fade in→out ~1000 ms; broken on vanish (SC-BOARD-22…24). -->
+        <!-- Catapult reveal — sequential overlay; broken 300+300 hold (SC-BOARD-23…26). -->
         <img
           v-for="catapult in catapultOverlays"
           :key="`catapult-${catapult.key}`"
-          class="catapult-overlay catapult-overlay--reveal"
+          class="catapult-overlay"
+          :class="{
+            'catapult-overlay--reveal': catapult.phase === 'fade',
+            'catapult-overlay--intact': catapult.phase === 'intact',
+            'catapult-overlay--broken-hold': catapult.phase === 'broken-hold',
+            'catapult-overlay--vanish': catapult.phase === 'vanish',
+          }"
           :src="catapult.showBroken ? catapultBrokenSrc : catapultSrc"
           alt=""
           :style="catapultStyle(catapult)"
@@ -408,7 +414,7 @@
 
                 <!-- End-turn right-center own avatar — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
                 <button
-                  v-if="canSendEndTurn"
+                  v-if="canSendEndTurn && !isBoardBusy"
                   type="button"
                   class="end-turn-affordance"
                   :aria-label="$t('game.endTurn')"
@@ -523,8 +529,12 @@ const MOVE_ANIM_MS = 250;
 const FINISH_FADE_MS = 200;
 /** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
 const GRILLE_ANIM_MS = 1000;
-/** Catapult fade in→out presentation (SC-BOARD-23/24 / D5). */
+/** Successful catapult fade in→out (SC-BOARD-23 / D5). */
 const CATAPULT_ANIM_MS = 1000;
+/** Broken timeline holds: intact then broken (SC-BOARD-24 / D5). */
+const CATAPULT_BROKEN_HOLD_MS = 300;
+/** Broken vanish fade after second hold. */
+const CATAPULT_BROKEN_VANISH_MS = 200;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -588,15 +598,32 @@ interface GrilleOverlay {
   phase: GrillePhase;
 }
 
+/** Catapult overlay phase — successful fade vs broken hold timeline (SC-BOARD-23/24). */
+type CatapultOverlayPhase = 'fade' | 'intact' | 'broken-hold' | 'vanish';
+
 /** Short-lived catapult reveal overlay (SC-BOARD-22…24). */
 interface CatapultOverlay {
   key: string;
   row: number;
   col: number;
-  /** Server marked no fling dest — broken art on fade-out. */
+  /** Server marked no fling dest — broken art after intact hold. */
   broken: boolean;
-  /** True after mid-anim swap to broken artwork. */
+  /** True after swap to broken artwork. */
   showBroken: boolean;
+  phase: CatapultOverlayPhase;
+}
+
+/** One step in sequential catapult presentation queue (SC-BOARD-26). */
+interface CatapultQueueItem {
+  key: string;
+  row: number;
+  col: number;
+  broken: boolean;
+  pieceKey: string;
+  /** After vanish: travel here; null if broken / stay. */
+  travelTo: Cell | null;
+  /** Center finish after vanish + travel (SC-FINISH-19). */
+  finishes: boolean;
 }
 
 interface RescueAffordance {
@@ -850,10 +877,28 @@ const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
 const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleStyle = { '--grille-anim-ms': `${GRILLE_ANIM_MS}ms` };
-/** Catapult fade overlays (SC-BOARD-22…24) — local timers own lifetime. */
+/** Catapult overlays — only the active queue item (SC-BOARD-23…26). */
 const catapultOverlays = ref<CatapultOverlay[]>([]);
-const catapultTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const catapultBrokenTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** Keys already enqueued/played this room (avoid re-play when sync clears/re-adds). */
+const catapultEnqueuedKeys = new Set<string>();
+/** Sequential presentation queue — no chain cap (SC-BOARD-26). */
+const catapultQueue: CatapultQueueItem[] = [];
+let catapultPlaying = false;
+/** Reactive busy flag for queue / active play (SC-BOARD-27). */
+const catapultPresentationBusy = ref(false);
+/** Pin piece on catapult cell while overlay runs (SC-BOARD-25). */
+const catapultPinByPieceKey = ref(new Map<string, Cell>());
+/**
+ * Intermediate visual cell during chain travel when sync is already past that cell.
+ */
+const catapultVisualByKey = ref(new Map<string, Cell>());
+/** Skip CSS travel while snapping to pin / intermediate (SC-BOARD-25). */
+const suppressPieceTransitionKeys = ref(new Set<string>());
+/** Finish watch defers travel/fade until catapult vanish (SC-FINISH-19). */
+const catapultDeferFinishKeys = ref(new Set<string>());
+/** True while deferred fling travel runs after vanish. */
+const flingTravelActive = ref(false);
+const catapultDelayTimers = new Set<ReturnType<typeof setTimeout>>();
 /** Temporary rescuer slide toward trapped cell (D5 — server coords unchanged). */
 const rescueAnimOverride = ref<{
   sessionId: string;
@@ -968,10 +1013,15 @@ function isStripSlotTrapped(side: string): boolean {
 /** Personal strip only after pieces materialize (SC-PIECE-17). */
 const hasOwnPieces = computed(() => Boolean(mySeat.value && mySeat.value.pieces.length > 0));
 
-/** Flat board overlay: unfinished + short-lived disappearing finishers. */
+/**
+ * Flat board overlay: unfinished + short-lived disappearing finishers.
+ * Catapult→center: keep finished piece visible (no fade) while deferred for pin
+ * (SC-BOARD-25 / SC-FINISH-19) — `disappearing` only after overlay vanish.
+ */
 const boardPieces = computed((): BoardPiece[] => {
   const out: BoardPiece[] = [];
   const fading = disappearingKeys.value;
+  const deferredFinish = catapultDeferFinishKeys.value;
 
   for (const piece of game.unfinishedBoardPieces) {
     out.push({ ...piece });
@@ -983,7 +1033,7 @@ const boardPieces = computed((): BoardPiece[] => {
         continue;
       }
       const key = pieceKey(seat.sessionId, piece.side);
-      if (!fading.has(key)) {
+      if (!fading.has(key) && !deferredFinish.has(key)) {
         continue;
       }
       out.push({
@@ -992,21 +1042,47 @@ const boardPieces = computed((): BoardPiece[] => {
         side: piece.side,
         row: piece.row,
         col: piece.col,
-        disappearing: true,
+        // Fade only after deferred catapult vanish releases finish travel.
+        disappearing: fading.has(key) && !deferredFinish.has(key),
       });
     }
   }
   return out;
 });
 
-/** Move chrome / submit only in playing; lock when finished or time-expired (SC-MOVE-20/31/32). */
+/**
+ * Move chrome / submit only in playing; lock when finished, time-expired, or any
+ * board presentation anim (move / grille / catapult / finish / fling — SC-BOARD-27).
+ */
+const isBoardBusy = computed(() => {
+  if (moveAnimating.value || flingTravelActive.value || catapultPresentationBusy.value) {
+    return true;
+  }
+  if (catapultPinByPieceKey.value.size > 0 || catapultVisualByKey.value.size > 0) {
+    return true;
+  }
+  if (catapultOverlays.value.length > 0) {
+    return true;
+  }
+  if (grilleOverlays.value.some((g) => g.phase === 'drop' || g.phase === 'rise')) {
+    return true;
+  }
+  if (disappearingKeys.value.size > 0) {
+    return true;
+  }
+  if (returnAnimFromByKey.value.size > 0 || finishAnimFromByKey.value.size > 0) {
+    return true;
+  }
+  return false;
+});
+
 const isInteractive = computed(
   () =>
     isPlaying.value &&
     isMyTurn.value &&
     !isMySeatFinished.value &&
     !isMySeatTimeExpired.value &&
-    !moveAnimating.value,
+    !isBoardBusy.value,
 );
 
 /** Fullscreen countdown for every client in the room (SC-START-08). */
@@ -1332,6 +1408,10 @@ function isOwnPiece(piece: BoardPiece): boolean {
   return Boolean(mySeat.value && piece.sessionId === mySeat.value.sessionId);
 }
 
+function suppressPieceTransition(piece: BoardPiece): boolean {
+  return suppressPieceTransitionKeys.value.has(pieceKey(piece.sessionId, piece.side));
+}
+
 function pieceStyle(piece: BoardPiece): Record<string, string> {
   const key = pieceKey(piece.sessionId, piece.side);
   const returnFrom = returnAnimFromByKey.value.get(key);
@@ -1346,6 +1426,20 @@ function pieceStyle(piece: BoardPiece): Record<string, string> {
     return {
       '--prow': String(finishFrom.row),
       '--pcol': String(finishFrom.col),
+    };
+  }
+  const catapultPin = catapultPinByPieceKey.value.get(key);
+  if (catapultPin) {
+    return {
+      '--prow': String(catapultPin.row),
+      '--pcol': String(catapultPin.col),
+    };
+  }
+  const catapultVisual = catapultVisualByKey.value.get(key);
+  if (catapultVisual) {
+    return {
+      '--prow': String(catapultVisual.row),
+      '--pcol': String(catapultVisual.col),
     };
   }
   const override = rescueAnimOverride.value;
@@ -1711,6 +1805,9 @@ function onReadyClick() {
 }
 
 function onEndTurnClick() {
+  if (isBoardBusy.value || !canSendEndTurn.value) {
+    return;
+  }
   sayPickerOpen.value = false;
   game.sendEndTurn();
 }
@@ -1864,91 +1961,442 @@ watch(
 );
 
 /**
- * Sync revealing catapults → fade in then out ~1000 ms; broken art on fade-out
- * when no fling dest (SC-BOARD-22…24 / D5). Local timers keep overlay until anim ends
- * even if server clears keys early. Piece travel / finish use existing sync watchers
- * (SC-FINISH-19).
+ * Sync revealing catapults → sequential queue: overlay → (travel) → next
+ * (SC-BOARD-23…26 / D5/D11). Local presentation owns timing; server may clear
+ * keys early. Mid-join skips replay.
  */
 watch(
   () => ({
     revealing: game.revealingCatapultKeys.slice(),
     broken: game.brokenCatapultKeys.slice(),
+    pieces: game.unfinishedBoardPieces.map((p) => ({
+      key: pieceKey(p.sessionId, p.side),
+      row: p.row,
+      col: p.col,
+    })),
+    finished: game.seats.flatMap((s) =>
+      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.side)),
+    ),
   }),
-  (next) => {
-    const nextSet = new Set(next.revealing);
-    const brokenSet = new Set(next.broken);
-    const shown = new Set(catapultOverlays.value.map((c) => c.key));
-
-    for (const key of nextSet) {
-      if (shown.has(key)) {
-        // Update broken flag if sync arrives after reveal start.
-        if (brokenSet.has(key)) {
-          catapultOverlays.value = catapultOverlays.value.map((c) => {
-            if (c.key !== key || c.broken) {
-              return c;
-            }
-            // Late broken sync: if mid-swap already ran, show broken immediately.
-            const midDone = !catapultBrokenTimers.has(key);
-            return { ...c, broken: true, showBroken: midDone || c.showBroken };
-          });
-        }
-        continue;
+  (next, prev) => {
+    if (prev === undefined) {
+      for (const key of next.revealing) {
+        catapultEnqueuedKeys.add(key);
       }
-      const cell = parseCellKey(key);
-      if (!cell) {
-        continue;
-      }
-      const broken = brokenSet.has(key);
-      catapultOverlays.value = [
-        ...catapultOverlays.value.filter((c) => c.key !== key),
-        {
-          key,
-          row: cell.row,
-          col: cell.col,
-          broken,
-          showBroken: false,
-        },
-      ];
-
-      const existingBroken = catapultBrokenTimers.get(key);
-      if (existingBroken !== undefined) {
-        clearTimeout(existingBroken);
-      }
-      const existingDone = catapultTimers.get(key);
-      if (existingDone !== undefined) {
-        clearTimeout(existingDone);
-      }
-
-      // Mid-anim: swap to broken artwork for fade-out portion (SC-BOARD-24).
-      catapultBrokenTimers.set(
-        key,
-        setTimeout(
-          () => {
-            catapultBrokenTimers.delete(key);
-            catapultOverlays.value = catapultOverlays.value.map((c) =>
-              c.key === key && c.broken ? { ...c, showBroken: true } : c,
-            );
-          },
-          Math.floor(CATAPULT_ANIM_MS / 2),
-        ),
-      );
-
-      catapultTimers.set(
-        key,
-        setTimeout(() => {
-          catapultTimers.delete(key);
-          const mid = catapultBrokenTimers.get(key);
-          if (mid !== undefined) {
-            clearTimeout(mid);
-            catapultBrokenTimers.delete(key);
-          }
-          catapultOverlays.value = catapultOverlays.value.filter((c) => c.key !== key);
-        }, CATAPULT_ANIM_MS),
-      );
+      return;
     }
+    enqueueCatapultPresentations(next, prev);
   },
-  { immediate: true, deep: true },
+  { flush: 'sync', deep: true, immediate: true },
 );
+
+function catapultDelay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      catapultDelayTimers.delete(timer);
+      resolve();
+    }, ms);
+    catapultDelayTimers.add(timer);
+  });
+}
+
+function refreshCatapultPresentationBusy() {
+  catapultPresentationBusy.value =
+    catapultPlaying || catapultQueue.length > 0 || catapultOverlays.value.length > 0;
+}
+
+function parsePieceKey(key: string): { sessionId: string; side: string } | null {
+  const colon = key.indexOf(':');
+  if (colon <= 0) {
+    return null;
+  }
+  return { sessionId: key.slice(0, colon), side: key.slice(colon + 1) };
+}
+
+function syncCellForPieceKey(key: string): Cell | null {
+  const parsed = parsePieceKey(key);
+  if (!parsed) {
+    return null;
+  }
+  const seat = game.seats.find((s) => s.sessionId === parsed.sessionId);
+  const piece = seat?.pieces.find((p) => p.side === parsed.side);
+  if (!piece) {
+    return null;
+  }
+  return { row: piece.row, col: piece.col };
+}
+
+function setCatapultPin(key: string, cell: Cell) {
+  const next = new Map(catapultPinByPieceKey.value);
+  next.set(key, cell);
+  catapultPinByPieceKey.value = next;
+}
+
+function clearCatapultPin(key: string) {
+  if (!catapultPinByPieceKey.value.has(key)) {
+    return;
+  }
+  const next = new Map(catapultPinByPieceKey.value);
+  next.delete(key);
+  catapultPinByPieceKey.value = next;
+}
+
+function setCatapultVisual(key: string, cell: Cell) {
+  const next = new Map(catapultVisualByKey.value);
+  next.set(key, cell);
+  catapultVisualByKey.value = next;
+}
+
+function clearCatapultVisual(key: string) {
+  if (!catapultVisualByKey.value.has(key)) {
+    return;
+  }
+  const next = new Map(catapultVisualByKey.value);
+  next.delete(key);
+  catapultVisualByKey.value = next;
+}
+
+function addSuppressTransition(key: string) {
+  const next = new Set(suppressPieceTransitionKeys.value);
+  next.add(key);
+  suppressPieceTransitionKeys.value = next;
+}
+
+function removeSuppressTransition(key: string) {
+  if (!suppressPieceTransitionKeys.value.has(key)) {
+    return;
+  }
+  const next = new Set(suppressPieceTransitionKeys.value);
+  next.delete(key);
+  suppressPieceTransitionKeys.value = next;
+}
+
+/** Mark finish travel owned by catapult queue — do not fade yet (SC-FINISH-19). */
+function markDeferredFinish(key: string) {
+  const next = new Set(catapultDeferFinishKeys.value);
+  next.add(key);
+  catapultDeferFinishKeys.value = next;
+}
+
+function resolveFlingPieceKey(
+  firstCell: Cell,
+  prev: {
+    pieces: Array<{ key: string; row: number; col: number }>;
+    finished: string[];
+  },
+  next: {
+    pieces: Array<{ key: string; row: number; col: number }>;
+    finished: string[];
+  },
+): string | null {
+  const prevByKey = new Map(prev.pieces.map((p) => [p.key, p]));
+  const prevFinished = new Set(prev.finished);
+
+  for (const p of prev.pieces) {
+    if (p.row === firstCell.row && p.col === firstCell.col) {
+      return p.key;
+    }
+  }
+  for (const p of next.pieces) {
+    if (p.row === firstCell.row && p.col === firstCell.col) {
+      return p.key;
+    }
+  }
+  for (const fk of next.finished) {
+    if (prevFinished.has(fk)) {
+      continue;
+    }
+    const prevPos = prevByKey.get(fk);
+    if (prevPos && prevPos.row === firstCell.row && prevPos.col === firstCell.col) {
+      return fk;
+    }
+  }
+
+  const moved: string[] = [];
+  for (const p of next.pieces) {
+    const before = prevByKey.get(p.key);
+    if (!before || before.row !== p.row || before.col !== p.col) {
+      moved.push(p.key);
+    }
+  }
+  for (const fk of next.finished) {
+    if (prevFinished.has(fk)) {
+      continue;
+    }
+    if (prevByKey.has(fk) && !moved.includes(fk)) {
+      moved.push(fk);
+    }
+  }
+  if (moved.length === 1) {
+    return moved[0]!;
+  }
+  for (const k of moved) {
+    const before = prevByKey.get(k);
+    if (!before) {
+      continue;
+    }
+    if (before.row === firstCell.row && before.col === firstCell.col) {
+      return k;
+    }
+    if (chebyshevDistance(before, firstCell) <= 1) {
+      return k;
+    }
+  }
+  return null;
+}
+
+function enqueueCatapultPresentations(
+  next: {
+    revealing: string[];
+    broken: string[];
+    pieces: Array<{ key: string; row: number; col: number }>;
+    finished: string[];
+  },
+  prev: {
+    revealing: string[];
+    broken: string[];
+    pieces: Array<{ key: string; row: number; col: number }>;
+    finished: string[];
+  },
+) {
+  const prevRevealing = new Set(prev.revealing);
+  const orderedNew = next.revealing.filter(
+    (key) => !prevRevealing.has(key) && !catapultEnqueuedKeys.has(key),
+  );
+  if (orderedNew.length === 0) {
+    return;
+  }
+
+  const firstCell = parseCellKey(orderedNew[0]!);
+  if (!firstCell) {
+    return;
+  }
+
+  const pk = resolveFlingPieceKey(firstCell, prev, next);
+  if (!pk) {
+    for (const key of orderedNew) {
+      catapultEnqueuedKeys.add(key);
+    }
+    return;
+  }
+
+  const brokenSet = new Set(next.broken);
+  const nextPos = next.pieces.find((p) => p.key === pk);
+  const finishes = next.finished.includes(pk) && !prev.finished.includes(pk);
+  let finalPos: Cell | null = nextPos ? { row: nextPos.row, col: nextPos.col } : null;
+  if (!finalPos && finishes) {
+    finalPos = syncCellForPieceKey(pk);
+  }
+
+  const cells: Cell[] = [];
+  for (const key of orderedNew) {
+    const cell = parseCellKey(key);
+    if (!cell) {
+      return;
+    }
+    cells.push(cell);
+  }
+
+  for (let i = 0; i < orderedNew.length; i++) {
+    const key = orderedNew[i]!;
+    const cell = cells[i]!;
+    const broken = brokenSet.has(key);
+    catapultEnqueuedKeys.add(key);
+
+    let travelTo: Cell | null = null;
+    if (!broken) {
+      if (i < cells.length - 1) {
+        travelTo = cells[i + 1]!;
+      } else if (finalPos && (finalPos.row !== cell.row || finalPos.col !== cell.col)) {
+        travelTo = finalPos;
+      }
+    }
+
+    const itemFinishes = finishes && i === orderedNew.length - 1 && !broken && Boolean(travelTo);
+
+    if (itemFinishes) {
+      markDeferredFinish(pk);
+    }
+
+    catapultQueue.push({
+      key,
+      row: cell.row,
+      col: cell.col,
+      broken,
+      pieceKey: pk,
+      travelTo,
+      finishes: itemFinishes,
+    });
+  }
+
+  // Pin immediately (same sync flush) so the piece does not flash at sync dest (SC-BOARD-25).
+  if (!catapultPlaying) {
+    const head = catapultQueue[0];
+    if (head) {
+      addSuppressTransition(head.pieceKey);
+      clearCatapultVisual(head.pieceKey);
+      setCatapultPin(head.pieceKey, { row: head.row, col: head.col });
+    }
+  }
+
+  refreshCatapultPresentationBusy();
+  void pumpCatapultQueue();
+}
+
+async function pumpCatapultQueue() {
+  if (catapultPlaying) {
+    return;
+  }
+  const item = catapultQueue[0];
+  if (!item) {
+    refreshCatapultPresentationBusy();
+    return;
+  }
+  catapultPlaying = true;
+  refreshCatapultPresentationBusy();
+  try {
+    await runCatapultPresentation(item);
+  } finally {
+    catapultQueue.shift();
+    catapultPlaying = false;
+    refreshCatapultPresentationBusy();
+    void pumpCatapultQueue();
+  }
+}
+
+async function runCatapultPresentation(item: CatapultQueueItem) {
+  addSuppressTransition(item.pieceKey);
+  clearCatapultVisual(item.pieceKey);
+  setCatapultPin(item.pieceKey, { row: item.row, col: item.col });
+  await nextTick();
+  removeSuppressTransition(item.pieceKey);
+
+  catapultOverlays.value = [
+    {
+      key: item.key,
+      row: item.row,
+      col: item.col,
+      broken: item.broken,
+      showBroken: false,
+      phase: item.broken ? 'intact' : 'fade',
+    },
+  ];
+  refreshCatapultPresentationBusy();
+
+  if (item.broken) {
+    await catapultDelay(CATAPULT_BROKEN_HOLD_MS);
+    catapultOverlays.value = catapultOverlays.value.map((c) =>
+      c.key === item.key ? { ...c, showBroken: true, phase: 'broken-hold' as const } : c,
+    );
+    await catapultDelay(CATAPULT_BROKEN_HOLD_MS);
+    catapultOverlays.value = catapultOverlays.value.map((c) =>
+      c.key === item.key ? { ...c, phase: 'vanish' as const } : c,
+    );
+    await catapultDelay(CATAPULT_BROKEN_VANISH_MS);
+  } else {
+    await catapultDelay(CATAPULT_ANIM_MS);
+  }
+
+  catapultOverlays.value = catapultOverlays.value.filter((c) => c.key !== item.key);
+  refreshCatapultPresentationBusy();
+
+  if (item.travelTo) {
+    await runDeferredFlingTravel(item);
+  } else {
+    clearCatapultPin(item.pieceKey);
+    clearCatapultVisual(item.pieceKey);
+    if (catapultDeferFinishKeys.value.has(item.pieceKey) && item.finishes) {
+      await releaseDeferredFinishAfterVanish(item.pieceKey, {
+        row: item.row,
+        col: item.col,
+      });
+    }
+  }
+}
+
+async function runDeferredFlingTravel(item: CatapultQueueItem) {
+  const to = item.travelTo;
+  if (!to) {
+    return;
+  }
+  flingTravelActive.value = true;
+  const from: Cell = { row: item.row, col: item.col };
+
+  if (item.finishes) {
+    clearCatapultPin(item.pieceKey);
+    clearCatapultVisual(item.pieceKey);
+    await releaseDeferredFinishAfterVanish(item.pieceKey, from);
+    flingTravelActive.value = false;
+    return;
+  }
+
+  // Hold pin one frame, then release toward travelTo (sync may already be past).
+  addSuppressTransition(item.pieceKey);
+  setCatapultPin(item.pieceKey, from);
+  await nextTick();
+  void document.body.offsetHeight;
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+  removeSuppressTransition(item.pieceKey);
+
+  clearCatapultPin(item.pieceKey);
+  const syncPos = syncCellForPieceKey(item.pieceKey);
+  if (syncPos && syncPos.row === to.row && syncPos.col === to.col) {
+    clearCatapultVisual(item.pieceKey);
+  } else {
+    setCatapultVisual(item.pieceKey, to);
+  }
+
+  await catapultDelay(MOVE_ANIM_MS + 50);
+  flingTravelActive.value = false;
+}
+
+async function releaseDeferredFinishAfterVanish(pieceKeyStr: string, from: Cell) {
+  const deferred = new Set(catapultDeferFinishKeys.value);
+  deferred.delete(pieceKeyStr);
+  catapultDeferFinishKeys.value = deferred;
+
+  const fading = new Set(disappearingKeys.value);
+  fading.add(pieceKeyStr);
+  disappearingKeys.value = fading;
+
+  const nextFrom = new Map(finishAnimFromByKey.value);
+  nextFrom.set(pieceKeyStr, from);
+  finishAnimFromByKey.value = nextFrom;
+
+  await nextTick();
+  void document.body.offsetHeight;
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+
+  const cleared = new Map(finishAnimFromByKey.value);
+  if (cleared.delete(pieceKeyStr)) {
+    finishAnimFromByKey.value = cleared;
+  }
+
+  const existing = finishFadeTimers.get(pieceKeyStr);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+  }
+  await new Promise<void>((resolve) => {
+    finishFadeTimers.set(
+      pieceKeyStr,
+      setTimeout(() => {
+        finishFadeTimers.delete(pieceKeyStr);
+        const next = new Set(disappearingKeys.value);
+        next.delete(pieceKeyStr);
+        disappearingKeys.value = next;
+        resolve();
+      }, MOVE_ANIM_MS + FINISH_FADE_MS),
+    );
+  });
+}
 
 /**
  * Mirror trapped → chrome grille drop/rise on strip slots (SC-PIECE-31 / D8).
@@ -2127,6 +2575,7 @@ watch(
  * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01/18).
  * Push/move→center: one painted frame at last-known pre-finish cell (SC-MOVE-76 / SC-FINISH-17 / D10–D11).
  * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
+ * Catapult fling→center: deferred until overlay vanish (SC-FINISH-19 / SC-BOARD-23).
  * flush sync so disappearingKeys / returnAnimFrom / finishAnimFrom update before boardPieces re-render.
  * Initial sync skipped — already-finished / mid-join pieces stay as-is.
  */
@@ -2146,6 +2595,12 @@ watch(
       if (prev.has(key) || disappearingKeys.value.has(key)) {
         continue;
       }
+
+      // Catapult queue owns finish travel after vanish — no fade yet (SC-FINISH-19).
+      if (catapultDeferFinishKeys.value.has(key)) {
+        continue;
+      }
+
       const next = new Set(disappearingKeys.value);
       next.add(key);
       disappearingKeys.value = next;
@@ -2323,14 +2778,19 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   chromeGrilleTimers.clear();
-  for (const timer of catapultTimers.values()) {
+  for (const timer of catapultDelayTimers) {
     clearTimeout(timer);
   }
-  catapultTimers.clear();
-  for (const timer of catapultBrokenTimers.values()) {
-    clearTimeout(timer);
-  }
-  catapultBrokenTimers.clear();
+  catapultDelayTimers.clear();
+  catapultQueue.length = 0;
+  catapultPlaying = false;
+  catapultPresentationBusy.value = false;
+  catapultOverlays.value = [];
+  catapultPinByPieceKey.value = new Map();
+  catapultVisualByKey.value = new Map();
+  suppressPieceTransitionKeys.value = new Set();
+  catapultDeferFinishKeys.value = new Set();
+  flingTravelActive.value = false;
   rescueAnimOverride.value = null;
 });
 </script>
@@ -2923,7 +3383,7 @@ body.body--dark .say-picker {
   animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
-/* Catapult reveal — fade in then out ~1000 ms (SC-BOARD-23/24 / D5). */
+/* Catapult reveal — successful fade ~1000 ms; broken intact/hold/vanish (SC-BOARD-23/24). */
 .catapult-overlay {
   position: absolute;
   z-index: 3;
@@ -2941,6 +3401,15 @@ body.body--dark .say-picker {
   animation: catapult-reveal var(--catapult-anim-ms, 1000ms) ease-in-out both;
 }
 
+.catapult-overlay--intact,
+.catapult-overlay--broken-hold {
+  opacity: 1;
+}
+
+.catapult-overlay--vanish {
+  animation: catapult-broken-vanish 200ms ease-out both;
+}
+
 @keyframes catapult-reveal {
   0% {
     opacity: 0;
@@ -2949,6 +3418,15 @@ body.body--dark .say-picker {
     opacity: 1;
   }
   100% {
+    opacity: 0;
+  }
+}
+
+@keyframes catapult-broken-vanish {
+  from {
+    opacity: 1;
+  }
+  to {
     opacity: 0;
   }
 }
