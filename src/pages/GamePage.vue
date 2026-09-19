@@ -613,14 +613,20 @@ interface CatapultOverlay {
   phase: CatapultOverlayPhase;
 }
 
-/** One step in sequential catapult presentation queue (SC-BOARD-26). */
+/** One step in sequential catapult presentation queue (SC-BOARD-26/28). */
 interface CatapultQueueItem {
   key: string;
   row: number;
   col: number;
   broken: boolean;
-  pieceKey: string;
-  /** After vanish: travel here; null if broken / stay. */
+  /** Null when attribution failed — still show overlay (D13, no silent skip). */
+  pieceKey: string | null;
+  /**
+   * Visual cell before land onto the catapult (SC-BOARD-28).
+   * Null = already on cell / unknown — no fake step.
+   */
+  landFrom: Cell | null;
+  /** After vanish: travel here; null if broken / stay / no piece. */
   travelTo: Cell | null;
   /** Center finish after vanish + travel (SC-FINISH-19). */
   finishes: boolean;
@@ -1052,7 +1058,8 @@ const boardPieces = computed((): BoardPiece[] => {
 
 /**
  * Move chrome / submit only in playing; lock when finished, time-expired, or any
- * board presentation anim (move / grille / catapult / finish / fling — SC-BOARD-27).
+ * board presentation anim (land-before-catapult / move / grille / catapult / finish /
+ * fling — SC-BOARD-27).
  */
 const isBoardBusy = computed(() => {
   if (moveAnimating.value || flingTravelActive.value || catapultPresentationBusy.value) {
@@ -1961,9 +1968,11 @@ watch(
 );
 
 /**
- * Sync revealing catapults → sequential queue: overlay → (travel) → next
- * (SC-BOARD-23…26 / D5/D11). Local presentation owns timing; server may clear
+ * Sync revealing catapults → sequential queue: land → overlay → (travel) → next
+ * (SC-BOARD-23…28 / D5/D11/D13). Local presentation owns timing; server may clear
  * keys early. Mid-join skips replay.
+ * flush 'pre' (not 'sync'): seats+revealing from atomic mirror must not fire mid-tick
+ * with pieces already at fling dest and empty revealing (D13).
  */
 watch(
   () => ({
@@ -1987,7 +1996,7 @@ watch(
     }
     enqueueCatapultPresentations(next, prev);
   },
-  { flush: 'sync', deep: true, immediate: true },
+  { flush: 'pre', deep: true, immediate: true },
 );
 
 function catapultDelay(ms: number): Promise<void> {
@@ -2090,7 +2099,23 @@ function resolveFlingPieceKey(
   },
 ): string | null {
   const prevByKey = new Map(prev.pieces.map((p) => [p.key, p]));
+  const nextByKey = new Map(next.pieces.map((p) => [p.key, p]));
   const prevFinished = new Set(prev.finished);
+  const known = lastKnownBoardCellByKey.value;
+
+  // Prefer piece that left the catapult cell (coords transition), not "still on cell".
+  for (const [key, before] of prevByKey) {
+    if (before.row !== firstCell.row || before.col !== firstCell.col) {
+      continue;
+    }
+    const after = nextByKey.get(key);
+    if (!after || after.row !== before.row || after.col !== before.col) {
+      return key;
+    }
+    if (next.finished.includes(key) && !prevFinished.has(key)) {
+      return key;
+    }
+  }
 
   for (const p of prev.pieces) {
     if (p.row === firstCell.row && p.col === firstCell.col) {
@@ -2109,6 +2134,27 @@ function resolveFlingPieceKey(
     const prevPos = prevByKey.get(fk);
     if (prevPos && prevPos.row === firstCell.row && prevPos.col === firstCell.col) {
       return fk;
+    }
+  }
+
+  // last-known / pin / visual at catapult cell (split-mirror fallback).
+  for (const [key, cell] of known) {
+    if (cell.row === firstCell.row && cell.col === firstCell.col) {
+      if (prevByKey.has(key) || nextByKey.has(key) || next.finished.includes(key)) {
+        return key;
+      }
+    }
+  }
+  const pin = catapultPinByPieceKey.value;
+  for (const [key, cell] of pin) {
+    if (cell.row === firstCell.row && cell.col === firstCell.col) {
+      return key;
+    }
+  }
+  const visual = catapultVisualByKey.value;
+  for (const [key, cell] of visual) {
+    if (cell.row === firstCell.row && cell.col === firstCell.col) {
+      return key;
     }
   }
 
@@ -2145,6 +2191,68 @@ function resolveFlingPieceKey(
   return null;
 }
 
+function cellEquals(a: Cell, b: Cell): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
+function visualCellForPiece(key: string): Cell | null {
+  return (
+    catapultPinByPieceKey.value.get(key) ??
+    catapultVisualByKey.value.get(key) ??
+    lastKnownBoardCellByKey.value.get(key) ??
+    syncCellForPieceKey(key)
+  );
+}
+
+/** Cancel own move lock — catapult queue owns land→overlay→fling (SC-BOARD-28). */
+function yieldMoveAnimToCatapult() {
+  if (moveAnimTimer !== undefined) {
+    clearTimeout(moveAnimTimer);
+    moveAnimTimer = undefined;
+  }
+  moveAnimating.value = false;
+}
+
+async function doubleRaf(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+/**
+ * Synthesize arrival onto the catapult cell when sync already relocated (SC-BOARD-28).
+ * Spectators and seated non-actors use the same path.
+ */
+async function runLandBeforeOverlay(pieceKeyStr: string, from: Cell, to: Cell) {
+  if (cellEquals(from, to)) {
+    addSuppressTransition(pieceKeyStr);
+    clearCatapultVisual(pieceKeyStr);
+    setCatapultPin(pieceKeyStr, to);
+    await nextTick();
+    removeSuppressTransition(pieceKeyStr);
+    return;
+  }
+
+  addSuppressTransition(pieceKeyStr);
+  clearCatapultPin(pieceKeyStr);
+  setCatapultVisual(pieceKeyStr, from);
+  await nextTick();
+  void document.body.offsetHeight;
+  await doubleRaf();
+  removeSuppressTransition(pieceKeyStr);
+
+  setCatapultVisual(pieceKeyStr, to);
+  await catapultDelay(MOVE_ANIM_MS);
+
+  addSuppressTransition(pieceKeyStr);
+  clearCatapultVisual(pieceKeyStr);
+  setCatapultPin(pieceKeyStr, to);
+  await nextTick();
+  removeSuppressTransition(pieceKeyStr);
+}
+
 function enqueueCatapultPresentations(
   next: {
     revealing: string[];
@@ -2172,19 +2280,16 @@ function enqueueCatapultPresentations(
     return;
   }
 
+  // D13: never silent-skip — enqueue overlay even without piece attribution.
   const pk = resolveFlingPieceKey(firstCell, prev, next);
-  if (!pk) {
-    for (const key of orderedNew) {
-      catapultEnqueuedKeys.add(key);
-    }
-    return;
-  }
 
   const brokenSet = new Set(next.broken);
-  const nextPos = next.pieces.find((p) => p.key === pk);
-  const finishes = next.finished.includes(pk) && !prev.finished.includes(pk);
+  const prevPos = pk ? prev.pieces.find((p) => p.key === pk) : undefined;
+  const nextPos = pk ? next.pieces.find((p) => p.key === pk) : undefined;
+  const finishes =
+    pk !== null && next.finished.includes(pk) && !prev.finished.includes(pk);
   let finalPos: Cell | null = nextPos ? { row: nextPos.row, col: nextPos.col } : null;
-  if (!finalPos && finishes) {
+  if (!finalPos && finishes && pk) {
     finalPos = syncCellForPieceKey(pk);
   }
 
@@ -2197,6 +2302,19 @@ function enqueueCatapultPresentations(
     cells.push(cell);
   }
 
+  // Land-from: prev coords when not already on first catapult cell (SC-BOARD-28).
+  let chainLandFrom: Cell | null = null;
+  if (pk && prevPos) {
+    if (!cellEquals(prevPos, firstCell)) {
+      chainLandFrom = { row: prevPos.row, col: prevPos.col };
+    }
+  } else if (pk) {
+    const visual = visualCellForPiece(pk);
+    if (visual && !cellEquals(visual, firstCell)) {
+      chainLandFrom = visual;
+    }
+  }
+
   for (let i = 0; i < orderedNew.length; i++) {
     const key = orderedNew[i]!;
     const cell = cells[i]!;
@@ -2204,7 +2322,7 @@ function enqueueCatapultPresentations(
     catapultEnqueuedKeys.add(key);
 
     let travelTo: Cell | null = null;
-    if (!broken) {
+    if (pk && !broken) {
       if (i < cells.length - 1) {
         travelTo = cells[i + 1]!;
       } else if (finalPos && (finalPos.row !== cell.row || finalPos.col !== cell.col)) {
@@ -2212,11 +2330,15 @@ function enqueueCatapultPresentations(
       }
     }
 
-    const itemFinishes = finishes && i === orderedNew.length - 1 && !broken && Boolean(travelTo);
+    const itemFinishes =
+      pk !== null && finishes && i === orderedNew.length - 1 && !broken && Boolean(travelTo);
 
-    if (itemFinishes) {
+    if (itemFinishes && pk) {
       markDeferredFinish(pk);
     }
+
+    // First hop may need synthesized land; later chain hops land via prior fling travel.
+    const landFrom = i === 0 ? chainLandFrom : null;
 
     catapultQueue.push({
       key,
@@ -2224,18 +2346,21 @@ function enqueueCatapultPresentations(
       col: cell.col,
       broken,
       pieceKey: pk,
+      landFrom,
       travelTo,
       finishes: itemFinishes,
     });
   }
 
-  // Pin immediately (same sync flush) so the piece does not flash at sync dest (SC-BOARD-25).
+  // Hold at landFrom (or catapult cell) so sync dest does not flash (SC-BOARD-25/28).
   if (!catapultPlaying) {
     const head = catapultQueue[0];
-    if (head) {
+    if (head?.pieceKey) {
+      yieldMoveAnimToCatapult();
       addSuppressTransition(head.pieceKey);
       clearCatapultVisual(head.pieceKey);
-      setCatapultPin(head.pieceKey, { row: head.row, col: head.col });
+      const hold = head.landFrom ?? { row: head.row, col: head.col };
+      setCatapultPin(head.pieceKey, hold);
     }
   }
 
@@ -2265,11 +2390,23 @@ async function pumpCatapultQueue() {
 }
 
 async function runCatapultPresentation(item: CatapultQueueItem) {
-  addSuppressTransition(item.pieceKey);
-  clearCatapultVisual(item.pieceKey);
-  setCatapultPin(item.pieceKey, { row: item.row, col: item.col });
-  await nextTick();
-  removeSuppressTransition(item.pieceKey);
+  const catapultCell: Cell = { row: item.row, col: item.col };
+
+  if (item.pieceKey) {
+    yieldMoveAnimToCatapult();
+
+    const landFrom = item.landFrom;
+    if (landFrom && !cellEquals(landFrom, catapultCell)) {
+      await runLandBeforeOverlay(item.pieceKey, landFrom, catapultCell);
+    } else {
+      // Already on cell (post-rescue / after prior hop) — pin, no fake step.
+      addSuppressTransition(item.pieceKey);
+      clearCatapultVisual(item.pieceKey);
+      setCatapultPin(item.pieceKey, catapultCell);
+      await nextTick();
+      removeSuppressTransition(item.pieceKey);
+    }
+  }
 
   catapultOverlays.value = [
     {
@@ -2300,9 +2437,9 @@ async function runCatapultPresentation(item: CatapultQueueItem) {
   catapultOverlays.value = catapultOverlays.value.filter((c) => c.key !== item.key);
   refreshCatapultPresentationBusy();
 
-  if (item.travelTo) {
+  if (item.pieceKey && item.travelTo) {
     await runDeferredFlingTravel(item);
-  } else {
+  } else if (item.pieceKey) {
     clearCatapultPin(item.pieceKey);
     clearCatapultVisual(item.pieceKey);
     if (catapultDeferFinishKeys.value.has(item.pieceKey) && item.finishes) {
@@ -2316,7 +2453,7 @@ async function runCatapultPresentation(item: CatapultQueueItem) {
 
 async function runDeferredFlingTravel(item: CatapultQueueItem) {
   const to = item.travelTo;
-  if (!to) {
+  if (!to || !item.pieceKey) {
     return;
   }
   flingTravelActive.value = true;
@@ -2335,11 +2472,7 @@ async function runDeferredFlingTravel(item: CatapultQueueItem) {
   setCatapultPin(item.pieceKey, from);
   await nextTick();
   void document.body.offsetHeight;
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
+  await doubleRaf();
   removeSuppressTransition(item.pieceKey);
 
   clearCatapultPin(item.pieceKey);

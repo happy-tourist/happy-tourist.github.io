@@ -1023,31 +1023,36 @@ export const useGameStore = defineStore('game', {
           timeExpired: Boolean(seat.timeExpired),
         });
       });
-      this.seats = next;
 
       const removed: string[] = [];
       s.removedTaskKeys?.forEach((key) => {
         removed.push(String(key));
       });
-      this.removedTaskKeys = removed;
 
       const holding: string[] = [];
       s.holdingGrilleKeys?.forEach((key) => {
         holding.push(String(key));
       });
-      this.holdingGrilleKeys = holding;
 
       const revealingCatapult: string[] = [];
       s.revealingCatapultKeys?.forEach((key) => {
         revealingCatapult.push(String(key));
       });
-      this.revealingCatapultKeys = revealingCatapult;
 
       const brokenCatapult: string[] = [];
       s.brokenCatapultKeys?.forEach((key) => {
         brokenCatapult.push(String(key));
       });
-      this.brokenCatapultKeys = brokenCatapult;
+
+      // D13: atomic seats + catapult reveal so board watchers never see
+      // "pieces already at fling dest" with empty revealingCatapultKeys mid-tick.
+      this.$patch({
+        seats: next,
+        removedTaskKeys: removed,
+        holdingGrilleKeys: holding,
+        revealingCatapultKeys: revealingCatapult,
+        brokenCatapultKeys: brokenCatapult,
+      });
 
       // Drop stale peek modal if turn moved away (timeout force-wrong / end-turn).
       if (
