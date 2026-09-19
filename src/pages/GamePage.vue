@@ -1026,13 +1026,15 @@ const hasOwnPieces = computed(() => Boolean(mySeat.value && mySeat.value.pieces.
 
 /**
  * Flat board overlay: unfinished + short-lived disappearing finishers.
- * Catapult→center: keep finished piece visible (no fade) while deferred for pin
- * (SC-BOARD-25 / SC-FINISH-19) — `disappearing` only after overlay vanish.
+ * Catapult→center: keep finished piece visible (no fade) while deferred / pinned
+ * (SC-BOARD-25 / SC-FINISH-19/20) — `disappearing` only after overlay vanish.
  */
 const boardPieces = computed((): BoardPiece[] => {
   const out: BoardPiece[] = [];
   const fading = disappearingKeys.value;
   const deferredFinish = catapultDeferFinishKeys.value;
+  const pinned = catapultPinByPieceKey.value;
+  const visual = catapultVisualByKey.value;
 
   for (const piece of game.unfinishedBoardPieces) {
     out.push({ ...piece });
@@ -1044,7 +1046,8 @@ const boardPieces = computed((): BoardPiece[] => {
         continue;
       }
       const key = pieceKey(seat.sessionId, piece.side);
-      if (!fading.has(key) && !deferredFinish.has(key)) {
+      // Keep visible while catapult owns presentation even if finish synced late.
+      if (!fading.has(key) && !deferredFinish.has(key) && !pinned.has(key) && !visual.has(key)) {
         continue;
       }
       out.push({
@@ -2090,6 +2093,46 @@ function syncCellForPieceKey(key: string): Cell | null {
   return { row: piece.row, col: piece.col };
 }
 
+/** True when synced seat piece is finished. */
+function isPieceFinishedInSync(key: string): boolean {
+  const parsed = parsePieceKey(key);
+  if (!parsed) {
+    return false;
+  }
+  const seat = game.seats.find((s) => s.sessionId === parsed.sessionId);
+  const piece = seat?.pieces.find((p) => p.side === parsed.side);
+  return Boolean(piece?.finished);
+}
+
+/** Catapult queue/pin owns this piece's presentation (SC-FINISH-20). */
+function catapultOwnsPiece(key: string): boolean {
+  if (catapultPinByPieceKey.value.has(key) || catapultVisualByKey.value.has(key)) {
+    return true;
+  }
+  return catapultQueue.some((item) => item.pieceKey === key);
+}
+
+/**
+ * After successful vanish: finish travel when piece finished / dest is center,
+ * even if finish sync arrived after reveal enqueue (D17 / SC-FINISH-20 / SC-BOARD-31).
+ */
+function shouldFinishTravelAfterVanish(item: CatapultQueueItem): boolean {
+  if (!item.pieceKey || item.broken) {
+    return false;
+  }
+  if (item.finishes || catapultDeferFinishKeys.value.has(item.pieceKey)) {
+    return true;
+  }
+  if (isPieceFinishedInSync(item.pieceKey)) {
+    return true;
+  }
+  if (item.travelTo && isCenterCell(item.travelTo.row, item.travelTo.col)) {
+    return true;
+  }
+  const sync = syncCellForPieceKey(item.pieceKey);
+  return Boolean(sync && isCenterCell(sync.row, sync.col));
+}
+
 function setCatapultPin(key: string, cell: Cell) {
   const next = new Map(catapultPinByPieceKey.value);
   next.set(key, cell);
@@ -2492,17 +2535,18 @@ async function runCatapultPresentation(item: CatapultQueueItem) {
   catapultOverlays.value = catapultOverlays.value.filter((c) => c.key !== item.key);
   refreshCatapultPresentationBusy();
 
-  if (item.pieceKey && item.travelTo) {
+  // After vanish: always finish travel if finished/center (even when finish sync
+  // arrived after reveal enqueue — SC-FINISH-20 / SC-BOARD-31).
+  if (item.pieceKey && shouldFinishTravelAfterVanish(item)) {
+    markDeferredFinish(item.pieceKey);
+    clearCatapultPin(item.pieceKey);
+    clearCatapultVisual(item.pieceKey);
+    await releaseDeferredFinishAfterVanish(item.pieceKey, catapultCell);
+  } else if (item.pieceKey && item.travelTo) {
     await runDeferredFlingTravel(item);
   } else if (item.pieceKey) {
     clearCatapultPin(item.pieceKey);
     clearCatapultVisual(item.pieceKey);
-    if (catapultDeferFinishKeys.value.has(item.pieceKey) && item.finishes) {
-      await releaseDeferredFinishAfterVanish(item.pieceKey, {
-        row: item.row,
-        col: item.col,
-      });
-    }
   }
 }
 
@@ -2514,7 +2558,9 @@ async function runDeferredFlingTravel(item: CatapultQueueItem) {
   flingTravelActive.value = true;
   const from: Cell = { row: item.row, col: item.col };
 
-  if (item.finishes) {
+  // Re-check finish/center at travel time (paced finish may land mid-overlay).
+  if (shouldFinishTravelAfterVanish(item)) {
+    markDeferredFinish(item.pieceKey);
     clearCatapultPin(item.pieceKey);
     clearCatapultVisual(item.pieceKey);
     await releaseDeferredFinishAfterVanish(item.pieceKey, from);
@@ -2543,13 +2589,15 @@ async function runDeferredFlingTravel(item: CatapultQueueItem) {
 }
 
 async function releaseDeferredFinishAfterVanish(pieceKeyStr: string, from: Cell) {
-  const deferred = new Set(catapultDeferFinishKeys.value);
-  deferred.delete(pieceKeyStr);
-  catapultDeferFinishKeys.value = deferred;
-
+  // Add fading before clearing deferred so boardPieces never drops the finisher
+  // for a tick (finished ∧ !deferred ∧ !pinned ∧ !fading → invisible).
   const fading = new Set(disappearingKeys.value);
   fading.add(pieceKeyStr);
   disappearingKeys.value = fading;
+
+  const deferred = new Set(catapultDeferFinishKeys.value);
+  deferred.delete(pieceKeyStr);
+  catapultDeferFinishKeys.value = deferred;
 
   const nextFrom = new Map(finishAnimFromByKey.value);
   nextFrom.set(pieceKeyStr, from);
@@ -2763,7 +2811,7 @@ watch(
  * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01/18).
  * Push/move→center: one painted frame at last-known pre-finish cell (SC-MOVE-76 / SC-FINISH-17 / D10–D11).
  * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
- * Catapult fling→center: deferred until overlay vanish (SC-FINISH-19 / SC-BOARD-23).
+ * Catapult fling→center: deferred until overlay vanish (SC-FINISH-19/20 / SC-BOARD-23/31).
  * flush sync so disappearingKeys / returnAnimFrom / finishAnimFrom update before boardPieces re-render.
  * Initial sync skipped — already-finished / mid-join pieces stay as-is.
  */
@@ -2784,8 +2832,9 @@ watch(
         continue;
       }
 
-      // Catapult queue owns finish travel after vanish — no fade yet (SC-FINISH-19).
-      if (catapultDeferFinishKeys.value.has(key)) {
+      // Catapult queue owns finish travel after vanish — no fade yet (SC-FINISH-19/20).
+      if (catapultDeferFinishKeys.value.has(key) || catapultOwnsPiece(key)) {
+        markDeferredFinish(key);
         continue;
       }
 
