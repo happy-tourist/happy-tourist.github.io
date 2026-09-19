@@ -252,19 +252,6 @@
           <q-icon name="swipe" size="18px" />
         </button>
       </div>
-
-      <!-- End-turn above sticky HUD, right-aligned — not in budgets row (SC-PRESENCE-17/25 / D3). -->
-      <div v-if="canSendEndTurn" class="end-turn-dock">
-        <q-btn
-          dense
-          unelevated
-          color="primary"
-          size="sm"
-          class="end-turn-btn"
-          :label="$t('game.endTurn')"
-          @click.stop="onEndTurnClick"
-        />
-      </div>
     </div>
 
     <!-- Sticky bottom HUD: seated own + strip only; spectator has no bottom presence (SC-PRESENCE-02/03/22). -->
@@ -338,6 +325,7 @@
                   'presence-marker--sayable':
                     canSendSay(item.marker) ||
                     canShowReady(item.marker) ||
+                    canSendEndTurn ||
                     showOwnBudgets(item.marker),
                 }"
               >
@@ -409,6 +397,17 @@
                   <q-icon name="chat_bubble_outline" size="18px" />
                 </button>
 
+                <!-- End-turn right-center own avatar — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
+                <button
+                  v-if="canSendEndTurn"
+                  type="button"
+                  class="end-turn-affordance"
+                  :aria-label="$t('game.endTurn')"
+                  @click.stop="onEndTurnClick"
+                >
+                  <q-icon name="skip_next" size="18px" />
+                </button>
+
                 <div
                   v-if="sayPickerOpen && canSendSay(item.marker)"
                   class="say-picker"
@@ -428,7 +427,7 @@
                 </div>
               </div>
 
-              <!-- Budgets to the right of own avatar (SC-PRESENCE-15 / D3); end-turn in end-turn-dock. -->
+              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); end-turn on avatar edge. -->
               <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
                 <div class="budget-counters">
                   <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
@@ -801,6 +800,13 @@ const pieceTransitionsReady = ref(false);
  * First paint uses this; nextTick clears so CSS slides to ring coords.
  */
 const returnAnimFromByKey = ref(new Map<string, Cell>());
+/**
+ * Finish travel from last board cell → center (move or push; SC-MOVE-76 / SC-FINISH-17 / D10).
+ * One frame at `from`, then clear so CSS slides onto center + disappear.
+ */
+const finishAnimFromByKey = ref(new Map<string, Cell>());
+/** Last unfinished board cell per piece — used when finish sync jumps to center. */
+const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
 /** Own place congratulation modal (SC-FINISH-03/04). */
@@ -1297,6 +1303,13 @@ function pieceStyle(piece: BoardPiece): Record<string, string> {
     return {
       '--prow': String(returnFrom.row),
       '--pcol': String(returnFrom.col),
+    };
+  }
+  const finishFrom = finishAnimFromByKey.value.get(key);
+  if (finishFrom) {
+    return {
+      '--prow': String(finishFrom.row),
+      '--pcol': String(finishFrom.col),
     };
   }
   const override = rescueAnimOverride.value;
@@ -1927,9 +1940,31 @@ watch(isMySeatTimeExpired, (expired, prev) => {
 });
 
 /**
+ * Track last unfinished board cell before finish sync (push/move → center; D10).
+ * Retain keys after finish so the finish watch can paint `from`.
+ */
+watch(
+  () =>
+    game.unfinishedBoardPieces.map((p) => ({
+      key: pieceKey(p.sessionId, p.side),
+      row: p.row,
+      col: p.col,
+    })),
+  (pieces) => {
+    const next = new Map(lastKnownBoardCellByKey.value);
+    for (const p of pieces) {
+      next.set(p.key, { row: p.row, col: p.col });
+    }
+    lastKnownBoardCellByKey.value = next;
+  },
+  { flush: 'sync' },
+);
+
+/**
  * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01).
+ * Push→center uses last-known pre-push cell for one frame (SC-MOVE-76 / SC-FINISH-17 / D10).
  * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
- * flush sync so disappearingKeys / returnAnimFrom update before boardPieces re-render.
+ * flush sync so disappearingKeys / returnAnimFrom / finishAnimFrom update before boardPieces re-render.
  * Initial sync skipped — already-finished / mid-join pieces stay as-is.
  */
 watch(
@@ -1951,6 +1986,22 @@ watch(
       const next = new Set(disappearingKeys.value);
       next.add(key);
       disappearingKeys.value = next;
+
+      // One frame at pre-finish board cell when sync already has center coords (D10).
+      const from = lastKnownBoardCellByKey.value.get(key);
+      if (from && !isCenterCell(from.row, from.col)) {
+        const nextFrom = new Map(finishAnimFromByKey.value);
+        nextFrom.set(key, from);
+        finishAnimFromByKey.value = nextFrom;
+        void nextTick(() => {
+          requestAnimationFrame(() => {
+            const cleared = new Map(finishAnimFromByKey.value);
+            if (cleared.delete(key)) {
+              finishAnimFromByKey.value = cleared;
+            }
+          });
+        });
+      }
 
       const existing = finishFadeTimers.get(key);
       if (existing !== undefined) {
@@ -1982,6 +2033,11 @@ watch(
         const cleared = new Set(disappearingKeys.value);
         cleared.delete(key);
         disappearingKeys.value = cleared;
+      }
+      if (finishAnimFromByKey.value.has(key)) {
+        const clearedFrom = new Map(finishAnimFromByKey.value);
+        clearedFrom.delete(key);
+        finishAnimFromByKey.value = clearedFrom;
       }
 
       const colon = key.indexOf(':');
@@ -2147,21 +2203,6 @@ onUnmounted(() => {
   pointer-events: auto;
 }
 
-/* End-turn above sticky HUD, right edge (SC-PRESENCE-17/25). */
-.end-turn-dock {
-  display: flex;
-  justify-content: flex-end;
-  width: 100%;
-  max-width: calc(10 * 60px + 9 * 2px);
-  padding: 4px 0 8px;
-  pointer-events: none;
-  flex-shrink: 0;
-}
-
-.end-turn-dock .end-turn-btn {
-  pointer-events: auto;
-}
-
 .game-hud {
   position: sticky;
   bottom: 0;
@@ -2225,12 +2266,13 @@ body.body--dark .game-hud {
   pointer-events: auto;
 }
 
-/* Own cluster: avatar | budgets to the right (SC-PRESENCE-15 / D3). */
+/* Own cluster: avatar | budgets to the right (SC-PRESENCE-15).
+   Gap ≥ end-turn hit (36px at right:-8px) so skip_next does not cover budgets (SC-PRESENCE-25). */
 .presence-slot--own {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 20px;
 }
 
 /* Own private budgets beside avatar (SC-PRESENCE-15 / D3). */
@@ -2302,10 +2344,6 @@ body.body--dark .budget-counter {
     opacity: 0;
     transform: translateX(-50%) translateY(10px);
   }
-}
-
-.end-turn-btn {
-  white-space: nowrap;
 }
 
 .presence-marker {
@@ -2510,6 +2548,35 @@ body.body--dark .say-bubble {
   background: #1e88e5;
 }
 
+/* End-turn right-center on own avatar — mirror of say top; no dock label (SC-PRESENCE-17/25). */
+.end-turn-affordance {
+  position: absolute;
+  top: 50%;
+  right: -8px;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(33, 150, 243, 0.92);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.end-turn-affordance:hover {
+  background: #1e88e5;
+}
+
 .say-picker {
   position: absolute;
   z-index: 6;
@@ -2615,8 +2682,10 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Eye affordance on selected peekable tourist (SC-BOARD-13). */
-.peek-affordance {
+/* Eye / rescue / push — top-center above piece (same family as strip return; SC-BOARD-13 / SC-MOVE-74/77). */
+.peek-affordance,
+.rescue-affordance,
+.push-affordance {
   position: absolute;
   z-index: 4;
   width: 32px;
@@ -2632,66 +2701,27 @@ body.body--dark .say-picker {
   cursor: pointer;
   pointer-events: auto;
   color: #fff;
-  background: rgba(33, 150, 243, 0.95);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
-  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) / 2);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 10px);
+  transform: translateX(-50%);
+}
+
+.peek-affordance {
+  background: rgba(33, 150, 243, 0.95);
 }
 
 .peek-affordance:hover {
   background: #1e88e5;
 }
 
-/* Rescue affordance over trapped tourist (SC-MOVE-54 UX). */
-.rescue-affordance {
-  position: absolute;
-  z-index: 5;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  pointer-events: auto;
-  color: #fff;
-  background: rgba(67, 160, 71, 0.95);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
-  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
-}
-
-.rescue-affordance:hover {
-  background: #388e3c;
-}
-
-/* Push affordance over pushable target (SC-MOVE-74 — same green family as rescue). */
+.rescue-affordance,
 .push-affordance {
-  position: absolute;
   z-index: 5;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  pointer-events: auto;
-  color: #fff;
   background: rgba(67, 160, 71, 0.95);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 14px);
-  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 6px);
 }
 
+.rescue-affordance:hover,
 .push-affordance:hover {
   background: #388e3c;
 }

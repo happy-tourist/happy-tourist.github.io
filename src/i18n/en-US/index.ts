@@ -94,7 +94,7 @@ export default {
     stepsCounterAria: 'Шаги',
     peeksCounterAria: 'Просмотры',
     budgetInfinity: '∞',
-    /** Multiplayer end-turn dock above HUD (SC-PRESENCE-17/18/25). */
+    /** Multiplayer end-turn icon on own avatar (SC-PRESENCE-17/18/25) — aria only. */
     endTurn: 'Завершить ход',
     /** Peek modal — reward amount + Correct/Wrong (SC-BOARD-08/09). */
     peekModal: 'Под плиткой награда: {n}. Ответьте правильно, чтобы получить шаги.',
