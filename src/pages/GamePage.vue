@@ -801,11 +801,11 @@ const pieceTransitionsReady = ref(false);
  */
 const returnAnimFromByKey = ref(new Map<string, Cell>());
 /**
- * Finish travel from last board cell → center (move or push; SC-MOVE-76 / SC-FINISH-17 / D10).
- * One frame at `from`, then clear so CSS slides onto center + disappear.
+ * Finish travel from last board cell → center (move or push; SC-FINISH-01/17/18 / D10–D11).
+ * Hold `from` until painted, then clear so CSS slides onto center + disappear.
  */
 const finishAnimFromByKey = ref(new Map<string, Cell>());
-/** Last unfinished board cell per piece — used when finish sync jumps to center. */
+/** Last non-center board cell per piece — used when finish sync jumps to center. */
 const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
@@ -1354,6 +1354,18 @@ function submitMove(side: string, row: number, col: number) {
   if (!isInteractive.value) {
     return;
   }
+  // D11 A / SC-FINISH-18: seed lastKnown before send so own center finish keeps travel `from`.
+  // Do not seed finishAnimFrom here — silent server reject would pin the piece via pieceStyle.
+  if (isCenterCell(row, col) && mySeat.value) {
+    const piece = mySeat.value.pieces.find((p) => p.side === side && !isFinishedPiece(p));
+    if (piece && !isCenterCell(piece.row, piece.col)) {
+      const key = pieceKey(mySeat.value.sessionId, side);
+      const from: Cell = { row: piece.row, col: piece.col };
+      const nextKnown = new Map(lastKnownBoardCellByKey.value);
+      nextKnown.set(key, from);
+      lastKnownBoardCellByKey.value = nextKnown;
+    }
+  }
   // Animate / lock input only when the store actually sent (room + isMyTurn).
   if (!game.sendMove(side, row, col)) {
     return;
@@ -1453,6 +1465,14 @@ function onPushClick(push: PushAffordance) {
   }
   if (!game.sendPush(push.pusherSide, push.targetSessionId, push.targetSide, push.row, push.col)) {
     return;
+  }
+  // D10 / SC-MOVE-76: seed target lastKnown before sync so push→center keeps travel `from`.
+  if (isCenterCell(push.row, push.col) && !isCenterCell(push.targetRow, push.targetCol)) {
+    const key = pieceKey(push.targetSessionId, push.targetSide);
+    const from: Cell = { row: push.targetRow, col: push.targetCol };
+    const nextKnown = new Map(lastKnownBoardCellByKey.value);
+    nextKnown.set(key, from);
+    lastKnownBoardCellByKey.value = nextKnown;
   }
   returningSide.value = null;
   // Keep selection on the pusher (SC-MOVE-75); approach/back via rescueAnimOverride.
@@ -1940,8 +1960,9 @@ watch(isMySeatTimeExpired, (expired, prev) => {
 });
 
 /**
- * Track last unfinished board cell before finish sync (push/move → center; D10).
+ * Track last unfinished board cell before finish sync (push/move → center; D10/D11).
  * Retain keys after finish so the finish watch can paint `from`.
+ * Never record a center cell as `from` (sync may land there before finished).
  */
 watch(
   () =>
@@ -1952,17 +1973,36 @@ watch(
     })),
   (pieces) => {
     const next = new Map(lastKnownBoardCellByKey.value);
+    const unfinishedKeys = new Set<string>();
     for (const p of pieces) {
+      unfinishedKeys.add(p.key);
+      if (isCenterCell(p.row, p.col)) {
+        continue;
+      }
       next.set(p.key, { row: p.row, col: p.col });
     }
     lastKnownBoardCellByKey.value = next;
+
+    // finishAnimFrom is only for disappearing finished pieces — drop stale overrides.
+    if (finishAnimFromByKey.value.size > 0) {
+      let changed = false;
+      const nextFrom = new Map(finishAnimFromByKey.value);
+      for (const key of unfinishedKeys) {
+        if (nextFrom.delete(key)) {
+          changed = true;
+        }
+      }
+      if (changed) {
+        finishAnimFromByKey.value = nextFrom;
+      }
+    }
   },
   { flush: 'sync' },
 );
 
 /**
- * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01).
- * Push→center uses last-known pre-push cell for one frame (SC-MOVE-76 / SC-FINISH-17 / D10).
+ * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01/18).
+ * Push/move→center: one painted frame at last-known pre-finish cell (SC-MOVE-76 / SC-FINISH-17 / D10–D11).
  * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
  * flush sync so disappearingKeys / returnAnimFrom / finishAnimFrom update before boardPieces re-render.
  * Initial sync skipped — already-finished / mid-join pieces stay as-is.
@@ -1987,18 +2027,22 @@ watch(
       next.add(key);
       disappearingKeys.value = next;
 
-      // One frame at pre-finish board cell when sync already has center coords (D10).
+      // Paint `from` when last-known ≠ center; hold until real paint (D11 B).
       const from = lastKnownBoardCellByKey.value.get(key);
       if (from && !isCenterCell(from.row, from.col)) {
         const nextFrom = new Map(finishAnimFromByKey.value);
         nextFrom.set(key, from);
         finishAnimFromByKey.value = nextFrom;
         void nextTick(() => {
+          // Force layout so the `from` frame is committed before we clear.
+          void document.body.offsetHeight;
           requestAnimationFrame(() => {
-            const cleared = new Map(finishAnimFromByKey.value);
-            if (cleared.delete(key)) {
-              finishAnimFromByKey.value = cleared;
-            }
+            requestAnimationFrame(() => {
+              const cleared = new Map(finishAnimFromByKey.value);
+              if (cleared.delete(key)) {
+                finishAnimFromByKey.value = cleared;
+              }
+            });
           });
         });
       }
