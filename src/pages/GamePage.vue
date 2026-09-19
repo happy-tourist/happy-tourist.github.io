@@ -216,6 +216,15 @@
           alt=""
           :style="grilleStyle(grille)"
         />
+        <!-- Catapult reveal — fade in→out ~1000 ms; broken on vanish (SC-BOARD-22…24). -->
+        <img
+          v-for="catapult in catapultOverlays"
+          :key="`catapult-${catapult.key}`"
+          class="catapult-overlay catapult-overlay--reveal"
+          :src="catapult.showBroken ? catapultBrokenSrc : catapultSrc"
+          alt=""
+          :style="catapultStyle(catapult)"
+        />
         <!-- Eye to open peek on selected own free piece on present * (SC-BOARD-13/20). -->
         <button
           v-if="canShowPeekAffordance"
@@ -475,6 +484,8 @@ import tourist2 from '@/assets/tourists/tourist2.png';
 import tourist3 from '@/assets/tourists/tourist3.png';
 import tourist4 from '@/assets/tourists/tourist4.png';
 import grilleSrc from '@/assets/grilles/grille.png';
+import catapultSrc from '@/assets/catapults/catapult.png';
+import catapultBrokenSrc from '@/assets/catapults/catapult-broken.png';
 import {
   useGameStore,
   type GamePiece,
@@ -512,6 +523,8 @@ const MOVE_ANIM_MS = 250;
 const FINISH_FADE_MS = 200;
 /** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
 const GRILLE_ANIM_MS = 1000;
+/** Catapult fade in→out presentation (SC-BOARD-23/24 / D5). */
+const CATAPULT_ANIM_MS = 1000;
 
 const CENTER_CELLS = [
   { row: 4, col: 4 },
@@ -573,6 +586,17 @@ interface GrilleOverlay {
   row: number;
   col: number;
   phase: GrillePhase;
+}
+
+/** Short-lived catapult reveal overlay (SC-BOARD-22…24). */
+interface CatapultOverlay {
+  key: string;
+  row: number;
+  col: number;
+  /** Server marked no fling dest — broken art on fade-out. */
+  broken: boolean;
+  /** True after mid-anim swap to broken artwork. */
+  showBroken: boolean;
 }
 
 interface RescueAffordance {
@@ -826,6 +850,10 @@ const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
 const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleStyle = { '--grille-anim-ms': `${GRILLE_ANIM_MS}ms` };
+/** Catapult fade overlays (SC-BOARD-22…24) — local timers own lifetime. */
+const catapultOverlays = ref<CatapultOverlay[]>([]);
+const catapultTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const catapultBrokenTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** Temporary rescuer slide toward trapped cell (D5 — server coords unchanged). */
 const rescueAnimOverride = ref<{
   sessionId: string;
@@ -1247,6 +1275,14 @@ function grilleStyle(grille: GrilleOverlay): Record<string, string> {
     '--prow': String(grille.row),
     '--pcol': String(grille.col),
     '--grille-anim-ms': `${GRILLE_ANIM_MS}ms`,
+  };
+}
+
+function catapultStyle(catapult: CatapultOverlay): Record<string, string> {
+  return {
+    '--prow': String(catapult.row),
+    '--pcol': String(catapult.col),
+    '--catapult-anim-ms': `${CATAPULT_ANIM_MS}ms`,
   };
 }
 
@@ -1828,6 +1864,93 @@ watch(
 );
 
 /**
+ * Sync revealing catapults → fade in then out ~1000 ms; broken art on fade-out
+ * when no fling dest (SC-BOARD-22…24 / D5). Local timers keep overlay until anim ends
+ * even if server clears keys early. Piece travel / finish use existing sync watchers
+ * (SC-FINISH-19).
+ */
+watch(
+  () => ({
+    revealing: game.revealingCatapultKeys.slice(),
+    broken: game.brokenCatapultKeys.slice(),
+  }),
+  (next) => {
+    const nextSet = new Set(next.revealing);
+    const brokenSet = new Set(next.broken);
+    const shown = new Set(catapultOverlays.value.map((c) => c.key));
+
+    for (const key of nextSet) {
+      if (shown.has(key)) {
+        // Update broken flag if sync arrives after reveal start.
+        if (brokenSet.has(key)) {
+          catapultOverlays.value = catapultOverlays.value.map((c) => {
+            if (c.key !== key || c.broken) {
+              return c;
+            }
+            // Late broken sync: if mid-swap already ran, show broken immediately.
+            const midDone = !catapultBrokenTimers.has(key);
+            return { ...c, broken: true, showBroken: midDone || c.showBroken };
+          });
+        }
+        continue;
+      }
+      const cell = parseCellKey(key);
+      if (!cell) {
+        continue;
+      }
+      const broken = brokenSet.has(key);
+      catapultOverlays.value = [
+        ...catapultOverlays.value.filter((c) => c.key !== key),
+        {
+          key,
+          row: cell.row,
+          col: cell.col,
+          broken,
+          showBroken: false,
+        },
+      ];
+
+      const existingBroken = catapultBrokenTimers.get(key);
+      if (existingBroken !== undefined) {
+        clearTimeout(existingBroken);
+      }
+      const existingDone = catapultTimers.get(key);
+      if (existingDone !== undefined) {
+        clearTimeout(existingDone);
+      }
+
+      // Mid-anim: swap to broken artwork for fade-out portion (SC-BOARD-24).
+      catapultBrokenTimers.set(
+        key,
+        setTimeout(
+          () => {
+            catapultBrokenTimers.delete(key);
+            catapultOverlays.value = catapultOverlays.value.map((c) =>
+              c.key === key && c.broken ? { ...c, showBroken: true } : c,
+            );
+          },
+          Math.floor(CATAPULT_ANIM_MS / 2),
+        ),
+      );
+
+      catapultTimers.set(
+        key,
+        setTimeout(() => {
+          catapultTimers.delete(key);
+          const mid = catapultBrokenTimers.get(key);
+          if (mid !== undefined) {
+            clearTimeout(mid);
+            catapultBrokenTimers.delete(key);
+          }
+          catapultOverlays.value = catapultOverlays.value.filter((c) => c.key !== key);
+        }, CATAPULT_ANIM_MS),
+      );
+    }
+  },
+  { immediate: true, deep: true },
+);
+
+/**
  * Mirror trapped → chrome grille drop/rise on strip slots (SC-PIECE-31 / D8).
  * Mid-join / remount shows hold without drop (same as board).
  */
@@ -2200,6 +2323,14 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   chromeGrilleTimers.clear();
+  for (const timer of catapultTimers.values()) {
+    clearTimeout(timer);
+  }
+  catapultTimers.clear();
+  for (const timer of catapultBrokenTimers.values()) {
+    clearTimeout(timer);
+  }
+  catapultBrokenTimers.clear();
   rescueAnimOverride.value = null;
 });
 </script>
@@ -2790,6 +2921,36 @@ body.body--dark .say-picker {
 
 .grille-overlay--rise {
   animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
+}
+
+/* Catapult reveal — fade in then out ~1000 ms (SC-BOARD-23/24 / D5). */
+.catapult-overlay {
+  position: absolute;
+  z-index: 3;
+  width: var(--cell);
+  height: var(--cell);
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)));
+  top: calc(var(--prow) * (var(--cell) + var(--gap)));
+  object-fit: contain;
+  pointer-events: none;
+  padding: 1px;
+  box-sizing: border-box;
+}
+
+.catapult-overlay--reveal {
+  animation: catapult-reveal var(--catapult-anim-ms, 1000ms) ease-in-out both;
+}
+
+@keyframes catapult-reveal {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes grille-drop {

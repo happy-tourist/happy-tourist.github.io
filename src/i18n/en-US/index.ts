@@ -62,6 +62,10 @@ export default {
     grilleDensityFew: 'мало',
     grilleDensityMedium: 'средне',
     grilleDensityMany: 'много',
+    catapultDensity: 'Плотность катапульт',
+    catapultDensityFew: 'мало',
+    catapultDensityMedium: 'средне',
+    catapultDensityMany: 'много',
     capacity: '{seats}/{maxSeats}',
   },
   game: {

@@ -106,6 +106,17 @@
           />
         </q-card-section>
 
+        <q-card-section class="q-pt-none">
+          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.catapultDensity') }}</div>
+          <q-option-group
+            v-model="createCatapultDensity"
+            type="radio"
+            color="primary"
+            :options="catapultDensityOptions"
+            inline
+          />
+        </q-card-section>
+
         <q-card-actions align="right">
           <q-btn
             flat
@@ -131,7 +142,12 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { useGameStore, type CreateGameGrilleDensity, type CreateGameMaxSeats } from '@/stores/game';
+import {
+  useGameStore,
+  type CreateGameCatapultDensity,
+  type CreateGameGrilleDensity,
+  type CreateGameMaxSeats,
+} from '@/stores/game';
 
 const auth = useAuthStore();
 const game = useGameStore();
@@ -142,8 +158,10 @@ const creating = ref(false);
 const joining = ref(false);
 const createModalOpen = ref(false);
 const createMaxSeats = ref<CreateGameMaxSeats>(2);
-/** Default medium (45%) — SC-LOBBY-15. */
+/** Default medium (22%) — SC-LOBBY-15. */
 const createGrilleDensity = ref<CreateGameGrilleDensity>('medium');
+/** Default medium (22%) — SC-LOBBY-18. */
+const createCatapultDensity = ref<CreateGameCatapultDensity>('medium');
 
 const maxSeatsOptions = computed(() =>
   ([2, 3, 4] as const).map((n) => ({
@@ -158,6 +176,12 @@ const grilleDensityOptions = computed(() => [
   { label: t('lobby.grilleDensityMany'), value: 'many' as const },
 ]);
 
+const catapultDensityOptions = computed(() => [
+  { label: t('lobby.catapultDensityFew'), value: 'few' as const },
+  { label: t('lobby.catapultDensityMedium'), value: 'medium' as const },
+  { label: t('lobby.catapultDensityMany'), value: 'many' as const },
+]);
+
 onMounted(() => {
   void game.subscribeLobby();
 });
@@ -169,6 +193,7 @@ onUnmounted(() => {
 function openCreateModal() {
   createMaxSeats.value = 2;
   createGrilleDensity.value = 'medium';
+  createCatapultDensity.value = 'medium';
   createModalOpen.value = true;
 }
 
@@ -185,6 +210,7 @@ async function onConfirmCreate() {
     const room = await game.createGame({
       maxSeats: createMaxSeats.value,
       grilleDensity: createGrilleDensity.value,
+      catapultDensity: createCatapultDensity.value,
     });
     createModalOpen.value = false;
     await router.push({ name: 'game', params: { roomId: room.roomId } });

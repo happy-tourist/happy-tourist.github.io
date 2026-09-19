@@ -28,10 +28,15 @@ export type CreateGameMaxSeats = 2 | 3 | 4;
 /** Create option grille density presets (D1 / SC-LOBBY-13…15). */
 export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
 
+/** Create option catapult density presets (D6 / SC-LOBBY-16…18). */
+export type CreateGameCatapultDensity = 'few' | 'medium' | 'many';
+
 export interface CreateGameOptions {
   maxSeats?: CreateGameMaxSeats;
-  /** few/medium/many → 25/45/65% of task cells; default medium on server. */
+  /** few/medium/many → 12/22/35% of task cells; default medium on server. */
   grilleDensity?: CreateGameGrilleDensity;
+  /** few/medium/many → 12/22/35% of task cells; default medium on server. Independent of grilleDensity. */
+  catapultDensity?: CreateGameCatapultDensity;
 }
 
 /** Mirrored piece from synced Seat.pieces (keyed by side N|E|S|W on server). */
@@ -194,6 +199,21 @@ type TouristRoomState = {
     forEach: (cb: (key: string) => void) => void;
     length?: number;
   };
+  /**
+   * Synced catapult cells currently presenting fade reveal (`"r,c"`).
+   * Hidden unspent catapults are never synced.
+   */
+  revealingCatapultKeys?: {
+    forEach: (cb: (key: string) => void) => void;
+    length?: number;
+  };
+  /**
+   * Subset of revealing catapults that show broken artwork on fade-out.
+   */
+  brokenCatapultKeys?: {
+    forEach: (cb: (key: string) => void) => void;
+    length?: number;
+  };
   seats?: {
     forEach: (cb: (seat: SeatSync, sessionId: string) => void) => void;
   };
@@ -317,6 +337,16 @@ export const useGameStore = defineStore('game', {
      * Mirrored from MyRoomState.holdingGrilleKeys (hidden grilles never sync).
      */
     holdingGrilleKeys: string[];
+    /**
+     * Synced catapult cells currently presenting fade reveal (`"r,c"`).
+     * Mirrored from MyRoomState.revealingCatapultKeys (hidden never sync).
+     */
+    revealingCatapultKeys: string[];
+    /**
+     * Subset of revealing catapults that show broken artwork on fade-out.
+     * Mirrored from MyRoomState.brokenCatapultKeys.
+     */
+    brokenCatapultKeys: string[];
     /** Own private steps budget from `budgets` (always finite; 0 for spectators / unset). */
     steps: number;
     /** Own private peeks budget from `budgets` (0 for spectators / unset). */
@@ -368,6 +398,8 @@ export const useGameStore = defineStore('game', {
     seats: [],
     removedTaskKeys: [],
     holdingGrilleKeys: [],
+    revealingCatapultKeys: [],
+    brokenCatapultKeys: [],
     steps: 0,
     peeks: 0,
     budgetsInfinite: false,
@@ -820,6 +852,8 @@ export const useGameStore = defineStore('game', {
       this.seats = [];
       this.removedTaskKeys = [];
       this.holdingGrilleKeys = [];
+      this.revealingCatapultKeys = [];
+      this.brokenCatapultKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
@@ -1003,6 +1037,18 @@ export const useGameStore = defineStore('game', {
       });
       this.holdingGrilleKeys = holding;
 
+      const revealingCatapult: string[] = [];
+      s.revealingCatapultKeys?.forEach((key) => {
+        revealingCatapult.push(String(key));
+      });
+      this.revealingCatapultKeys = revealingCatapult;
+
+      const brokenCatapult: string[] = [];
+      s.brokenCatapultKeys?.forEach((key) => {
+        brokenCatapult.push(String(key));
+      });
+      this.brokenCatapultKeys = brokenCatapult;
+
       // Drop stale peek modal if turn moved away (timeout force-wrong / end-turn).
       if (
         this.openPeek &&
@@ -1029,6 +1075,8 @@ export const useGameStore = defineStore('game', {
       this.sayEvents = [];
       this.removedTaskKeys = [];
       this.holdingGrilleKeys = [];
+      this.revealingCatapultKeys = [];
+      this.brokenCatapultKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
@@ -1165,6 +1213,8 @@ export const useGameStore = defineStore('game', {
       this.seats = [];
       this.removedTaskKeys = [];
       this.holdingGrilleKeys = [];
+      this.revealingCatapultKeys = [];
+      this.brokenCatapultKeys = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
