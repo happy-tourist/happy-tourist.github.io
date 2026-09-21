@@ -2,15 +2,16 @@
   <q-layout view="hHh lpR fFf">
     <q-header bordered>
       <q-toolbar>
-        <q-btn
-          v-if="isGameRoute"
-          flat
-          round
-          dense
-          icon="logout"
-          :aria-label="t('game.leave')"
-          @click="onExitClick"
-        />
+        <button
+          v-if="isBrandLogoClickable"
+          type="button"
+          class="brand-logo-control"
+          :aria-label="brandLogoAria"
+          @click="onBrandLogoClick"
+        >
+          <img :src="brandLogoUrl" alt="" class="brand-logo" />
+        </button>
+        <img v-else :src="brandLogoUrl" alt="" class="brand-logo" aria-hidden="true" />
         <q-space />
         <div v-if="isGameRoute" class="text-subtitle1 text-center">{{ statusLabel }}</div>
         <q-space />
@@ -84,11 +85,14 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import brandLogoUrl from '@/assets/brand/logo.png';
 import { useAuthStore } from '@/stores/auth';
 import { useGameStore } from '@/stores/game';
 import { useThemeStore } from '@/stores/theme';
 
 const EMAIL_VERIFY_REMINDER_KEY = 'ht-email-verify-reminder';
+
+const AUTH_ROUTE_NAMES = new Set(['login', 'forgot-password', 'confirm-email', 'reset-password']);
 
 const { t } = useI18n();
 const route = useRoute();
@@ -103,13 +107,33 @@ const emailVerifyReminderOpen = ref(false);
 let emailVerifyReminderShown = false;
 
 const isGameRoute = computed(() => route.name === 'game');
-const isLoginRoute = computed(
-  () =>
-    route.name === 'login' ||
-    route.name === 'forgot-password' ||
-    route.name === 'confirm-email' ||
-    route.name === 'reset-password',
+const isLoginRoute = computed(() => AUTH_ROUTE_NAMES.has(String(route.name)));
+
+/** Brand logo click mode (design D2). */
+const brandLogoMode = computed<'decorative' | 'noop' | 'leave' | 'toLobby'>(() => {
+  const name = route.name;
+  if (name === 'game') {
+    return 'leave';
+  }
+  if (AUTH_ROUTE_NAMES.has(String(name))) {
+    return 'decorative';
+  }
+  if (name === 'lobby') {
+    return 'noop';
+  }
+  return 'toLobby';
+});
+
+const isBrandLogoClickable = computed(
+  () => brandLogoMode.value === 'leave' || brandLogoMode.value === 'toLobby',
 );
+
+const brandLogoAria = computed(() => {
+  if (brandLogoMode.value === 'leave') {
+    return t('game.leave');
+  }
+  return t('auth.backToLobby');
+});
 
 /** Registered non-anonymous — cabinet link in header (design D7). */
 const showAccountNav = computed(
@@ -228,6 +252,16 @@ function onToggleTheme() {
   void theme.toggle();
 }
 
+function onBrandLogoClick() {
+  if (brandLogoMode.value === 'leave') {
+    onExitClick();
+    return;
+  }
+  if (brandLogoMode.value === 'toLobby') {
+    void router.push({ name: 'lobby' });
+  }
+}
+
 function onExitClick() {
   if (needsLeaveConfirm.value) {
     leaveConfirmOpen.value = true;
@@ -246,3 +280,29 @@ async function onLeave() {
   await router.push({ name: 'lobby' });
 }
 </script>
+
+<style scoped>
+.brand-logo {
+  height: 30px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-logo-control {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 0;
+}
+
+.brand-logo-control:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+</style>

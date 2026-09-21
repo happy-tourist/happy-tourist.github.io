@@ -6,7 +6,6 @@
         <div class="text-subtitle2 text-muted">{{ auth.displayName }}</div>
       </div>
       <div class="row q-gutter-sm">
-        <q-btn flat :label="$t('auth.backToLobby')" :to="{ name: 'lobby' }" />
         <q-btn
           flat
           color="negative"

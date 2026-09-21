@@ -20,7 +20,6 @@
           :label="$t('support.adminNav')"
           :to="{ name: 'admin-users' }"
         />
-        <q-btn flat :label="$t('auth.backToLobby')" :to="{ name: 'lobby' }" />
       </div>
     </div>
 

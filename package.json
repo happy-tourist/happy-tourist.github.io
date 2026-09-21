@@ -2,7 +2,7 @@
   "name": "happy-tourist-client-2",
   "version": "0.0.1",
   "description": "A Quasar Project",
-  "productName": "happy-tourist-client",
+  "productName": "Happy Tourist",
   "author": "AAKalinin <aakalinin@sportmasterlab.net>",
   "type": "module",
   "private": true,
