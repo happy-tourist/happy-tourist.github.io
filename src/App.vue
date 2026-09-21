@@ -3,7 +3,6 @@
     <q-header bordered>
       <q-toolbar>
         <button
-          v-if="isBrandLogoClickable"
           type="button"
           class="brand-logo-control"
           :aria-label="brandLogoAria"
@@ -11,7 +10,6 @@
         >
           <img :src="brandLogoUrl" alt="" class="brand-logo" />
         </button>
-        <img v-else :src="brandLogoUrl" alt="" class="brand-logo" aria-hidden="true" />
         <q-space />
         <div v-if="isGameRoute" class="text-subtitle1 text-center">{{ statusLabel }}</div>
         <q-space />
@@ -109,24 +107,18 @@ let emailVerifyReminderShown = false;
 const isGameRoute = computed(() => route.name === 'game');
 const isLoginRoute = computed(() => AUTH_ROUTE_NAMES.has(String(route.name)));
 
-/** Brand logo click mode (design D2). */
-const brandLogoMode = computed<'decorative' | 'noop' | 'leave' | 'toLobby'>(() => {
+/** Brand logo click mode (design D2) — always same button DOM (SC-BRAND-09). */
+const brandLogoMode = computed<'noop' | 'leave' | 'toLobby'>(() => {
   const name = route.name;
   if (name === 'game') {
     return 'leave';
   }
-  if (AUTH_ROUTE_NAMES.has(String(name))) {
-    return 'decorative';
-  }
   if (name === 'lobby') {
     return 'noop';
   }
+  // Auth + other authenticated → lobby (SC-BRAND-04; guest may bounce via requiresAuth)
   return 'toLobby';
 });
-
-const isBrandLogoClickable = computed(
-  () => brandLogoMode.value === 'leave' || brandLogoMode.value === 'toLobby',
-);
 
 const brandLogoAria = computed(() => {
   if (brandLogoMode.value === 'leave') {
@@ -283,7 +275,7 @@ async function onLeave() {
 
 <style scoped>
 .brand-logo {
-  height: 30px;
+  height: 60px;
   width: auto;
   object-fit: contain;
   display: block;
