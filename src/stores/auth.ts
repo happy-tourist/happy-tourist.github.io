@@ -5,6 +5,8 @@ import { client } from '@/boot/colyseus';
 
 const AUTH_TOKEN_KEY = 'colyseus-auth-token';
 
+export type AuthRole = 'user' | 'moderator' | 'admin';
+
 export interface AuthUser {
   id?: string | number;
   email?: string;
@@ -14,6 +16,8 @@ export interface AuthUser {
   emailVerified?: boolean;
   /** Registered-user UI theme from userdata (`light` | `dark`); unset when null/absent. */
   theme?: string | null;
+  /** Product role from userdata (nav gating only — server enforces). */
+  role?: AuthRole;
   [key: string]: unknown;
 }
 
@@ -57,6 +61,18 @@ export const useAuthStore = defineStore('auth', () => {
       user.value.emailVerified !== true,
     ),
   );
+
+  const role = computed<AuthRole>(() => {
+    const r = user.value?.role;
+    if (r === 'moderator' || r === 'admin' || r === 'user') {
+      return r;
+    }
+    return 'user';
+  });
+  /** Moderator or admin — staff support queue (client nav only). */
+  const isStaff = computed(() => role.value === 'moderator' || role.value === 'admin');
+  /** Admin-only users UI (SC-ROLE-08). */
+  const isAdmin = computed(() => role.value === 'admin');
 
   // Restores session: Auth constructor loads token from storage; onChange fetches userdata.
   client.auth.onChange((data) => {
@@ -310,6 +326,9 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     displayName,
     needsEmailVerification,
+    role,
+    isStaff,
+    isAdmin,
     register,
     login,
     loginAnonymously,

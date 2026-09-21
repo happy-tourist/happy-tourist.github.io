@@ -40,6 +40,30 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/support',
+    name: 'support',
+    component: () => import('@/pages/SupportPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/support/staff',
+    name: 'support-staff',
+    component: () => import('@/pages/SupportStaffPage.vue'),
+    meta: { requiresAuth: true, requiresStaff: true },
+  },
+  {
+    path: '/support/:id',
+    name: 'support-ticket',
+    component: () => import('@/pages/SupportTicketPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('@/pages/AdminUsersPage.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
     path: '/game/:roomId',
     name: 'game',
     component: () => import('@/pages/GamePage.vue'),

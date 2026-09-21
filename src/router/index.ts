@@ -33,6 +33,15 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     if (to.meta.guest && auth.isAuthenticated) {
       return '/lobby';
     }
+
+    // Client nav gating only — server still enforces (SC-ROLE-08).
+    if (to.meta.requiresAdmin && !auth.isAdmin) {
+      return '/support';
+    }
+
+    if (to.meta.requiresStaff && !auth.isStaff) {
+      return '/support';
+    }
   });
 
   return Router;
