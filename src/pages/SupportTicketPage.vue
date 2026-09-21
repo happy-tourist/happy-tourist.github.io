@@ -31,7 +31,7 @@
         </template>
       </q-banner>
 
-      <div class="q-gutter-y-md q-mb-md">
+      <div class="q-gutter-y-md q-mb-lg">
         <div
           v-for="msg in support.messages"
           :key="msg.id"
@@ -46,7 +46,7 @@
         </div>
       </div>
 
-      <div v-if="!isClosed" class="q-gutter-md">
+      <div v-if="!isClosed" class="q-gutter-md q-mt-md">
         <q-form ref="replyFormRef" class="q-gutter-md" @submit.prevent="onReply">
           <q-input
             v-model="replyBody"
@@ -54,6 +54,7 @@
             outlined
             dense
             autogrow
+            lazy-rules
             :label="$t('support.reply')"
             :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('support.bodyRequired')]"
           />
@@ -65,7 +66,7 @@
               :loading="support.loading"
             />
             <q-btn
-              v-if="isAuthor"
+              v-if="canClose"
               flat
               color="negative"
               :label="$t('support.close')"
@@ -94,13 +95,6 @@
               :loading="support.loading"
               @click="onSetAwaiting"
             />
-            <q-btn
-              color="negative"
-              outline
-              :label="$t('support.close')"
-              :loading="support.loading"
-              @click="onClose"
-            />
           </div>
         </div>
       </div>
@@ -111,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import type { QForm } from 'quasar';
@@ -135,6 +129,9 @@ const isAuthor = computed(() => {
   const uid = auth.user?.id != null ? String(auth.user.id) : '';
   return Boolean(uid && support.ticket && support.ticket.authorUserId === uid);
 });
+
+/** Author or staff may close; single control (avoid duplicate when staff is author). */
+const canClose = computed(() => isAuthor.value || auth.isStaff);
 
 const errorLabel = computed(() => {
   const key = supportErrorI18nKey(support.error);
@@ -210,6 +207,7 @@ async function onReply() {
   try {
     await support.postMessage(ticketId.value, replyBody.value.trim());
     replyBody.value = '';
+    await nextTick();
     replyFormRef.value?.resetValidation();
   } catch {
     /* error in store */

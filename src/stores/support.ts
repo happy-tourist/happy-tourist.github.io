@@ -331,7 +331,10 @@ export const useSupportStore = defineStore('support', () => {
       );
       const updated = data.user;
       if (updated) {
-        adminUsers.value = adminUsers.value.map((u) => (u.id === updated.id ? updated : u));
+        // Merge so list-only fields (e.g. emailVerified) survive if API omits them.
+        adminUsers.value = adminUsers.value.map((u) =>
+          u.id === updated.id ? { ...u, ...updated } : u,
+        );
       }
       return updated;
     } catch (e) {

@@ -46,6 +46,7 @@
             map-options
             outlined
             dense
+            lazy-rules
             :label="$t('support.topic')"
             :rules="[(v) => !!v || $t('support.topicRequired')]"
           />
@@ -55,6 +56,7 @@
             outlined
             dense
             autogrow
+            lazy-rules
             :label="$t('support.body')"
             :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('support.bodyRequired')]"
           />
@@ -105,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
@@ -182,6 +184,7 @@ async function onCreate() {
   try {
     const created = await support.createTicket(topic.value, body.value.trim());
     body.value = '';
+    await nextTick();
     createFormRef.value?.resetValidation();
     await support.listOwnTickets().catch(() => undefined);
     await router.push({ name: 'support-ticket', params: { id: created.id } });
