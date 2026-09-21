@@ -17,6 +17,10 @@ export type SupportStatus = (typeof SUPPORT_STATUSES)[number];
 export const USER_ROLES = ['user', 'moderator', 'admin'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+/** Staff queue status filter (server default `open`). */
+export const STAFF_STATUS_FILTERS = ['open', 'closed', 'all'] as const;
+export type StaffStatusFilter = (typeof STAFF_STATUS_FILTERS)[number];
+
 export interface SupportTicket {
   id: string;
   authorUserId: string;
@@ -42,6 +46,14 @@ export interface AdminUserRow {
   anonymous: boolean;
   role: string;
   displayName: string | null;
+  emailVerified?: boolean;
+}
+
+export interface StaffTicketsFilters {
+  /** Omit or empty = all topics. */
+  topic?: SupportTopic | '';
+  /** Default on server is `open`. */
+  status?: StaffStatusFilter;
 }
 
 function httpErrorCode(e: unknown): string {
@@ -234,12 +246,20 @@ export const useSupportStore = defineStore('support', () => {
     }
   }
 
-  async function listStaffTickets() {
+  async function listStaffTickets(filters: StaffTicketsFilters = {}) {
     loading.value = true;
     error.value = null;
     try {
+      const query: { topic?: string; status?: StaffStatusFilter } = {};
+      if (filters.topic) {
+        query.topic = filters.topic;
+      }
+      if (filters.status) {
+        query.status = filters.status;
+      }
       const { data } = await client.http.get<{ tickets: SupportTicket[] }>(
         '/api/support/staff/tickets',
+        { query },
       );
       staffTickets.value = data?.tickets ?? [];
     } catch (e) {

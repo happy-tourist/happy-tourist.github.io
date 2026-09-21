@@ -32,12 +32,17 @@
       <template v-else>
         <q-item v-for="row in support.adminUsers" :key="row.id">
           <q-item-section>
-            <q-item-label>
-              {{ row.anonymous ? $t('support.guest') : row.displayName || row.email || row.id }}
+            <q-item-label class="row items-center q-gutter-sm">
+              <span>{{ row.displayName || row.email || row.id }}</span>
+              <q-badge
+                v-if="row.emailVerified === false"
+                color="warning"
+                text-color="dark"
+                :label="$t('support.emailUnverified')"
+              />
             </q-item-label>
             <q-item-label caption>
               {{ row.email || '—' }}
-              <span v-if="row.anonymous"> · {{ $t('support.guest') }}</span>
             </q-item-label>
           </q-item-section>
           <q-item-section side style="min-width: 160px">

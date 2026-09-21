@@ -31,22 +31,23 @@
         </template>
       </q-banner>
 
-      <q-list bordered separator class="rounded-borders q-mb-md">
-        <q-item v-for="msg in support.messages" :key="msg.id">
-          <q-item-section>
-            <q-item-label class="text-weight-medium">
-              {{ messageAuthorLabel(msg) }}
-              <span class="text-caption text-muted q-ml-sm">{{ formatDate(msg.createdAt) }}</span>
-            </q-item-label>
-            <q-item-label class="text-body2" style="white-space: pre-wrap">{{
-              msg.body
-            }}</q-item-label>
-          </q-item-section>
-        </q-item>
-      </q-list>
+      <div class="q-gutter-y-md q-mb-md">
+        <div
+          v-for="msg in support.messages"
+          :key="msg.id"
+          class="q-pa-md rounded-borders"
+          style="border: 1px solid rgba(128, 128, 128, 0.35)"
+        >
+          <div class="text-weight-medium q-mb-sm">
+            {{ messageAuthorLabel(msg) }}
+            <span class="text-caption text-muted q-ml-sm">{{ formatDate(msg.createdAt) }}</span>
+          </div>
+          <div class="text-body2" style="white-space: pre-wrap">{{ msg.body }}</div>
+        </div>
+      </div>
 
       <div v-if="!isClosed" class="q-gutter-md">
-        <q-form class="q-gutter-md" @submit.prevent="onReply">
+        <q-form ref="replyFormRef" class="q-gutter-md" @submit.prevent="onReply">
           <q-input
             v-model="replyBody"
             type="textarea"
@@ -86,7 +87,7 @@
               @click="onTake"
             />
             <q-btn
-              v-if="support.ticket.status !== 'awaiting_response'"
+              v-if="support.ticket.status === 'in_progress'"
               color="warning"
               outline
               :label="$t('support.setAwaiting')"
@@ -113,6 +114,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
+import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import { supportErrorI18nKey, useSupportStore, type SupportMessage } from '@/stores/support';
@@ -123,6 +125,7 @@ const route = useRoute('support-ticket');
 const { t } = useI18n();
 
 const replyBody = ref('');
+const replyFormRef = ref<QForm | null>(null);
 
 const ticketId = computed(() => String(route.params.id ?? ''));
 
@@ -207,6 +210,7 @@ async function onReply() {
   try {
     await support.postMessage(ticketId.value, replyBody.value.trim());
     replyBody.value = '';
+    replyFormRef.value?.resetValidation();
   } catch {
     /* error in store */
   }

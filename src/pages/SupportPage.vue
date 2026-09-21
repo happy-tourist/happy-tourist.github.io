@@ -38,7 +38,7 @@
     <q-card flat bordered class="q-mb-lg">
       <q-card-section>
         <div class="text-h6 q-mb-md">{{ $t('support.createTitle') }}</div>
-        <q-form class="q-gutter-md" @submit.prevent="onCreate">
+        <q-form ref="createFormRef" class="q-gutter-md" @submit.prevent="onCreate">
           <q-select
             v-model="topic"
             :options="topicOptions"
@@ -108,6 +108,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -124,6 +125,7 @@ const { t } = useI18n();
 
 const topic = ref<SupportTopic>('problem');
 const body = ref('');
+const createFormRef = ref<QForm | null>(null);
 
 const topicOptions = computed(() =>
   SUPPORT_TOPICS.map((value) => ({
@@ -180,6 +182,7 @@ async function onCreate() {
   try {
     const created = await support.createTicket(topic.value, body.value.trim());
     body.value = '';
+    createFormRef.value?.resetValidation();
     await support.listOwnTickets().catch(() => undefined);
     await router.push({ name: 'support-ticket', params: { id: created.id } });
   } catch {

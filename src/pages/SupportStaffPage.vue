@@ -24,14 +24,40 @@
       </template>
     </q-banner>
 
-    <div class="row q-mb-md">
-      <q-btn
-        flat
-        icon="refresh"
-        :label="$t('support.refresh')"
-        :loading="support.loading"
-        @click="onRefresh"
-      />
+    <div class="row q-col-gutter-md items-end q-mb-md">
+      <div class="col-12 col-sm-4">
+        <q-select
+          v-model="topicFilter"
+          :options="topicFilterOptions"
+          emit-value
+          map-options
+          outlined
+          dense
+          :label="$t('support.filterTopic')"
+          @update:model-value="onFiltersChange"
+        />
+      </div>
+      <div class="col-12 col-sm-4">
+        <q-select
+          v-model="statusFilter"
+          :options="statusFilterOptions"
+          emit-value
+          map-options
+          outlined
+          dense
+          :label="$t('support.filterStatus')"
+          @update:model-value="onFiltersChange"
+        />
+      </div>
+      <div class="col-12 col-sm-4">
+        <q-btn
+          flat
+          icon="refresh"
+          :label="$t('support.refresh')"
+          :loading="support.loading"
+          @click="onRefresh"
+        />
+      </div>
     </div>
 
     <q-list bordered separator class="rounded-borders">
@@ -70,31 +96,67 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { supportErrorI18nKey, useSupportStore } from '@/stores/support';
+import {
+  STAFF_STATUS_FILTERS,
+  SUPPORT_TOPICS,
+  supportErrorI18nKey,
+  useSupportStore,
+  type StaffStatusFilter,
+  type SupportTopic,
+} from '@/stores/support';
 
 const auth = useAuthStore();
 const support = useSupportStore();
 const router = useRouter();
 const { t } = useI18n();
 
+/** Empty string = all topics (omit query). */
+const topicFilter = ref<SupportTopic | ''>('');
+/** Server default is open. */
+const statusFilter = ref<StaffStatusFilter>('open');
+
+const topicFilterOptions = computed(() => [
+  { label: t('support.filterTopicAll'), value: '' as const },
+  ...SUPPORT_TOPICS.map((value) => ({
+    label: t(`support.topics.${value}`),
+    value,
+  })),
+]);
+
+const statusFilterOptions = computed(() =>
+  STAFF_STATUS_FILTERS.map((value) => ({
+    label: t(`support.filterStatuses.${value}`),
+    value,
+  })),
+);
+
 const errorLabel = computed(() => {
   const key = supportErrorI18nKey(support.error);
   return key ? t(key) : (support.error ?? '');
 });
+
+function loadStaffList() {
+  return support
+    .listStaffTickets({
+      topic: topicFilter.value,
+      status: statusFilter.value,
+    })
+    .catch(() => {
+      /* error in store */
+    });
+}
 
 onMounted(() => {
   if (!auth.isStaff) {
     void router.replace({ name: 'support' });
     return;
   }
-  void support.listStaffTickets().catch(() => {
-    /* error in store */
-  });
+  void loadStaffList();
 });
 
 function topicLabel(value: string) {
@@ -130,9 +192,11 @@ function formatDate(value: string | Date) {
   return d.toLocaleString('ru-RU');
 }
 
+function onFiltersChange() {
+  void loadStaffList();
+}
+
 function onRefresh() {
-  void support.listStaffTickets().catch(() => {
-    /* error in store */
-  });
+  void loadStaffList();
 }
 </script>
