@@ -5,13 +5,22 @@
         <div class="text-h5">{{ $t('auth.cabinetTitle') }}</div>
         <div class="text-subtitle2 text-muted">{{ auth.displayName }}</div>
       </div>
-      <q-btn flat :label="$t('auth.backToLobby')" :to="{ name: 'lobby' }" />
+      <div class="row q-gutter-sm">
+        <q-btn flat :label="$t('auth.backToLobby')" :to="{ name: 'lobby' }" />
+        <q-btn
+          flat
+          color="negative"
+          :label="$t('auth.logout')"
+          :loading="auth.loading"
+          @click="onLogout"
+        />
+      </div>
     </div>
 
-    <q-banner v-if="auth.error" dense rounded class="bg-negative text-white q-mb-md">
-      {{ auth.error }}
+    <q-banner v-if="pageError" dense rounded class="bg-negative text-white q-mb-md">
+      {{ pageError }}
       <template #action>
-        <q-btn flat dense label="OK" @click="auth.error = null" />
+        <q-btn flat dense label="OK" @click="clearErrors" />
       </template>
     </q-banner>
 
@@ -39,6 +48,77 @@
             />
           </div>
         </div>
+      </q-card-section>
+    </q-card>
+
+    <q-card flat bordered class="q-mb-md">
+      <q-card-section>
+        <div class="text-h6 q-mb-md">{{ $t('auth.displayNameTitle') }}</div>
+        <q-form class="q-gutter-md" @submit.prevent="onUpdateDisplayName">
+          <q-input
+            v-model="nameDraft"
+            :label="$t('auth.displayNameLabel')"
+            outlined
+            dense
+            autocomplete="nickname"
+            :rules="[(v) => !!String(v || '').trim() || $t('auth.displayNameRequired')]"
+          />
+          <q-btn
+            type="submit"
+            color="primary"
+            :label="$t('auth.displayNameSubmit')"
+            :loading="auth.loading"
+          />
+        </q-form>
+      </q-card-section>
+    </q-card>
+
+    <q-card v-if="auth.canChangePassword" flat bordered class="q-mb-md">
+      <q-card-section>
+        <div class="text-h6 q-mb-md">{{ $t('auth.changePasswordTitle') }}</div>
+        <q-form class="q-gutter-md" @submit.prevent="onChangePassword">
+          <q-input
+            v-model="currentPassword"
+            :type="showCurrentPassword ? 'text' : 'password'"
+            :label="$t('auth.currentPassword')"
+            outlined
+            dense
+            autocomplete="current-password"
+            :rules="[(v) => !!v || $t('auth.currentPasswordRequired')]"
+          >
+            <template #append>
+              <q-icon
+                :name="showCurrentPassword ? 'visibility_off' : 'visibility'"
+                class="cursor-pointer"
+                @click="showCurrentPassword = !showCurrentPassword"
+              />
+            </template>
+          </q-input>
+          <q-input
+            v-model="newPassword"
+            :type="showNewPassword ? 'text' : 'password'"
+            :label="$t('auth.newPassword')"
+            outlined
+            dense
+            autocomplete="new-password"
+            :rules="[(v) => passwordPolicyRule(v, $t('auth.passwordPolicy'))]"
+          >
+            <template #append>
+              <q-icon
+                :name="showNewPassword ? 'visibility_off' : 'visibility'"
+                class="cursor-pointer"
+                @click="showNewPassword = !showNewPassword"
+              />
+            </template>
+          </q-input>
+          <PasswordStrengthMeter :password="newPassword" />
+          <q-btn
+            type="submit"
+            color="primary"
+            :label="$t('auth.changePasswordSubmit')"
+            :loading="auth.loading"
+          />
+        </q-form>
       </q-card-section>
     </q-card>
 
@@ -79,15 +159,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 
+import PasswordStrengthMeter from '@/components/PasswordStrengthMeter.vue';
+import { passwordPolicyRule } from '@/lib/passwordPolicy';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 const router = useRouter();
+const { t } = useI18n();
 
 const newEmail = ref('');
+const nameDraft = ref('');
+const currentPassword = ref('');
+const newPassword = ref('');
+const showCurrentPassword = ref(false);
+const showNewPassword = ref(false);
 const confirmSentOpen = ref(false);
 
 /** Cabinet is for registered (non-anonymous) users only (design D7). */
@@ -97,9 +186,46 @@ onMounted(() => {
   }
 });
 
+watch(
+  () => [auth.user?.displayName, auth.user?.name] as const,
+  ([dn, name]) => {
+    const persisted = typeof dn === 'string' ? dn.trim() : '';
+    if (persisted) {
+      nameDraft.value = persisted;
+      return;
+    }
+    nameDraft.value = typeof name === 'string' ? name : '';
+  },
+  { immediate: true },
+);
+
 const showConfirmButton = computed(
   () => Boolean(auth.user?.email) && !auth.user?.anonymous && auth.user?.emailVerified !== true,
 );
+
+const pageError = computed(() => {
+  const code = auth.error;
+  if (!code) {
+    return null;
+  }
+  if (code === 'display_name_invalid') {
+    return t('auth.displayNameRequired');
+  }
+  if (code === 'invalid_current_password') {
+    return t('auth.invalidCurrentPassword');
+  }
+  if (code === 'password_policy_failed') {
+    return t('auth.passwordPolicy');
+  }
+  if (code === 'password_change_unavailable') {
+    return t('auth.passwordChangeUnavailable');
+  }
+  return code;
+});
+
+function clearErrors() {
+  auth.error = null;
+}
 
 async function onSendConfirm() {
   try {
@@ -114,6 +240,32 @@ async function onChangeEmail() {
   try {
     await auth.changeEmail(newEmail.value);
     newEmail.value = '';
+  } catch {
+    // error already in store
+  }
+}
+
+async function onUpdateDisplayName() {
+  try {
+    await auth.updateDisplayName(nameDraft.value.trim());
+  } catch {
+    // error already in store
+  }
+}
+
+async function onChangePassword() {
+  try {
+    await auth.changePassword(currentPassword.value, newPassword.value);
+    await router.replace({ name: 'login' });
+  } catch {
+    // error already in store — session kept on failure (SC-PROFILE-04)
+  }
+}
+
+async function onLogout() {
+  try {
+    await auth.logout();
+    await router.replace({ name: 'login' });
   } catch {
     // error already in store
   }

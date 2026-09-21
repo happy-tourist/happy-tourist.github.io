@@ -116,8 +116,9 @@
 
     <!-- Board scrolls above sticky bottom HUD; opponents/spectator markers above board (SC-PRESENCE-02/03/22 / D2). -->
     <div class="game-board-region">
+      <!-- Seated always reserves top band height (SC-PRESENCE-26); spectator only when markers exist. -->
       <div
-        v-if="topPresenceMarkers.length > 0"
+        v-if="isSeatedViewer || topPresenceMarkers.length > 0"
         class="presence-row presence-row--top"
         aria-label="presence"
       >
@@ -525,6 +526,11 @@ const GRACE_SECONDS = 30;
 
 /** Piece travel animation (D6) — matches CSS transition. */
 const MOVE_ANIM_MS = 250;
+/**
+ * After move travel ends, keep pipeline lock briefly so server paced trap reveal
+ * (MOVE_ANIM_MS then holding/revealing sync) can own busy without a click gap (D4).
+ */
+const PIPELINE_SETTLE_MS = 600;
 /** Short fade after landing on center before DOM removal (SC-FINISH-01). */
 const FINISH_FADE_MS = 200;
 /** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
@@ -850,6 +856,12 @@ const selectedSide = ref<string | null>(null);
 const returningSide = ref<string | null>(null);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
+/**
+ * Intent / gap lock: set before sendMove (and rescue/push/return); bridges
+ * intent→send and move→catapult/grille until visual presentation owns busy (D4 / SC-BOARD-27).
+ */
+const boardPipelineLock = ref(false);
+let pipelineSettleTimer: ReturnType<typeof setTimeout> | undefined;
 /** Skip first paint transition so pieces do not fly from 0,0. */
 const pieceTransitionsReady = ref(false);
 /**
@@ -1065,11 +1077,12 @@ const boardPieces = computed((): BoardPiece[] => {
 });
 
 /**
- * Move chrome / submit only in playing; lock when finished, time-expired, or any
- * board presentation anim (land-before-catapult / move / grille / catapult / finish /
- * fling / deferred grille — SC-BOARD-27/29/30).
+ * Visual presentation only (no intent lock) — used to decide when pipeline settle can release.
+ * Grille: drop/rise busy; settled `hold` alone does not lock so rescue remains possible after
+ * the trap presentation budget (server `GRILLE_ANIM_MS` then idle). Pipeline lock bridges
+ * move→drop so there is no unlock flash before hold appears (D4 / SC-BOARD-27).
  */
-const isBoardBusy = computed(() => {
+function hasVisualBoardPresentation(): boolean {
   if (moveAnimating.value || flingTravelActive.value || catapultPresentationBusy.value) {
     return true;
   }
@@ -1082,6 +1095,7 @@ const isBoardBusy = computed(() => {
   if (catapultOverlays.value.length > 0) {
     return true;
   }
+  // drop / rise (hold after drop settle unlocks for rescue; pipeline lock covers into drop)
   if (grilleOverlays.value.some((g) => g.phase === 'drop' || g.phase === 'rise')) {
     return true;
   }
@@ -1092,7 +1106,45 @@ const isBoardBusy = computed(() => {
     return true;
   }
   return false;
-});
+}
+
+function clearPipelineSettleTimer() {
+  if (pipelineSettleTimer !== undefined) {
+    clearTimeout(pipelineSettleTimer);
+    pipelineSettleTimer = undefined;
+  }
+}
+
+/** Intent lock before send (D4). */
+function beginBoardPipelineLock() {
+  clearPipelineSettleTimer();
+  boardPipelineLock.value = true;
+}
+
+function releaseBoardPipelineLock() {
+  clearPipelineSettleTimer();
+  boardPipelineLock.value = false;
+}
+
+/**
+ * After move travel may end before trap sync — keep lock briefly, then release if still idle.
+ */
+function scheduleBoardPipelineSettle() {
+  clearPipelineSettleTimer();
+  pipelineSettleTimer = setTimeout(() => {
+    pipelineSettleTimer = undefined;
+    if (!hasVisualBoardPresentation()) {
+      boardPipelineLock.value = false;
+    }
+  }, PIPELINE_SETTLE_MS);
+}
+
+/**
+ * Move chrome / submit only in playing; lock when finished, time-expired, or any
+ * board presentation anim (intent lock, land-before-catapult / move / grille hold /
+ * catapult / finish / fling / deferred grille — SC-BOARD-27/29/30/32).
+ */
+const isBoardBusy = computed(() => boardPipelineLock.value || hasVisualBoardPresentation());
 
 const isInteractive = computed(
   () =>
@@ -1489,12 +1541,14 @@ function selectOwnSide(side: string) {
 /** Lock board chrome for travel (default) or approach+back (rescue/push = 2×). */
 function beginMoveAnimation(durationMs: number = MOVE_ANIM_MS) {
   moveAnimating.value = true;
+  clearPipelineSettleTimer();
   if (moveAnimTimer !== undefined) {
     clearTimeout(moveAnimTimer);
   }
   moveAnimTimer = setTimeout(() => {
     moveAnimating.value = false;
     moveAnimTimer = undefined;
+    scheduleBoardPipelineSettle();
   }, durationMs + 50);
 }
 
@@ -1502,6 +1556,7 @@ function submitMove(side: string, row: number, col: number) {
   if (!isInteractive.value) {
     return;
   }
+  beginBoardPipelineLock();
   // D11 A / SC-FINISH-18: seed lastKnown before send so own center finish keeps travel `from`.
   // Do not seed finishAnimFrom here — silent server reject would pin the piece via pieceStyle.
   if (isCenterCell(row, col) && mySeat.value) {
@@ -1516,6 +1571,7 @@ function submitMove(side: string, row: number, col: number) {
   }
   // Animate / lock input only when the store actually sent (room + isMyTurn).
   if (!game.sendMove(side, row, col)) {
+    releaseBoardPipelineLock();
     return;
   }
   // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
@@ -1556,7 +1612,9 @@ function submitReturn(side: string, row: number, col: number) {
   if (!isInteractive.value || !returningSide.value) {
     return;
   }
+  beginBoardPipelineLock();
   if (!game.sendReturnFromFinish(side, row, col)) {
+    releaseBoardPipelineLock();
     return;
   }
   returningSide.value = null;
@@ -1575,7 +1633,9 @@ function onRescueClick(side: string) {
   if (!rescuer) {
     return;
   }
+  beginBoardPipelineLock();
   if (!game.sendRescue(side)) {
+    releaseBoardPipelineLock();
     return;
   }
   returningSide.value = null;
@@ -1611,7 +1671,9 @@ function onPushClick(push: PushAffordance) {
   if (!pusher) {
     return;
   }
+  beginBoardPipelineLock();
   if (!game.sendPush(push.pusherSide, push.targetSessionId, push.targetSide, push.row, push.col)) {
+    releaseBoardPipelineLock();
     return;
   }
   // D10 / SC-MOVE-76: seed target lastKnown before sync so push→center keeps travel `from`.
@@ -1700,6 +1762,7 @@ function onPieceTransitionEnd(event: TransitionEvent) {
       clearTimeout(moveAnimTimer);
       moveAnimTimer = undefined;
     }
+    scheduleBoardPipelineSettle();
   }
 }
 
@@ -1882,8 +1945,24 @@ watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
     selectedSide.value = null;
     returningSide.value = null;
+    releaseBoardPipelineLock();
   }
 });
+
+/**
+ * When trap/finish visuals take over, pause settle; when they end, settle so
+ * intent lock releases into grille hold briefly then unlocks for rescue (D4).
+ */
+watch(
+  () => hasVisualBoardPresentation(),
+  (active) => {
+    if (active) {
+      clearPipelineSettleTimer();
+    } else if (boardPipelineLock.value && !moveAnimating.value) {
+      scheduleBoardPipelineSettle();
+    }
+  },
+);
 
 // Lock move/peek selection if the selected piece becomes trapped (SC-MOVE-52/53 UX).
 watch(
@@ -2309,6 +2388,9 @@ function yieldMoveAnimToCatapult() {
     moveAnimTimer = undefined;
   }
   moveAnimating.value = false;
+  // Catapult visual owns busy; drop intent lock so settle is not needed.
+  clearPipelineSettleTimer();
+  boardPipelineLock.value = false;
 }
 
 async function doubleRaf(): Promise<void> {
@@ -2999,6 +3081,8 @@ onUnmounted(() => {
     clearTimeout(moveAnimTimer);
     moveAnimTimer = undefined;
   }
+  clearPipelineSettleTimer();
+  boardPipelineLock.value = false;
   for (const timer of finishFadeTimers.values()) {
     clearTimeout(timer);
   }

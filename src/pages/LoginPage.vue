@@ -13,10 +13,11 @@
           <q-input
             v-if="isRegister"
             v-model="displayName"
-            label="Имя"
+            :label="$t('auth.displayNameLabel')"
             outlined
             dense
             autocomplete="nickname"
+            :rules="[(v) => !!String(v || '').trim() || $t('auth.displayNameRequired')]"
           />
 
           <q-input
@@ -35,8 +36,8 @@
             label="Пароль"
             outlined
             dense
-            autocomplete="current-password"
-            :rules="[(v) => (v && v.length >= 6) || $t('auth.passwordMin')]"
+            :autocomplete="isRegister ? 'new-password' : 'current-password'"
+            :rules="passwordRules"
           >
             <template #append>
               <q-icon
@@ -47,8 +48,14 @@
             </template>
           </q-input>
 
+          <PasswordStrengthMeter
+            v-if="isRegister"
+            :password="password"
+            :user-inputs="strengthInputs"
+          />
+
           <q-banner v-if="auth.error" dense class="bg-negative text-white">
-            {{ auth.error }}
+            {{ authErrorText }}
           </q-banner>
 
           <q-btn
@@ -98,20 +105,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 
+import PasswordStrengthMeter from '@/components/PasswordStrengthMeter.vue';
+import { passwordPolicyRule } from '@/lib/passwordPolicy';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
 const router = useRouter();
 const route = useRoute();
+const { t } = useI18n();
 
 const isRegister = ref(false);
 const showPassword = ref(false);
 const displayName = ref('');
 const email = ref('');
 const password = ref('');
+
+const passwordRules = computed(() => {
+  if (isRegister.value) {
+    return [(v: string) => passwordPolicyRule(v, t('auth.passwordPolicy'))];
+  }
+  return [(v: string) => (v && v.length >= 6) || t('auth.passwordMin')];
+});
+
+const strengthInputs = computed(() =>
+  [email.value, displayName.value].filter((v) => Boolean(v && String(v).trim())),
+);
+
+const authErrorText = computed(() => {
+  const code = auth.error;
+  if (code === 'password_policy_failed') {
+    return t('auth.passwordPolicy');
+  }
+  return code;
+});
 
 function toggleMode() {
   isRegister.value = !isRegister.value;
@@ -126,8 +156,8 @@ async function goAfterLogin() {
 async function onSubmit() {
   try {
     if (isRegister.value) {
-      const options = displayName.value ? { name: displayName.value } : {};
-      await auth.register(email.value, password.value, options);
+      const name = displayName.value.trim();
+      await auth.register(email.value, password.value, { name });
     } else {
       await auth.login(email.value, password.value);
     }
@@ -139,7 +169,8 @@ async function onSubmit() {
 
 async function onAnonymous() {
   try {
-    const options = displayName.value ? { name: displayName.value } : {};
+    const name = displayName.value.trim();
+    const options = name ? { name } : {};
     await auth.loginAnonymously(options);
     await goAfterLogin();
   } catch {

@@ -539,16 +539,20 @@ export const useGameStore = defineStore('game', {
       await this.unsubscribeLobby();
       this.lobbyWanted = true;
       this.listing = true;
+      // SC-LOBBY-20 / D3: drop stale list; stay loading until fresh `rooms` snapshot.
+      this.rooms = [];
       this.error = null;
 
       try {
         this._attachLobbyRoom(await this._joinLobbyRoom());
+        // listing cleared in onMessage('rooms') — not here.
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (isLobbyReconnectNoise(msg)) {
           // Entry hit reconnect noise — one quiet retry before SC-LOBBY-07 surface.
           try {
             this._attachLobbyRoom(await this._joinLobbyRoom());
+            return;
           } catch (e2) {
             const msg2 = e2 instanceof Error ? e2.message : String(e2);
             if (!isLobbyReconnectNoise(msg2)) {
@@ -566,13 +570,14 @@ export const useGameStore = defineStore('game', {
           this.rooms = [];
           this.lobbyRoom = null;
         }
-      } finally {
         this.listing = false;
       }
     },
 
     async unsubscribeLobby() {
       this.lobbyWanted = false;
+      // SC-LOBBY-20: clear before leave/resubscribe so remount never flashes stale rows.
+      this.rooms = [];
       const lobby = this.lobbyRoom;
       this.lobbyRoom = null;
 
@@ -912,6 +917,8 @@ export const useGameStore = defineStore('game', {
 
       lobby.onMessage('rooms', (rooms: RoomAvailable<GameRoomMeta>[]) => {
         this.rooms = rooms ?? [];
+        // SC-LOBBY-20 / D3: first (or refreshed) snapshot ends listing spinner.
+        this.listing = false;
       });
 
       lobby.onMessage('+', ([roomId, room]: [string, RoomAvailable<GameRoomMeta>]) => {
@@ -953,6 +960,10 @@ export const useGameStore = defineStore('game', {
         return;
       }
 
+      // SC-LOBBY-20: do not keep prior snapshot visible across resubscribe.
+      this.rooms = [];
+      this.listing = true;
+
       try {
         const lobby = await this._joinLobbyRoom();
         if (!this.lobbyWanted) {
@@ -961,19 +972,23 @@ export const useGameStore = defineStore('game', {
           } catch {
             // already closed
           }
+          this.listing = false;
           return;
         }
         this._attachLobbyRoom(lobby);
+        // listing cleared in onMessage('rooms').
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (isLobbyReconnectNoise(msg)) {
-          // Transient reconnect noise — leave list as-is; user may remount Lobby.
+          // Transient reconnect noise — empty-safe until remount / next drop.
+          this.listing = false;
           return;
         }
         // SC-LOBBY-07: listing remains unavailable after quiet attempt.
         this.error = msg;
         this.rooms = [];
         this.lobbyRoom = null;
+        this.listing = false;
       }
     },
 

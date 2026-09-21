@@ -25,7 +25,7 @@
             outlined
             dense
             autocomplete="new-password"
-            :rules="[(v) => (v && v.length >= 6) || $t('auth.passwordMin')]"
+            :rules="[(v) => passwordPolicyRule(v, $t('auth.passwordPolicy'))]"
           >
             <template #append>
               <q-icon
@@ -35,6 +35,8 @@
               />
             </template>
           </q-input>
+
+          <PasswordStrengthMeter :password="password" />
 
           <q-banner v-if="pageError" dense class="bg-negative text-white">
             {{ pageError }}
@@ -62,6 +64,8 @@ import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 
+import PasswordStrengthMeter from '@/components/PasswordStrengthMeter.vue';
+import { passwordPolicyRule } from '@/lib/passwordPolicy';
 import { useAuthStore } from '@/stores/auth';
 
 const auth = useAuthStore();
@@ -96,6 +100,9 @@ function mapResetError(code: string | null): string {
   }
   if (code === 'token_invalid') {
     return t('auth.resetInvalid');
+  }
+  if (code === 'password_policy_failed') {
+    return t('auth.passwordPolicy');
   }
   return t('auth.resetFailed');
 }

@@ -54,8 +54,9 @@
         <q-item
           v-for="room in game.rooms"
           :key="room.roomId"
-          clickable
-          v-ripple
+          :clickable="!joining"
+          :disable="joining"
+          v-ripple="!joining"
           @click="onJoin(room.roomId)"
         >
           <q-item-section>
@@ -223,6 +224,10 @@ async function onConfirmCreate() {
 }
 
 async function onJoin(roomId: string) {
+  // SC-LOBBY-19: busy-lock — ignore re-entrant join while connecting.
+  if (joining.value) {
+    return;
+  }
   joining.value = true;
   try {
     await game.joinGame(roomId);
