@@ -7,7 +7,7 @@
       </div>
 
       <div class="q-gutter-sm">
-        <q-btn flat icon="style" :label="$t('content.nav')" :to="{ name: 'content-catalog' }" />
+        <q-btn flat icon="style" :label="$t('content.nav')" :to="{ name: 'content-collection' }" />
         <q-btn flat icon="help_outline" :label="$t('support.nav')" :to="{ name: 'support' }" />
         <q-btn
           v-if="!auth.user?.anonymous"

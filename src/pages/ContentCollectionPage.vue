@@ -7,6 +7,13 @@
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+        <q-btn
+          v-if="auth.isStaff"
+          flat
+          icon="rate_review"
+          :label="$t('content.staffNav')"
+          :to="{ name: 'content-staff' }"
+        />
         <q-btn color="primary" icon="add" :label="$t('content.create')" @click="onCreateClick" />
       </div>
     </div>

@@ -3,10 +3,10 @@
     <div class="row items-center justify-between q-mb-md">
       <div>
         <div class="text-h5">{{ $t('content.staffTitle') }}</div>
-        <div class="text-subtitle2 text-muted">{{ $t('content.staffSubtitle') }}</div>
+        <div class="text-subtitle2 text-muted">{{ $t('content.staffAnswersHubSubtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+        <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
         <q-btn
           flat
           icon="refresh"
@@ -51,7 +51,11 @@
               </q-badge>
             </q-item-label>
             <q-item-label caption>
-              {{ $t('content.statuses.pending') }} · {{ formatDate(item.updatedAt) }}
+              {{ $t('content.requestTypeAnswers') }} · {{ $t('content.statuses.pending') }} ·
+              {{ formatDate(item.updatedAt) }}
+              <template v-if="item.hasTasksPending">
+                · {{ $t('content.hasTasksPending') }}
+              </template>
             </q-item-label>
           </q-item-section>
           <q-item-section side>
@@ -89,7 +93,7 @@ function load() {
 
 onMounted(() => {
   if (!auth.isStaff) {
-    void router.replace({ name: 'content-catalog' });
+    void router.replace({ name: 'content-collection' });
     return;
   }
   void load();

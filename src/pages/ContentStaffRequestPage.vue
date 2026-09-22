@@ -9,7 +9,8 @@
           </q-badge>
         </div>
         <div class="text-subtitle2 text-muted">
-          {{ preview ? statusLabel(preview.request.status) : '' }}
+          {{ $t('content.requestTypeAnswers') }}
+          <template v-if="preview"> · {{ statusLabel(preview.request.status) }}</template>
         </div>
       </div>
       <q-btn flat :label="$t('content.staffBack')" :to="{ name: 'content-staff' }" />
@@ -39,8 +40,18 @@
         </q-item>
       </q-list>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
-      <div v-for="(ts, si) in preview.content.taskSets" :key="ts.id" class="q-mb-md">
+      <div class="text-h6 q-mb-sm">{{ $t('content.nestedTasks') }}</div>
+      <div v-if="nested?.tasksPending" class="q-mb-sm text-caption text-muted">
+        {{ $t('content.tasksPendingHint') }}
+      </div>
+      <div v-else-if="nested?.hasLiveTasks" class="q-mb-sm text-caption text-muted">
+        {{ $t('content.tasksLiveHint') }}
+      </div>
+      <div v-else class="q-mb-sm text-caption text-muted">
+        {{ $t('content.tasksMissingHint') }}
+      </div>
+
+      <div v-for="(ts, si) in nestedTaskSets" :key="ts.id" class="q-mb-md">
         <div class="text-subtitle1 q-mb-xs">{{ $t('content.taskSetLabel', { n: si + 1 }) }}</div>
         <q-list bordered separator class="rounded-borders">
           <q-item v-for="task in ts.tasks" :key="task.id">
@@ -61,27 +72,60 @@
           </q-item>
         </q-list>
       </div>
+      <div v-if="!nestedTaskSets.length" class="text-muted q-mb-lg">
+        {{ $t('content.emptyTasks') }}
+      </div>
 
-      <div v-if="preview.request.status === 'pending'" class="q-gutter-sm q-mb-lg">
+      <div
+        v-if="nested?.tasksPending && nested.tasksPending.status === 'pending'"
+        class="q-gutter-sm q-mb-lg"
+      >
+        <div class="text-subtitle2">{{ $t('content.approveTasksFirst') }}</div>
         <q-btn
           color="positive"
-          :label="$t('content.approve')"
+          :label="$t('content.approveTasks')"
           :loading="content.loading"
-          @click="onApprove"
+          @click="onApproveTasks"
         />
         <q-btn
           color="warning"
-          :label="$t('content.reject')"
+          :label="$t('content.rejectTasks')"
           :loading="content.loading"
-          @click="rejectOpen = true"
+          @click="openReject('tasks')"
         />
         <q-btn
           color="grey"
           outline
-          :label="$t('content.cancelPending')"
+          :label="$t('content.cancelTasksPending')"
           :loading="content.loading"
-          @click="onCancel"
+          @click="onCancelTasks"
         />
+      </div>
+
+      <div v-if="preview.request.status === 'pending'" class="q-gutter-sm q-mb-lg">
+        <q-btn
+          color="positive"
+          :label="$t('content.approveAnswers')"
+          :loading="content.loading"
+          :disable="!canApproveAnswers"
+          @click="onApproveAnswers"
+        />
+        <q-btn
+          color="warning"
+          :label="$t('content.rejectAnswers')"
+          :loading="content.loading"
+          @click="openReject('answers')"
+        />
+        <q-btn
+          color="grey"
+          outline
+          :label="$t('content.cancelAnswersPending')"
+          :loading="content.loading"
+          @click="onCancelAnswers"
+        />
+        <div v-if="!canApproveAnswers" class="text-caption text-muted">
+          {{ $t('content.approveAnswersNeedLiveTasks') }}
+        </div>
       </div>
 
       <div class="q-gutter-sm q-mb-lg">
@@ -103,7 +147,7 @@
         />
       </div>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.thread') }}</div>
+      <div class="text-h6 q-mb-sm">{{ $t('content.threadAnswers') }}</div>
       <q-list bordered separator class="rounded-borders q-mb-lg">
         <q-item v-for="msg in preview.messages" :key="msg.id">
           <q-item-section>
@@ -182,7 +226,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -196,10 +240,15 @@ const requestId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const preview = computed(() => content.staffPreview);
+const nested = computed(() => preview.value?.nested);
+const nestedTaskSets = computed((): TaskSet[] => nested.value?.tasksContent?.taskSets ?? []);
+const canApproveAnswers = computed(() => Boolean(nested.value?.hasLiveTasks));
+
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const rejectOpen = ref(false);
 const rejectComment = ref('');
+const rejectTarget = ref<'answers' | 'tasks'>('answers');
 
 const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
@@ -215,7 +264,7 @@ function load() {
 
 onMounted(() => {
   if (!auth.isStaff) {
-    void router.replace({ name: 'content-catalog' });
+    void router.replace({ name: 'content-collection' });
     return;
   }
   load();
@@ -244,10 +293,30 @@ function formatDate(value: string | Date) {
 
 function cardContent(answerCardId: string | null) {
   if (!answerCardId || !preview.value) return '';
-  return preview.value.content.answerCards.find((c) => c.id === answerCardId)?.content ?? '';
+  // Prefer answers cards from pending answers content; fall back to empty.
+  const fromAnswers = preview.value.content.answerCards.find((c) => c.id === answerCardId);
+  if (fromAnswers) return fromAnswers.content;
+  return '';
 }
 
-async function onApprove() {
+function openReject(target: 'answers' | 'tasks') {
+  rejectTarget.value = target;
+  rejectComment.value = '';
+  rejectOpen.value = true;
+}
+
+async function onApproveTasks() {
+  const tasksId = nested.value?.tasksPending?.requestId;
+  if (!tasksId) return;
+  try {
+    await content.approveRequest(tasksId);
+    await content.loadStaffPreview(requestId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onApproveAnswers() {
   try {
     await content.approveRequest(requestId.value);
     await router.replace({ name: 'content-staff' });
@@ -257,8 +326,11 @@ async function onApprove() {
 }
 
 async function onReject() {
+  const id =
+    rejectTarget.value === 'tasks' ? nested.value?.tasksPending?.requestId : requestId.value;
+  if (!id) return;
   try {
-    await content.rejectRequest(requestId.value, rejectComment.value.trim());
+    await content.rejectRequest(id, rejectComment.value.trim());
     rejectOpen.value = false;
     rejectComment.value = '';
     await content.loadStaffPreview(requestId.value);
@@ -267,7 +339,18 @@ async function onReject() {
   }
 }
 
-async function onCancel() {
+async function onCancelTasks() {
+  const tasksId = nested.value?.tasksPending?.requestId;
+  if (!tasksId) return;
+  try {
+    await content.cancelRequest(tasksId);
+    await content.loadStaffPreview(requestId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onCancelAnswers() {
   try {
     await content.cancelRequest(requestId.value);
     await router.replace({ name: 'content-staff' });

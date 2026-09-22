@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { client } from '@/boot/colyseus';
 
 export type Difficulty = 1 | 2 | 3;
+export type ModerationRequestType = 'answers' | 'tasks';
 
 export interface ContentPackSummary {
   id: string;
@@ -59,6 +60,7 @@ export interface ModerationRequest {
   changeAuthorId: string;
   revisionId: string;
   status: string;
+  type?: ModerationRequestType;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -79,7 +81,32 @@ export interface StaffPendingItem {
   status: string;
   title: string;
   blocked: boolean;
+  type?: ModerationRequestType;
+  hasTasksPending?: boolean;
+  hasLiveTasks?: boolean;
   updatedAt: string | Date;
+}
+
+export interface StaffNestedTasks {
+  tasksPending: {
+    requestId: string;
+    changeAuthorId: string;
+    status: string;
+    type: string;
+  } | null;
+  tasksContent: {
+    taskSets: TaskSet[];
+    title: string;
+  } | null;
+  hasLiveTasks: boolean;
+}
+
+export interface StaffPreview {
+  request: ModerationRequest;
+  pack: ContentPackSummary;
+  content: PackContent;
+  messages: ModerationMessage[];
+  nested?: StaffNestedTasks;
 }
 
 function httpErrorCode(e: unknown): string {
@@ -97,35 +124,39 @@ function httpErrorCode(e: unknown): string {
   return typeof anyErr.message === 'string' ? anyErr.message : '';
 }
 
+const KNOWN_ERROR_CODES = [
+  'email_verified_required',
+  'registered_user_required',
+  'not_in_collection',
+  'pack_blocked',
+  'pack_pending_lock',
+  'pack_pending_other',
+  'answers_dirty',
+  'tasks_need_cards',
+  'submit_need_cards',
+  'submit_need_tasks',
+  'submit_empty_slots',
+  'empty_title',
+  'empty_card_content',
+  'empty_question',
+  'empty_body',
+  'empty_comment',
+  'invalid_difficulty',
+  'pack_not_public',
+  'pack_not_found',
+  'request_not_found',
+  'not_pending',
+  'not_cancellable',
+  'thread_closed',
+  'approve_answers_need_live_tasks',
+  'forbidden',
+  'unauthenticated',
+] as const;
+
 /** Map API error codes to i18n keys under `content.errors.*` (page resolves). */
 function mapContentError(e: unknown): string {
   const code = httpErrorCode(e);
-  const known = [
-    'email_verified_required',
-    'registered_user_required',
-    'not_in_collection',
-    'pack_blocked',
-    'pack_pending_lock',
-    'pack_pending_other',
-    'submit_need_cards',
-    'submit_need_tasks',
-    'submit_empty_slots',
-    'empty_title',
-    'empty_card_content',
-    'empty_question',
-    'empty_body',
-    'empty_comment',
-    'invalid_difficulty',
-    'pack_not_public',
-    'pack_not_found',
-    'request_not_found',
-    'not_pending',
-    'not_cancellable',
-    'thread_closed',
-    'forbidden',
-    'unauthenticated',
-  ];
-  for (const k of known) {
+  for (const k of KNOWN_ERROR_CODES) {
     if (code.includes(k)) {
       return k;
     }
@@ -135,32 +166,7 @@ function mapContentError(e: unknown): string {
 
 export function contentErrorI18nKey(code: string | null): `content.errors.${string}` | null {
   if (!code) return null;
-  const keys = [
-    'email_verified_required',
-    'registered_user_required',
-    'not_in_collection',
-    'pack_blocked',
-    'pack_pending_lock',
-    'pack_pending_other',
-    'submit_need_cards',
-    'submit_need_tasks',
-    'submit_empty_slots',
-    'empty_title',
-    'empty_card_content',
-    'empty_question',
-    'empty_body',
-    'empty_comment',
-    'invalid_difficulty',
-    'pack_not_public',
-    'pack_not_found',
-    'request_not_found',
-    'not_pending',
-    'not_cancellable',
-    'thread_closed',
-    'forbidden',
-    'unauthenticated',
-  ] as const;
-  for (const k of keys) {
+  for (const k of KNOWN_ERROR_CODES) {
     if (code === k) {
       return `content.errors.${k}`;
     }
@@ -174,8 +180,9 @@ export function newLocalId(prefix = 'local'): string {
 }
 
 /**
- * Content packs HTTP (catalog / collection / draft / moderation / staff).
+ * Content packs HTTP (catalog / collection / draft / dual submit / moderation / staff).
  * Pages show `error` via q-banner; map codes with contentErrorI18nKey.
+ * No badge state for «submit answers» reminders (SC-PACK / D10).
  */
 export const useContentStore = defineStore('content', () => {
   const catalog = ref<ContentPackSummary[]>([]);
@@ -183,22 +190,56 @@ export const useContentStore = defineStore('content', () => {
   const pack = ref<ContentPackSummary | null>(null);
   const liveContent = ref<PackContent | null>(null);
   const draft = ref<PackContent | null>(null);
+  const answersDirty = ref(false);
+  const pendingAnswersRequestId = ref<string | null>(null);
+  const pendingTasksRequestId = ref<string | null>(null);
+  const isAnswersPendingAuthor = ref(false);
+  const isTasksPendingAuthor = ref(false);
+  /** Compat: either pending answers or tasks request id. */
   const pendingRequestId = ref<string | null>(null);
   const isPendingAuthor = ref(false);
   const moderationRequest = ref<ModerationRequest | null>(null);
   const moderationMessages = ref<ModerationMessage[]>([]);
   const staffPending = ref<StaffPendingItem[]>([]);
-  const staffPreview = ref<{
-    request: ModerationRequest;
-    pack: ContentPackSummary;
-    content: PackContent;
-    messages: ModerationMessage[];
-  } | null>(null);
+  const staffPreview = ref<StaffPreview | null>(null);
   const loading = ref(false);
+  const saving = ref(false);
   const error = ref<string | null>(null);
 
   function clearError() {
     error.value = null;
+  }
+
+  function applyDraftFlags(data: {
+    answersDirty?: boolean;
+    pendingAnswersRequestId?: string | null;
+    pendingTasksRequestId?: string | null;
+    isAnswersPendingAuthor?: boolean;
+    isTasksPendingAuthor?: boolean;
+    pendingRequestId?: string | null;
+    isPendingAuthor?: boolean;
+  }) {
+    answersDirty.value = Boolean(data.answersDirty);
+    pendingAnswersRequestId.value = data.pendingAnswersRequestId ?? null;
+    pendingTasksRequestId.value = data.pendingTasksRequestId ?? null;
+    isAnswersPendingAuthor.value = Boolean(data.isAnswersPendingAuthor);
+    isTasksPendingAuthor.value = Boolean(data.isTasksPendingAuthor);
+    pendingRequestId.value =
+      data.pendingRequestId ?? data.pendingAnswersRequestId ?? data.pendingTasksRequestId ?? null;
+    isPendingAuthor.value =
+      data.isPendingAuthor !== undefined
+        ? Boolean(data.isPendingAuthor)
+        : isAnswersPendingAuthor.value || isTasksPendingAuthor.value;
+  }
+
+  function clearDraftFlags() {
+    answersDirty.value = false;
+    pendingAnswersRequestId.value = null;
+    pendingTasksRequestId.value = null;
+    isAnswersPendingAuthor.value = false;
+    isTasksPendingAuthor.value = false;
+    pendingRequestId.value = null;
+    isPendingAuthor.value = false;
   }
 
   async function listCatalog() {
@@ -299,8 +340,8 @@ export const useContentStore = defineStore('content', () => {
       });
       pack.value = data.pack;
       draft.value = data.draft;
-      pendingRequestId.value = null;
-      isPendingAuthor.value = false;
+      clearDraftFlags();
+      answersDirty.value = true;
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -317,13 +358,17 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<{
         pack: ContentPackSummary;
         draft: PackContent;
-        pendingRequestId: string | null;
-        isPendingAuthor: boolean;
+        answersDirty?: boolean;
+        pendingAnswersRequestId?: string | null;
+        pendingTasksRequestId?: string | null;
+        isAnswersPendingAuthor?: boolean;
+        isTasksPendingAuthor?: boolean;
+        pendingRequestId?: string | null;
+        isPendingAuthor?: boolean;
       }>(`/api/content/packs/${packId}/draft`);
       pack.value = data.pack;
       draft.value = data.draft;
-      pendingRequestId.value = data.pendingRequestId;
-      isPendingAuthor.value = Boolean(data.isPendingAuthor);
+      applyDraftFlags(data);
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -334,38 +379,59 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function saveDraft(packId: string, body: PackContent) {
-    loading.value = true;
+  async function saveDraft(packId: string, body: PackContent, opts?: { quiet?: boolean }) {
+    const quiet = Boolean(opts?.quiet);
+    if (quiet) {
+      saving.value = true;
+    } else {
+      loading.value = true;
+    }
     error.value = null;
     try {
-      const { data } = await client.http.post<{ draft: PackContent }>(
-        `/api/content/packs/${packId}/draft`,
-        {
-          body: {
-            title: body.title,
-            description: body.description,
-            answerCards: body.answerCards,
-            taskSets: body.taskSets,
-          },
+      const { data } = await client.http.post<{
+        draft: PackContent;
+        answersDirty?: boolean;
+      }>(`/api/content/packs/${packId}/draft`, {
+        body: {
+          title: body.title,
+          description: body.description,
+          answerCards: body.answerCards,
+          taskSets: body.taskSets,
         },
-      );
+      });
       draft.value = data.draft;
+      if (typeof data.answersDirty === 'boolean') {
+        answersDirty.value = data.answersDirty;
+      }
       return data.draft;
     } catch (e) {
       error.value = mapContentError(e);
       throw e;
     } finally {
-      loading.value = false;
+      if (quiet) {
+        saving.value = false;
+      } else {
+        loading.value = false;
+      }
     }
   }
 
-  async function submitPack(packId: string) {
+  async function submitAnswers(packId: string) {
     loading.value = true;
     error.value = null;
     try {
       const { data } = await client.http.post<{
-        request: { id: string; packId: string; status: string; changeAuthorId: string };
-      }>(`/api/content/packs/${packId}/submit`);
+        request: {
+          id: string;
+          packId: string;
+          status: string;
+          changeAuthorId: string;
+          type?: string;
+        };
+      }>(`/api/content/packs/${packId}/submit/answers`);
+      pendingAnswersRequestId.value = data.request.id;
+      isAnswersPendingAuthor.value = true;
+      answersDirty.value = false;
       pendingRequestId.value = data.request.id;
       isPendingAuthor.value = true;
       return data.request;
@@ -377,14 +443,52 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function loadModeration(packId: string) {
+  async function submitTasks(packId: string) {
     loading.value = true;
     error.value = null;
     try {
+      const { data } = await client.http.post<{
+        request: {
+          id: string;
+          packId: string;
+          status: string;
+          changeAuthorId: string;
+          type?: string;
+        };
+      }>(`/api/content/packs/${packId}/submit/tasks`);
+      pendingTasksRequestId.value = data.request.id;
+      isTasksPendingAuthor.value = true;
+      pendingRequestId.value = data.request.id;
+      isPendingAuthor.value = true;
+      return data.request;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** @deprecated Use submitAnswers / submitTasks. Kept for compile safety during migration. */
+  async function submitPack(packId: string) {
+    return submitAnswers(packId);
+  }
+
+  async function loadModeration(
+    packId: string,
+    type?: ModerationRequestType,
+  ) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const qs =
+        type === 'answers' || type === 'tasks'
+          ? `?type=${encodeURIComponent(type)}`
+          : '';
       const { data } = await client.http.get<{
         request: ModerationRequest;
         messages: ModerationMessage[];
-      }>(`/api/content/packs/${packId}/moderation`);
+      }>(`/api/content/packs/${packId}/moderation${qs}`);
       moderationRequest.value = data.request;
       moderationMessages.value = data.messages ?? [];
       return data;
@@ -398,15 +502,23 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function postModerationMessage(packId: string, body: string) {
+  async function postModerationMessage(
+    packId: string,
+    body: string,
+    type?: ModerationRequestType,
+  ) {
     loading.value = true;
     error.value = null;
     try {
+      const payload: { body: string; type?: ModerationRequestType } = { body };
+      if (type === 'answers' || type === 'tasks') {
+        payload.type = type;
+      }
       const { data } = await client.http.post<{
         request: ModerationRequest;
         messages: ModerationMessage[];
       }>(`/api/content/packs/${packId}/moderation/messages`, {
-        body: { body },
+        body: payload,
       });
       moderationRequest.value = data.request;
       moderationMessages.value = data.messages ?? [];
@@ -440,12 +552,9 @@ export const useContentStore = defineStore('content', () => {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await client.http.get<{
-        request: ModerationRequest;
-        pack: ContentPackSummary;
-        content: PackContent;
-        messages: ModerationMessage[];
-      }>(`/api/content/staff/requests/${requestId}`);
+      const { data } = await client.http.get<StaffPreview>(
+        `/api/content/staff/requests/${requestId}`,
+      );
       staffPreview.value = data;
       moderationRequest.value = data.request;
       moderationMessages.value = data.messages ?? [];
@@ -588,6 +697,11 @@ export const useContentStore = defineStore('content', () => {
     pack,
     liveContent,
     draft,
+    answersDirty,
+    pendingAnswersRequestId,
+    pendingTasksRequestId,
+    isAnswersPendingAuthor,
+    isTasksPendingAuthor,
     pendingRequestId,
     isPendingAuthor,
     moderationRequest,
@@ -595,6 +709,7 @@ export const useContentStore = defineStore('content', () => {
     staffPending,
     staffPreview,
     loading,
+    saving,
     error,
     clearError,
     listCatalog,
@@ -605,6 +720,8 @@ export const useContentStore = defineStore('content', () => {
     createPack,
     loadDraft,
     saveDraft,
+    submitAnswers,
+    submitTasks,
     submitPack,
     loadModeration,
     postModerationMessage,

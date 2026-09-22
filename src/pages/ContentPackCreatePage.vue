@@ -5,7 +5,7 @@
         <div class="text-h5">{{ $t('content.createTitle') }}</div>
         <div class="text-subtitle2 text-muted">{{ $t('content.createSubtitle') }}</div>
       </div>
-      <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+      <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
     </div>
 
     <q-banner v-if="content.error" dense rounded class="bg-negative text-white q-mb-md">
@@ -51,7 +51,7 @@
           <div class="q-mt-sm">{{ gateText }}</div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+          <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
           <q-btn
             v-if="gateMode === 'login'"
             color="primary"
@@ -125,6 +125,7 @@ async function onSubmit() {
   }
   try {
     const created = await content.createPack(title.value.trim(), description.value.trim());
+    // SC-PACK-01: after create → answers editing surface
     await router.replace({
       name: 'content-pack-edit',
       params: { id: created.pack.id },

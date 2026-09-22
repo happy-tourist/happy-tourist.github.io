@@ -4,7 +4,7 @@
       <div>
         <div class="text-h5">{{ $t('content.moderationTitle') }}</div>
         <div v-if="content.moderationRequest" class="text-subtitle2 text-muted">
-          {{ statusLabel(content.moderationRequest.status) }}
+          {{ typeLabel }} · {{ statusLabel(content.moderationRequest.status) }}
         </div>
       </div>
       <div class="q-gutter-sm">
@@ -71,7 +71,12 @@ import { useRoute } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore, type ModerationMessage } from '@/stores/content';
+import {
+  contentErrorI18nKey,
+  useContentStore,
+  type ModerationMessage,
+  type ModerationRequestType,
+} from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -83,12 +88,30 @@ const packId = computed(() => {
   const raw = params.id;
   return typeof raw === 'string' ? raw : '';
 });
+
+const threadType = computed((): ModerationRequestType | undefined => {
+  const q = route.query as Record<string, string | string[] | undefined>;
+  const raw = q.type;
+  const value = typeof raw === 'string' ? raw : '';
+  if (value === 'answers' || value === 'tasks') return value;
+  const fromReq = content.moderationRequest?.type;
+  if (fromReq === 'answers' || fromReq === 'tasks') return fromReq;
+  return undefined;
+});
+
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 
 const canReply = computed(() => {
   const status = content.moderationRequest?.status;
   return status === 'pending' || status === 'rejected';
+});
+
+const typeLabel = computed(() => {
+  const typ = content.moderationRequest?.type ?? threadType.value;
+  if (typ === 'tasks') return t('content.requestTypeTasks');
+  if (typ === 'answers') return t('content.requestTypeAnswers');
+  return '';
 });
 
 const errorLabel = computed(() => {
@@ -98,13 +121,17 @@ const errorLabel = computed(() => {
 
 function load() {
   if (!packId.value) return;
-  void content.loadModeration(packId.value).catch(() => {
+  const q = route.query as Record<string, string | string[] | undefined>;
+  const raw = q.type;
+  const type =
+    raw === 'answers' || raw === 'tasks' ? (raw as ModerationRequestType) : undefined;
+  void content.loadModeration(packId.value, type).catch(() => {
     /* error in store */
   });
 }
 
 onMounted(load);
-watch(packId, load);
+watch([packId, () => route.query.type], load);
 
 function statusLabel(value: string) {
   if (
@@ -138,7 +165,11 @@ function messageAuthorLabel(msg: ModerationMessage) {
 
 async function onReply() {
   try {
-    await content.postModerationMessage(packId.value, replyBody.value.trim());
+    await content.postModerationMessage(
+      packId.value,
+      replyBody.value.trim(),
+      threadType.value,
+    );
     replyBody.value = '';
     await nextTick();
     replyFormRef.value?.resetValidation();

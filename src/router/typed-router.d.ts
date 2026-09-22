@@ -84,6 +84,12 @@ declare module 'vue-router' {
         { id: string },
         { id: string }
       >;
+      'content-pack-tasks': RouteRecordInfo<
+        'content-pack-tasks',
+        '/content/packs/:id/tasks/:taskSetId',
+        { id: string; taskSetId: string },
+        { id: string; taskSetId: string }
+      >;
       'content-pack-moderation': RouteRecordInfo<
         'content-pack-moderation',
         '/content/packs/:id/moderation',

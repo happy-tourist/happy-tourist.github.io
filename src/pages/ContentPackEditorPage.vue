@@ -2,26 +2,26 @@
   <q-page class="q-pa-md">
     <div class="row items-center justify-between q-mb-md">
       <div>
-        <div class="text-h5">{{ $t('content.editorTitle') }}</div>
+        <div class="text-h5">{{ $t('content.answersTitle') }}</div>
         <div class="text-subtitle2 text-muted">
-          <template v-if="content.pendingRequestId && content.isPendingAuthor">
-            {{ $t('content.statusPendingAuthor') }}
+          <template v-if="content.pendingAnswersRequestId && content.isAnswersPendingAuthor">
+            {{ $t('content.statusPendingAnswers') }}
           </template>
           <template v-else-if="content.pack?.blocked">
             {{ $t('content.blocked') }}
           </template>
           <template v-else>
-            {{ $t('content.editorSubtitle') }}
+            {{ $t('content.answersSubtitle') }}
           </template>
         </div>
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
         <q-btn
-          v-if="content.pendingRequestId"
+          v-if="content.pendingAnswersRequestId || content.pendingTasksRequestId"
           flat
           :label="$t('content.moderationThread')"
-          :to="{ name: 'content-pack-moderation', params: { id: packId } }"
+          :to="moderationLink"
         />
       </div>
     </div>
@@ -32,6 +32,10 @@
         <q-btn flat dense label="OK" @click="content.error = null" />
       </template>
     </q-banner>
+
+    <div v-if="content.saving" class="text-caption text-muted q-mb-sm">
+      {{ $t('content.autosaving') }}
+    </div>
 
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
@@ -44,6 +48,7 @@
             dense
             :label="$t('content.packTitle')"
             :disable="readOnly"
+            @update:model-value="scheduleAutosave"
           />
           <q-input
             v-model="local.description"
@@ -53,58 +58,73 @@
             autogrow
             :label="$t('content.packDescription')"
             :disable="readOnly"
+            @update:model-value="scheduleAutosave"
           />
         </q-card-section>
       </q-card>
 
-      <div class="row items-center justify-between q-mb-sm">
-        <div class="text-h6">{{ $t('content.answerCards') }}</div>
-        <q-btn
-          flat
-          dense
-          icon="add"
-          :label="$t('content.addCard')"
-          :disable="readOnly"
-          @click="addCard"
-        />
-      </div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="(card, ci) in local.answerCards" :key="card.id">
-          <q-item-section>
+      <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
+
+      <q-card flat bordered class="q-mb-md">
+        <q-card-section>
+          <q-form class="q-gutter-md" @submit.prevent="onAddOrUpdateCard">
             <q-input
-              v-model="card.content"
+              v-model="cardForm.content"
               outlined
               dense
-              class="q-mb-sm"
               :label="$t('content.cardContent')"
               :disable="readOnly"
-              @update:model-value="(v) => onCardContentChange(card.id, String(v ?? ''))"
             />
             <q-input
-              v-model="card.description"
+              v-model="cardForm.description"
               outlined
               dense
               :label="$t('content.cardDescription')"
               :disable="readOnly"
             />
+            <div class="row q-gutter-sm">
+              <q-btn
+                type="submit"
+                color="primary"
+                :label="editingCardId ? $t('content.saveCard') : $t('content.addCard')"
+                :disable="readOnly || !cardForm.content.trim()"
+              />
+              <q-btn
+                v-if="editingCardId"
+                flat
+                :label="$t('content.cancelEditCard')"
+                :disable="readOnly"
+                @click="resetCardForm"
+              />
+            </div>
+          </q-form>
+        </q-card-section>
+      </q-card>
+
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item v-for="card in local.answerCards" :key="card.id">
+          <q-item-section>
+            <q-item-label>{{ card.content || $t('content.untitled') }}</q-item-label>
+            <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
           </q-item-section>
-          <q-item-section side top>
-            <div class="column q-gutter-xs">
+          <q-item-section side>
+            <div class="q-gutter-xs">
               <q-btn
                 flat
                 dense
-                icon="touch_app"
-                :disable="readOnly || !activeTask"
-                :aria-label="$t('content.fillSlot')"
-                @click="fillNextSlot(card.id)"
+                icon="edit"
+                :aria-label="$t('content.editCard')"
+                :disable="readOnly"
+                @click="startEditCard(card)"
               />
               <q-btn
                 flat
                 dense
                 icon="delete"
                 color="negative"
+                :aria-label="$t('content.deleteCard')"
                 :disable="readOnly"
-                @click="removeCard(ci)"
+                @click="confirmDeleteCard(card.id)"
               />
             </div>
           </q-item-section>
@@ -115,114 +135,55 @@
       </q-list>
 
       <div class="row items-center justify-between q-mb-sm">
-        <div class="text-h6">{{ $t('content.tasks') }}</div>
+        <div class="text-h6">{{ $t('content.taskSets') }}</div>
         <q-btn
           flat
           dense
           icon="add"
-          :label="$t('content.addTask')"
-          :disable="readOnly"
-          @click="addTask"
+          :label="$t('content.addTaskSet')"
+          :disable="!canOpenTasks"
+          @click="onAddTaskSet"
         />
       </div>
-
-      <div
-        v-for="(task, ti) in allTasks"
-        :key="task.id"
-        class="q-mb-md"
-        :class="{ 'bg-grey-2': activeTaskId === task.id }"
-      >
-        <q-card flat bordered>
-          <q-card-section>
-            <div class="row items-center q-mb-sm">
-              <div class="text-subtitle1">{{ $t('content.taskN', { n: ti + 1 }) }}</div>
-              <q-space />
-              <q-btn
-                flat
-                dense
-                :label="
-                  activeTaskId === task.id ? $t('content.slotTargetOn') : $t('content.slotTarget')
-                "
-                :color="activeTaskId === task.id ? 'primary' : undefined"
-                :disable="readOnly"
-                @click="activeTaskId = task.id"
-              />
-              <q-btn
-                flat
-                dense
-                icon="delete"
-                color="negative"
-                :disable="readOnly"
-                @click="removeTask(ti)"
-              />
-            </div>
-            <q-input
-              v-model="task.question"
-              outlined
-              dense
-              class="q-mb-sm"
-              :label="$t('content.question')"
-              :disable="readOnly"
-            />
-            <q-select
-              v-model="task.difficulty"
-              :options="difficultyOptions"
-              emit-value
-              map-options
-              outlined
-              dense
-              class="q-mb-sm"
-              :label="$t('content.difficultyLabel')"
-              :disable="readOnly"
-            />
-            <div class="row items-center q-mb-xs">
-              <div class="text-caption">{{ $t('content.slots') }}</div>
-              <q-space />
-              <q-btn
-                flat
-                dense
-                round
-                icon="remove"
-                :disable="readOnly || task.slots.length <= 1"
-                @click="removeSlot(task)"
-              />
-              <q-btn flat dense round icon="add" :disable="readOnly" @click="addSlot(task)" />
-            </div>
-            <div class="row q-gutter-sm">
-              <q-chip
-                v-for="slot in task.slots"
-                :key="slot.id"
-                clickable
-                :outline="!slot.answerCardId"
-                :color="slot.answerCardId ? 'primary' : 'grey'"
-                :disable="readOnly"
-                @click="clearSlot(slot)"
-              >
-                {{ slotLabel(slot) }}
-              </q-chip>
-            </div>
-          </q-card-section>
-        </q-card>
+      <div v-if="!canOpenTasks" class="text-caption text-muted q-mb-sm">
+        {{ tasksGateHint }}
       </div>
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item
+          v-for="(ts, si) in local.taskSets"
+          :key="ts.id"
+          :clickable="canOpenTasks"
+          :disable="!canOpenTasks"
+          v-ripple="canOpenTasks"
+          @click="canOpenTasks && openTaskSet(ts.id)"
+        >
+          <q-item-section>
+            <q-item-label>{{ $t('content.taskSetLabel', { n: si + 1 }) }}</q-item-label>
+            <q-item-label caption>
+              {{ taskSetAttribution(ts) }} ·
+              {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-icon name="chevron_right" />
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!local.taskSets.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyTaskSets') }}</q-item-section>
+        </q-item>
+      </q-list>
 
-      <div class="row q-gutter-sm q-mt-lg">
-        <q-btn
-          color="primary"
-          :label="$t('content.saveDraft')"
-          :loading="content.loading"
-          :disable="readOnly"
-          @click="onSave"
-        />
+      <div class="row q-gutter-sm">
         <q-btn
           color="secondary"
-          :label="$t('content.submitModeration')"
+          :label="$t('content.submitAnswers')"
           :loading="content.loading"
-          :disable="readOnly || !canSubmitLocal"
-          @click="onSubmit"
+          :disable="readOnly || !canSubmitAnswers"
+          @click="onSubmitAnswers"
         />
       </div>
-      <div v-if="!canSubmitLocal" class="text-caption text-muted q-mt-sm">
-        {{ $t('content.submitHint') }}
+      <div v-if="!canSubmitAnswers" class="text-caption text-muted q-mt-sm">
+        {{ $t('content.submitAnswersHint') }}
       </div>
     </template>
 
@@ -249,28 +210,43 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="deleteConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.deleteCardTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.deleteCardConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn color="negative" :label="$t('content.deleteCard')" @click="doDeleteCard" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
   newLocalId,
   useContentStore,
-  type ContentTask,
-  type Difficulty,
+  type AnswerCard,
   type PackContent,
-  type TaskSlot,
+  type TaskSet,
 } from '@/stores/content';
+
+const AUTOSAVE_MS = 800;
 
 const auth = useAuthStore();
 const content = useContentStore();
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 
 const packId = computed(() => {
@@ -279,18 +255,26 @@ const packId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const editPath = computed(() => `/content/packs/${packId.value}/edit`);
+const moderationLink = computed(() => ({
+  name: 'content-pack-moderation' as const,
+  params: { id: packId.value },
+  query: {
+    type: content.pendingAnswersRequestId
+      ? 'answers'
+      : content.pendingTasksRequestId
+        ? 'tasks'
+        : 'answers',
+  },
+}));
 const local = ref<PackContent | null>(null);
-const activeTaskId = ref<string | null>(null);
-const previousCardContent = ref<Map<string, string>>(new Map());
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
-
-const difficultyOptions = computed(() =>
-  ([1, 2, 3] as Difficulty[]).map((value) => ({
-    label: t(`content.difficulty.${value}`),
-    value,
-  })),
-);
+const editingCardId = ref<string | null>(null);
+const cardForm = reactive({ content: '', description: '' });
+const deleteConfirmOpen = ref(false);
+const pendingDeleteCardId = ref<string | null>(null);
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressAutosave = false;
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
@@ -306,143 +290,37 @@ const errorLabel = computed(() => {
 
 const readOnly = computed(() => Boolean(content.pack?.blocked) || Boolean(gateOpen.value));
 
-const allTasks = computed(() => {
-  if (!local.value) return [] as ContentTask[];
-  const tasks: ContentTask[] = [];
-  for (const ts of local.value.taskSets) {
-    tasks.push(...ts.tasks);
-  }
-  return tasks;
+const canSubmitAnswers = computed(() => {
+  if (!local.value) return false;
+  return local.value.answerCards.filter((c) => c.content.trim()).length >= 2;
 });
 
-const activeTask = computed(() => allTasks.value.find((t) => t.id === activeTaskId.value) ?? null);
-
-const canSubmitLocal = computed(() => {
-  if (!local.value) return false;
-  if (local.value.answerCards.length < 2) return false;
-  if (allTasks.value.length < 2) return false;
-  for (const task of allTasks.value) {
-    if (!task.slots.length || task.slots.some((s) => !s.answerCardId)) return false;
-    if (![1, 2, 3].includes(task.difficulty)) return false;
-  }
+const canOpenTasks = computed(() => {
+  if (readOnly.value || !local.value) return false;
+  if (!local.value.answerCards.length) return false;
+  if (content.answersDirty) return false;
   return true;
 });
 
-function snapshotCardContent(draft: PackContent) {
-  previousCardContent.value = new Map(draft.answerCards.map((c) => [c.id, c.content]));
-}
-
-function ensureTaskSet(): PackContent['taskSets'][0] {
-  if (!local.value) throw new Error('no draft');
-  if (!local.value.taskSets.length) {
-    local.value.taskSets.push({
-      id: newLocalId('ts'),
-      authorUserId: String(auth.user?.id ?? ''),
-      coauthorLabels: [],
-      tasks: [],
-    });
+const tasksGateHint = computed(() => {
+  if (!local.value?.answerCards.length) {
+    return t('content.tasksNeedCards');
   }
-  const ts = local.value.taskSets[0];
-  if (!ts) throw new Error('no task set');
-  return ts;
-}
-
-function addCard() {
-  if (!local.value || readOnly.value) return;
-  local.value.answerCards.push({
-    id: newLocalId('card'),
-    content: '',
-    description: '',
-  });
-}
-
-function removeCard(index: number) {
-  if (!local.value || readOnly.value) return;
-  const [removed] = local.value.answerCards.splice(index, 1);
-  if (!removed) return;
-  for (const task of allTasks.value) {
-    for (const slot of task.slots) {
-      if (slot.answerCardId === removed.id) {
-        slot.answerCardId = null;
-      }
-    }
+  if (content.answersDirty) {
+    return t('content.tasksLockedDirty');
   }
-  previousCardContent.value.delete(removed.id);
-}
+  return '';
+});
 
-function onCardContentChange(cardId: string, next: string) {
-  const prev = previousCardContent.value.get(cardId);
-  if (prev !== undefined && prev !== next) {
-    for (const task of allTasks.value) {
-      for (const slot of task.slots) {
-        if (slot.answerCardId === cardId) {
-          slot.answerCardId = null;
-        }
-      }
-    }
+function taskSetAttribution(ts: TaskSet) {
+  const labels = ts.coauthorLabels?.filter(Boolean) ?? [];
+  if (labels.length) {
+    return labels.join(', ');
   }
-  previousCardContent.value.set(cardId, next);
-}
-
-function addTask() {
-  if (!local.value || readOnly.value) return;
-  const ts = ensureTaskSet();
-  const task: ContentTask = {
-    id: newLocalId('task'),
-    question: '',
-    difficulty: 1,
-    slots: [{ id: newLocalId('slot'), answerCardId: null }],
-  };
-  ts.tasks.push(task);
-  activeTaskId.value = task.id;
-}
-
-function removeTask(globalIndex: number) {
-  if (!local.value || readOnly.value) return;
-  let remaining = globalIndex;
-  for (const ts of local.value.taskSets) {
-    if (remaining < ts.tasks.length) {
-      const [removed] = ts.tasks.splice(remaining, 1);
-      if (removed && activeTaskId.value === removed.id) {
-        activeTaskId.value = null;
-      }
-      return;
-    }
-    remaining -= ts.tasks.length;
+  if (ts.authorUserId && ts.authorUserId === String(auth.user?.id ?? '')) {
+    return t('content.authorYou');
   }
-}
-
-function addSlot(task: ContentTask) {
-  if (readOnly.value) return;
-  task.slots.push({ id: newLocalId('slot'), answerCardId: null });
-}
-
-function removeSlot(task: ContentTask) {
-  if (readOnly.value || task.slots.length <= 1) return;
-  task.slots.pop();
-}
-
-function clearSlot(slot: TaskSlot) {
-  if (readOnly.value) return;
-  slot.answerCardId = null;
-}
-
-function fillNextSlot(cardId: string) {
-  if (readOnly.value) return;
-  const task = activeTask.value;
-  if (!task) return;
-  const empty = task.slots.find((s) => !s.answerCardId);
-  if (empty) {
-    empty.answerCardId = cardId;
-  }
-}
-
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId || !local.value) {
-    return t('content.slotEmpty');
-  }
-  const card = local.value.answerCards.find((c) => c.id === slot.answerCardId);
-  return card?.content?.trim() || t('content.slotFilled');
+  return t('content.authorUser');
 }
 
 function checkGate(): boolean {
@@ -459,24 +337,147 @@ function checkGate(): boolean {
   return true;
 }
 
+function clearAutosaveTimer() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+}
+
+function scheduleAutosave() {
+  if (suppressAutosave || readOnly.value || !local.value) return;
+  clearAutosaveTimer();
+  autosaveTimer = setTimeout(() => {
+    void flushAutosave();
+  }, AUTOSAVE_MS);
+}
+
+async function flushAutosave() {
+  clearAutosaveTimer();
+  if (!local.value || readOnly.value || !packId.value) return;
+  try {
+    const saved = await content.saveDraft(packId.value, local.value, { quiet: true });
+    suppressAutosave = true;
+    local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
+    suppressAutosave = false;
+  } catch {
+    suppressAutosave = false;
+  }
+}
+
+function resetCardForm() {
+  editingCardId.value = null;
+  cardForm.content = '';
+  cardForm.description = '';
+}
+
+function startEditCard(card: AnswerCard) {
+  editingCardId.value = card.id;
+  cardForm.content = card.content;
+  cardForm.description = card.description;
+}
+
+function onAddOrUpdateCard() {
+  if (!local.value || readOnly.value) return;
+  const text = cardForm.content.trim();
+  if (!text) return;
+
+  if (editingCardId.value) {
+    const card = local.value.answerCards.find((c) => c.id === editingCardId.value);
+    if (card) {
+      const prev = card.content;
+      card.content = text;
+      card.description = cardForm.description;
+      if (prev !== text) {
+        clearSlotsForCard(card.id);
+      }
+    }
+  } else {
+    local.value.answerCards.push({
+      id: newLocalId('card'),
+      content: text,
+      description: cardForm.description,
+    });
+  }
+  resetCardForm();
+  scheduleAutosave();
+}
+
+function clearSlotsForCard(cardId: string) {
+  if (!local.value) return;
+  for (const ts of local.value.taskSets) {
+    for (const task of ts.tasks) {
+      for (const slot of task.slots) {
+        if (slot.answerCardId === cardId) {
+          slot.answerCardId = null;
+        }
+      }
+    }
+  }
+}
+
+function confirmDeleteCard(cardId: string) {
+  pendingDeleteCardId.value = cardId;
+  deleteConfirmOpen.value = true;
+}
+
+function doDeleteCard() {
+  if (!local.value || !pendingDeleteCardId.value) return;
+  const id = pendingDeleteCardId.value;
+  const idx = local.value.answerCards.findIndex((c) => c.id === id);
+  if (idx >= 0) {
+    local.value.answerCards.splice(idx, 1);
+    clearSlotsForCard(id);
+    if (editingCardId.value === id) {
+      resetCardForm();
+    }
+    scheduleAutosave();
+  }
+  pendingDeleteCardId.value = null;
+  deleteConfirmOpen.value = false;
+}
+
+async function onAddTaskSet() {
+  if (!local.value || !canOpenTasks.value) return;
+  await flushAutosave();
+  const ts: TaskSet = {
+    id: newLocalId('ts'),
+    authorUserId: String(auth.user?.id ?? ''),
+    coauthorLabels: [],
+    tasks: [],
+  };
+  local.value.taskSets.push(ts);
+  try {
+    const saved = await content.saveDraft(packId.value, local.value);
+    local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
+    const created = local.value.taskSets[local.value.taskSets.length - 1];
+    if (created) {
+      await router.push({
+        name: 'content-pack-tasks',
+        params: { id: packId.value, taskSetId: created.id },
+      });
+    }
+  } catch {
+    /* error in store */
+  }
+}
+
+function openTaskSet(taskSetId: string) {
+  void router.push({
+    name: 'content-pack-tasks',
+    params: { id: packId.value, taskSetId },
+  });
+}
+
 async function load() {
   if (!packId.value) return;
   if (!checkGate()) return;
+  clearAutosaveTimer();
   try {
     const data = await content.loadDraft(packId.value);
+    suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
-    if (!local.value.taskSets.length) {
-      local.value.taskSets = [
-        {
-          id: newLocalId('ts'),
-          authorUserId: String(auth.user?.id ?? ''),
-          coauthorLabels: [],
-          tasks: [],
-        },
-      ];
-    }
-    snapshotCardContent(local.value);
-    activeTaskId.value = allTasks.value[0]?.id ?? null;
+    suppressAutosave = false;
   } catch {
     /* error in store */
   }
@@ -484,23 +485,20 @@ async function load() {
 
 onMounted(load);
 watch(packId, load);
+onBeforeUnmount(() => {
+  clearAutosaveTimer();
+});
 
-async function onSave() {
-  if (!local.value || !checkGate()) return;
-  try {
-    const saved = await content.saveDraft(packId.value, local.value);
-    local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
-    snapshotCardContent(local.value);
-  } catch {
-    /* error in store */
-  }
-}
-
-async function onSubmit() {
-  if (!local.value || !checkGate()) return;
+async function onSubmitAnswers() {
+  if (!local.value || !checkGate() || !canSubmitAnswers.value) return;
+  clearAutosaveTimer();
   try {
     await content.saveDraft(packId.value, local.value);
-    await content.submitPack(packId.value);
+    await content.submitAnswers(packId.value);
+    const data = await content.loadDraft(packId.value);
+    suppressAutosave = true;
+    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
+    suppressAutosave = false;
   } catch {
     /* error in store */
   }
