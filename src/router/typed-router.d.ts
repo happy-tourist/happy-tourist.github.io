@@ -48,6 +48,54 @@ declare module 'vue-router' {
         Record<never, never>,
         Record<never, never>
       >;
+      'content-catalog': RouteRecordInfo<
+        'content-catalog',
+        '/content/packs',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-collection': RouteRecordInfo<
+        'content-collection',
+        '/content/collection',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-pack-new': RouteRecordInfo<
+        'content-pack-new',
+        '/content/packs/new',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-staff': RouteRecordInfo<
+        'content-staff',
+        '/content/staff',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-staff-request': RouteRecordInfo<
+        'content-staff-request',
+        '/content/staff/requests/:id',
+        { id: string },
+        { id: string }
+      >;
+      'content-pack-edit': RouteRecordInfo<
+        'content-pack-edit',
+        '/content/packs/:id/edit',
+        { id: string },
+        { id: string }
+      >;
+      'content-pack-moderation': RouteRecordInfo<
+        'content-pack-moderation',
+        '/content/packs/:id/moderation',
+        { id: string },
+        { id: string }
+      >;
+      'content-pack': RouteRecordInfo<
+        'content-pack',
+        '/content/packs/:id',
+        { id: string },
+        { id: string }
+      >;
       game: RouteRecordInfo<'game', '/game/:roomId', { roomId: string }, { roomId: string }>;
     };
   }

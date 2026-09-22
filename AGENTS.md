@@ -16,8 +16,9 @@ Main scenarios:
 - Sign in anonymously as a guest; Google one-click.
 - Request password reset from forgot-password page (explicit not-found when email unknown).
 - Confirm email / set new password on public hash routes (`/#/confirm-email`, `/#/reset-password`).
-- Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`); open Support from the lobby header.
+- Browse available tourist rooms in the lobby (live `LobbyRoom` subscribe; leave lobby before enter `tourist`); open Support or content packs («Наборы») from the lobby header.
 - Create support tickets (topic + body), view own list / thread; staff (moderator|admin) queue; admin users page to change roles.
+- Browse content packs catalog / collection; create/edit draft + submit for moderation (non-anonymous + `emailVerified`); staff pack queue (moderator|admin).
 - Create a game with chosen `maxSeats` (2|3|4), or join by room id.
 - Open Game and view the tourist board with synced seats (pieces appear only in `playing`) and a four-slot tourist strip inside the seated sticky bottom HUD once own pieces exist (wide row N,E,W,S; HUD ≤~420 (covers ≤320/300) → 2×2; **no** chip/`q-menu`); after phase `playing`, on own turn select an unfinished piece from the strip or board and submit a one-step `move` via the game store; landing on center finishes a piece (disappear + finish flag on strip; any finish 2×2 click → nearest legal center); finishing all four shows a place modal and presence badge while the seat stays (say allowed, no moves, leave without confirm); solo five-minute timer expiry or steps exhaustion (no live task tile) shows a distinct end modal + locks moves (`timeExpired`); presence: opponents (or spectator all) above the board; seated bottom HUD = own + strip only; dual circular countdowns (outer turn blue/red, inner reconnect warning) around avatar; say bubbles: top markers down toward board, own bottom up; seated+online players may send preset say bubbles (`hello` / `luck`) via `sendSay`; underfilled waiting may `sendReady`.
 - Leave the room via shared App header brand logo on Game (accessible name «Выход из игры» / `game.leave`; match status centered in the same header; no Material `logout` leave; no room id chrome); auth and other authenticated pages use the same always-button logo to go toward lobby (`auth.backToLobby` aria; no page «В лобби»; lobby click is noop); seated players in phase `playing` without finish place or time-expired confirm before consented leave; sign out.
@@ -28,9 +29,9 @@ Main users:
 
 - Casual players who want a short online board game «Счастливый турист» match in the browser.
 - Guests (anonymous Colyseus auth), registered users (email/password), and Google one-click (`loginWithGoogle` / `signInWithProvider('google')`).
-- Moderators / admins (product `role` from userdata) for support staff queue and (admin only) user role assignment.
+- Moderators / admins (product `role` from userdata) for support staff queue, content-pack moderation, and (admin only) user role assignment.
 
-There is no separate CMS. Support + role admin are in-app pages (`/support`, `/support/staff`, `/admin/users`) over JWT HTTP — not a full admin console. Registered users have a personal cabinet (`/account`) for display name, change-password (email/password only), and soft email confirm / change-email; confirm and password-reset UX is **client SPA** + JSON (not API HTML). Register / reset / change-password share a product password policy (≥8 + lower/upper/digit/symbol) with an advisory strength meter. Auth-email human-facing copy is **Russian** and mentions checking the spam folder.
+There is no separate CMS. Support, content packs, and role admin are in-app pages (`/support`, `/content/*`, `/admin/users`) over JWT HTTP — not a full admin console. Registered users have a personal cabinet (`/account`) for display name, change-password (email/password only), and soft email confirm / change-email; confirm and password-reset UX is **client SPA** + JSON (not API HTML). Register / reset / change-password share a product password policy (≥8 + lower/upper/digit/symbol) with an advisory strength meter. Auth-email human-facing copy is **Russian** and mentions checking the spam folder.
 
 ## Important
 
@@ -77,6 +78,7 @@ Deploy target: GitHub Pages (user/org site at domain root). Router mode is **has
 - `eslint` flat config (`eslint.config.js`) + `prettier` (`.prettierrc.json`).
 - `vue-tsc` / `vite-plugin-checker` - typecheck during build/dev tooling.
 - Scripts: `dev` (`quasar dev`), `build` (`quasar build`), `lint` / `lint:check`, `typecheck`.
+- Unit tests: none yet. When adding the first tests, use Vitest + `@vue/test-utils` per meta skill [`work-with-test`](../happy-tourist-meta/.agents/skills/client/work-with-test/SKILL.md) (bootstrap + conventions). Not mocha/Jest (server uses mocha).
 - Package manager: npm lockfile is present (`package-lock.json`); README also mentions pnpm.
 
 Application boot is Quasar CLI-driven (`quasar.config.ts` → boot files), not a hand-written `main.ts` entry for app plugins.
@@ -98,7 +100,7 @@ Typical order conceptually:
 
 Through Quasar / Vue app:
 
-- Pinia stores (`auth`, `theme`, `game`, `support`, scaffold `counter`).
+- Pinia stores (`auth`, `theme`, `game`, `support`, `content`, scaffold `counter`).
 - Vue Router.
 - vue-i18n.
 - Quasar framework (auto-import).
@@ -127,9 +129,9 @@ Shared shell:
 - `components` - reusable widgets (mostly scaffold).
 - `css` - `app.scss`, Quasar variables.
 - `i18n` - locale messages (`en-US`).
-- `pages` - route-level views (login / lobby / support / admin / game).
+- `pages` - route-level views (login / lobby / support / content / admin / game).
 - `router` - `index.ts` (guards) + `routes.ts`.
-- `stores` - Pinia: `auth`, `game`, `support`, `example-store` (scaffold).
+- `stores` - Pinia: `auth`, `game`, `support`, `content`, `example-store` (scaffold).
 
 Outside `src`:
 
@@ -141,7 +143,7 @@ Outside `src`:
 
 ## Pages And Dependency Direction
 
-Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot` / `components`. Keep Colyseus I/O inside Pinia stores (`auth`, `game`, `support`) rather than scattering `client.*` calls across many components.
+Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot` / `components`. Keep Colyseus I/O inside Pinia stores (`auth`, `game`, `support`, `content`) rather than scattering `client.*` calls across many components.
 
 ## Business Entities And Areas
 
@@ -151,29 +153,38 @@ Route pages live in `src/pages/*Page.vue`. Prefer: `pages` → `stores` / `boot`
 - **Tourist board** - client layout constant on GamePage (start/task/center tiles; holes for `removedTaskKeys` — not landable; piece may stand on hole); grille overlay from `holdingGrilleKeys` (`grille.png` drop/rise **`GRILLE_ANIM_MS = 1000`** / `--grille-anim-ms`, incl. leave-clear rise + chrome grille on strip when trapped; **defer drop** while catapult queue busy — SC-BOARD-29/30); catapult sequential overlay from `revealingCatapultKeys` / `brokenCatapultKeys` (`catapult.png` / `catapult-broken.png`, **`CATAPULT_ANIM_MS = 1000`**; every viewer land→overlay→fling; pin on cell during overlay → travel after vanish; **always finish travel after vanish** when finished/center even if finish sync late — SC-FINISH-20 / SC-BOARD-31; broken 300+300 hold; D13 atomic seats+revealing mirror; continuous board-busy (intent lock before send + presentation + pipeline settle; settled grille hold unlocks for rescue) on land/move/grille/catapult/finish/fling + pending grille; seated top presence always reserves row height); trapped pieces visible, no move/peek; rescue affordance when adj free + steps; push icons over free adj targets of selected free pusher + steps → `sendPush`; return: green `undo` icon over finished strip when `canReturn` → same red `.tile--target` ring → `sendReturnFromFinish` (dim finished only if `!canReturn`; slot body finished → noop; **no** confirm modal); overlay unfinished pieces only after materialize; opponents/spectator markers above board; seated bottom HUD = own + strip (row / narrow 2×2); finish/ready top-left, say top-right (top bubbles↓ / own↑); budgets beside own avatar; end-turn icon-only `skip_next` right-center on own avatar (no dock/label/dialog; solo hides); peek/rescue/push affordances top-center (same family as strip return); peek eye (non-trapped on live `*`); all-jail warning modal (own seat only); on own turn while `playing` local select/hints + `sendMove` (does not end turn; hints exclude holes); finish 2×2 click → nearest legal center; center finish (move or push) → travel from last board cell + fade + finish flag on strip + place modal.
 - **Tourist reconnect** - `localStorage` token + `rejoinGame` (`reconnect` → `joinById`); lobby has no reconnect hold.
 - **Support** - `stores/support` + `pages/SupportPage` (create + own list) + `SupportTicketPage` (thread) + `SupportStaffPage` (staff queue; moderator|admin; topic + status filters, default all topics / open) + lobby header link «Поддержка» (any JWT, incl. anonymous). HTTP only via `client.http` (no Colyseus room). Guest create: warn no email notify + session-loss risk; anonymous display «Гость»; create/reply: `lazy-rules` + clear → `await nextTick()` → `resetValidation` (no red empty after success); thread message spacing + gap thread→reply; closed read-only + CTA new ticket. i18n RU for topics/statuses/limits.
+- **Content packs** (`content/packs`) - `stores/content` + catalog / collection / pack view / editor / create + staff pending queue; lobby nav «Наборы». HTTP only via `client.http` (no Colyseus room). Catalog/collection: any JWT; create/edit/submit: non-anonymous + `emailVerified` (ineligible → login/verify modal, not silent 403 only); staff routes `requiresStaff`. Live view = approved snapshot; blocked packs still listed with badge. Capability: `openspec/specs/content/packs/`.
 - **Roles / admin users** - product `role` (`user` \| `moderator` \| `admin`) from auth userdata; `auth.isStaff` / `auth.isAdmin` gate nav only (server enforces). `pages/AdminUsersPage` — non-anonymous users from API + change role (admin only; moderator has no role UI); badge when `emailVerified === false`.
 
 ## Pages (routes)
 
 From `src/router/routes.ts`:
 
-| Path               | Name              | Purpose                                                                 |
-| ------------------ | ----------------- | ----------------------------------------------------------------------- |
-| `/` → `/lobby`     | —                 | redirect                                                                |
-| `/login`           | `login`           | auth; `meta.guest`                                                      |
-| `/forgot-password` | `forgot-password` | reset request; `meta.guest`                                             |
-| `/confirm-email`   | `confirm-email`   | SPA JSON confirm (`?token=`); **public** (no `guest`)                   |
-| `/reset-password`  | `reset-password`  | SPA JSON reset form (`?token=`); **public**                             |
-| `/lobby`           | `lobby`           | room list / create / join; Support link; `meta.requiresAuth`            |
-| `/account`         | `account`         | cabinet (name / password / confirm / change email); `meta.requiresAuth` |
-| `/support`         | `support`         | create + own tickets; `meta.requiresAuth`                               |
-| `/support/staff`   | `support-staff`   | staff queue; `meta.requiresAuth` + `requiresStaff`                      |
-| `/support/:id`     | `support-ticket`  | ticket thread; `meta.requiresAuth`                                      |
-| `/admin/users`     | `admin-users`     | list users + set role; `meta.requiresAuth` + `requiresAdmin`            |
-| `/game/:roomId`    | `game`            | tourist board; `meta.requiresAuth`                                      |
-| `/:catchAll(.*)*`  | —                 | redirect to `/lobby`                                                    |
+| Path                            | Name                      | Purpose                                                                 |
+| ------------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| `/` → `/lobby`                  | —                         | redirect                                                                |
+| `/login`                        | `login`                   | auth; `meta.guest`                                                      |
+| `/forgot-password`              | `forgot-password`         | reset request; `meta.guest`                                             |
+| `/confirm-email`                | `confirm-email`           | SPA JSON confirm (`?token=`); **public** (no `guest`)                   |
+| `/reset-password`               | `reset-password`          | SPA JSON reset form (`?token=`); **public**                             |
+| `/lobby`                        | `lobby`                   | room list / create / join; Support link; `meta.requiresAuth`            |
+| `/account`                      | `account`                 | cabinet (name / password / confirm / change email); `meta.requiresAuth` |
+| `/support`                      | `support`                 | create + own tickets; `meta.requiresAuth`                               |
+| `/support/staff`                | `support-staff`           | staff queue; `meta.requiresAuth` + `requiresStaff`                      |
+| `/support/:id`                  | `support-ticket`          | ticket thread; `meta.requiresAuth`                                      |
+| `/admin/users`                  | `admin-users`             | list users + set role; `meta.requiresAuth` + `requiresAdmin`            |
+| `/content/packs`                | `content-catalog`         | pack catalog; `meta.requiresAuth`                                       |
+| `/content/collection`           | `content-collection`      | own collection; `meta.requiresAuth`                                     |
+| `/content/packs/new`            | `content-pack-new`        | create pack; `meta.requiresAuth` (+ verify gate in page)                |
+| `/content/packs/:id`            | `content-pack`            | live pack view; `meta.requiresAuth`                                     |
+| `/content/packs/:id/edit`       | `content-pack-edit`       | draft editor; `meta.requiresAuth`                                       |
+| `/content/packs/:id/moderation` | `content-pack-moderation` | author moderation thread; `meta.requiresAuth`                           |
+| `/content/staff`                | `content-staff`           | pending packs queue; `meta.requiresAuth` + `requiresStaff`              |
+| `/content/staff/requests/:id`   | `content-staff-request`   | staff preview + actions; `requiresStaff`                                |
+| `/game/:roomId`                 | `game`                    | tourist board; `meta.requiresAuth`                                      |
+| `/:catchAll(.*)*`               | —                         | redirect to `/lobby`                                                    |
 
-Router mode: hash (`/#/lobby`, `/#/support`, `/#/support/staff`, `/#/support/<id>`, `/#/admin/users`, `/#/confirm-email`, `/#/reset-password`, `/#/game/...`).
+Router mode: hash (`/#/lobby`, `/#/support`, `/#/content/packs`, `/#/content/staff`, `/#/admin/users`, `/#/confirm-email`, `/#/reset-password`, `/#/game/...`).
 
 ## Pinia Stores
 
@@ -181,6 +192,7 @@ Router mode: hash (`/#/lobby`, `/#/support`, `/#/support/staff`, `/#/support/<id
 - **`theme`** (`stores/theme.ts`, setup store) — Quasar Dark preference; guest `localStorage`; registered `client.http.get('/api/theme')` restore (≠ JWT `user.theme` alone; theme stays in theme store after GET) + `post('/api/theme')` on toggle (optional in-memory `user.theme` patch; `error` + App `q-banner` on fail). Wired from `App.vue`.
 - **`game`** (`stores/game.ts`, options store) — `rooms`, `lobbyRoom`, `lobbyWanted`, `room`, `roomId`, `sessionId`, `seats` (incl. connectivity + `ready` + `finishPlace` + `timeExpired` + piece `trapped`), `phase`, `maxSeats`, `countdownRemaining`, legacy `started`, `currentTurnSessionId`, `turnUntil`, `turnBudgetSeconds`, `removedTaskKeys`, `holdingGrilleKeys`, `revealingCatapultKeys`, `brokenCatapultKeys`, private `steps`/`peeks`/`budgetsInfinite`/`peekedThisTurn`/`openPeek`/`allJailWarning`, ephemeral `sayEvents`, `consentedLeaving` (gates GamePage soft-drop rejoin during App header `leaveGame`), `status`, `error`, `listing`; getters `isInRoom` / `mySeat` / `isSeated` / `isMyTurn` / `isPlaying` / `canSendReady` / `canSendEndTurn` / `isMySeatFinished` / `isMySeatTimeExpired` / `isSoloBudget`; actions `subscribeLobby`, `unsubscribeLobby`, `createGame({ maxSeats, grilleDensity, catapultDensity })`, `joinGame`, `rejoinGame`, `leaveGame`, `sendMove`, `sendRescue`, `sendPush`, `sendReturnFromFinish`, `sendPeek`, `sendPeekAnswer`, `sendEndTurn`, `sendReady`, `sendSay` (`refreshRooms` HTTP unused by LobbyPage); tourist reconnect token in `localStorage` (`ht-tourist-reconnect`).
 - **`support`** (`stores/support.ts`, setup store) — HTTP create/list/detail/message/close + staff list/take/status + admin users/role; `loading` / `error` + page `q-banner` pattern.
+- **`content`** (`stores/content.ts`, setup store) — HTTP catalog / collection / live / draft / submit / moderation thread + staff pending/preview/approve/reject/cancel/block; `loading` / `error` + page `q-banner`.
 - **`counter`** (`stores/example-store.ts`) — Quasar scaffold; not used by the game flow.
 
 ## Realtime / HTTP Layer
@@ -225,10 +237,10 @@ Runtime paths in skills (`src/…`) are relative to **this** client repo root; s
 | `client-work-with-errors`     | Store `error` + `q-banner` (pages + App theme), room `onError`; soft-drop gated by `consentedLeaving`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `client-work-with-structure`  | pages / components / boot / stores / assets (`brand/`, `grilles/`, `catapults/`) placement (always-button brand logo ≥60px shell + Game leave via logo + status in App)                                                                                                                                                                                                                                                                                                                                                                                      |
 | `work-with-forms`             | LoginPage / ForgotPasswordPage / ResetPasswordPage `q-form` / rules                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `work-with-pages`             | Routes + guards login/forgot/confirm/reset/account/lobby/support/admin/game; App header (always-button brand logo ≥60px + theme + verify reminder + Game leave via logo/status; auth→lobby; lobby noop; no page «В лобби»; productName/favicon); Lobby grilleDensity+catapultDensity + Support link; GamePage top presence + seated strip HUD / budgets / end-turn icon / return strip icon / push / holes / grilles / catapult land→overlay→fling + deferred grille + board-busy / dual end + all-jail                                                      |
-| `work-with-stores`            | Pinia `auth` (forgot/confirm/reset/change-email / `role` gating) / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/push/return / grilleDensity+catapultDensity create / reveal keys / D13 atomic `$patch` seats+revealing / end-turn / `consentedLeaving`) / `support` (HTTP tickets + staff + admin)                                                                                                                                                                                                                                          |
+| `work-with-pages`             | Routes + guards login/forgot/confirm/reset/account/lobby/support/content/admin/game; App header (always-button brand logo ≥60px + theme + verify reminder + Game leave via logo/status; auth→lobby; lobby noop; no page «В лобби»; productName/favicon); Lobby grilleDensity+catapultDensity + Support + content packs links; GamePage top presence + seated strip HUD / budgets / end-turn icon / return strip icon / push / holes / grilles / catapult land→overlay→fling + deferred grille + board-busy / dual end + all-jail                             |
+| `work-with-stores`            | Pinia `auth` (forgot/confirm/reset/change-email / `role` gating) / `theme` / `game` (incl. peeks∞ / finite steps / peek / rescue/push/return / grilleDensity+catapultDensity create / reveal keys / D13 atomic `$patch` seats+revealing / end-turn / `consentedLeaving`) / `support` (HTTP tickets + staff + admin) / `content` (packs catalog/collection/draft/moderation HTTP)                                                                                                                                                                             |
 | `work-with-styles`            | Quasar Dark + GET/POST `/api/theme`, header always-button brand-logo ≥60px CSS + theme toggle, muted chrome, board holes + grille overlays (`--grille-anim-ms` 1000) + catapult reveal/broken-hold CSS (`--catapult-anim-ms` 1000) + top presence + seated strip HUD / budgets / end-turn affordance CSS                                                                                                                                                                                                                                                     |
-| `work-with-localization`      | vue-i18n boot; auth-email RU (`confirmSentDialog` / `forgotSuccess` / confirm+reset SPA + spam); `auth.backToLobby` aria-only for always-button logo (lobby noop); `game.say` / ready / leave (logo aria) / finish / returnAffordance / pushAffordance / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille+catapult density + rescue/return/all-jail keys                                                                                                                                                                              |
+| `work-with-localization`      | vue-i18n boot; auth-email RU (`confirmSentDialog` / `forgotSuccess` / confirm+reset SPA + spam); `auth.backToLobby` aria-only for always-button logo (lobby noop); `content.*` packs; `game.say` / ready / leave (logo aria) / finish / returnAffordance / pushAffordance / timer+steps end / steps/peeks / endTurn / peek / solo-peeks∞ / grille+catapult density + rescue/return/all-jail keys                                                                                                                                                                                |
 | `work-with-lobby`             | Live LobbyRoom list, create-with-maxSeats + grilleDensity + catapultDensity modal (12/22/35% seed each; no Play), quiet resubscribe                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `work-with-rooms`             | Room lifecycle, tourist reconnect token, consented leave (brand-logo confirm in App header on Game)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `work-with-game-board`        | Board + top opponents / spectator presence + seated strip (row/2×2; no chip/`q-menu`) + grille (`GRILLE_ANIM_MS=1000`; defer drop during catapult hops) + catapult land→overlay→fling (`CATAPULT_ANIM_MS=1000`, broken 300+300, spectator parity, D13 atomic mirror, **finish travel after vanish** even if finish sync late, board-busy lock) + trap/rescue/push top-center + return strip icon (no modal) + budgets / end-turn `skip_next` on avatar + dual rings + say top↓/own↑ + push/move finish travel + return anim; leave/status via App brand logo |
