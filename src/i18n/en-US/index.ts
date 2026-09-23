@@ -218,7 +218,9 @@ export default {
     staffNav: 'Модерация',
     staffTitle: 'Очередь модерации',
     staffSubtitle: 'Заявки на проверку наборов',
-    staffAnswersHubSubtitle: 'Только наборы с ожидающими ответами',
+    staffQueueSubtitle: 'Ожидающие ответы и задания',
+    tasksOnlyHubHint:
+      'Только задания на проверке — одобрение ответов недоступно. Откройте набор заданий ниже.',
     staffBack: 'К очереди',
     emptyStaff: 'Нет заявок',
     refresh: 'Обновить',

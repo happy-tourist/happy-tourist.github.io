@@ -9,7 +9,7 @@
           </q-badge>
         </div>
         <div class="text-subtitle2 text-muted">
-          {{ $t('content.requestTypeAnswers') }}
+          {{ isTasksOnly ? $t('content.requestTypeTasks') : $t('content.requestTypeAnswers') }}
           <template v-if="preview"> · {{ statusLabel(preview.request.status) }}</template>
         </div>
       </div>
@@ -90,7 +90,11 @@
         </q-item>
       </q-list>
 
-      <div v-if="preview.request.status === 'pending'" class="q-gutter-sm q-mb-lg">
+      <div v-if="isTasksOnly" class="q-mb-md text-caption text-muted">
+        {{ $t('content.tasksOnlyHubHint') }}
+      </div>
+
+      <div v-if="showAnswersActions" class="q-gutter-sm q-mb-lg">
         <q-btn
           color="positive"
           :label="$t('content.approveAnswers')"
@@ -116,47 +120,49 @@
         </div>
       </div>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.threadAnswers') }}</div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="msg in preview.messages" :key="msg.id">
-          <q-item-section>
-            <q-item-label>
-              {{
-                msg.authorKind === 'staff' ? $t('content.authorStaff') : $t('content.authorUser')
-              }}
-            </q-item-label>
-            <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
-            <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!preview.messages.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
-        </q-item>
-      </q-list>
+      <template v-if="showAnswersThread">
+        <div class="text-h6 q-mb-sm">{{ $t('content.threadAnswers') }}</div>
+        <q-list bordered separator class="rounded-borders q-mb-lg">
+          <q-item v-for="msg in preview.messages" :key="msg.id">
+            <q-item-section>
+              <q-item-label>
+                {{
+                  msg.authorKind === 'staff' ? $t('content.authorStaff') : $t('content.authorUser')
+                }}
+              </q-item-label>
+              <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
+              <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
+            </q-item-section>
+          </q-item>
+          <q-item v-if="!preview.messages.length">
+            <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
+          </q-item>
+        </q-list>
 
-      <q-form
-        v-if="preview.request.status === 'pending' || preview.request.status === 'rejected'"
-        ref="replyFormRef"
-        class="q-gutter-md"
-        @submit.prevent="onStaffReply"
-      >
-        <q-input
-          v-model="replyBody"
-          type="textarea"
-          outlined
-          dense
-          autogrow
-          lazy-rules
-          :label="$t('content.reply')"
-          :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
-        />
-        <q-btn
-          type="submit"
-          color="primary"
-          :label="$t('content.sendReply')"
-          :loading="content.loading"
-        />
-      </q-form>
+        <q-form
+          v-if="preview.request.status === 'pending' || preview.request.status === 'rejected'"
+          ref="replyFormRef"
+          class="q-gutter-md"
+          @submit.prevent="onStaffReply"
+        >
+          <q-input
+            v-model="replyBody"
+            type="textarea"
+            outlined
+            dense
+            autogrow
+            lazy-rules
+            :label="$t('content.reply')"
+            :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
+          />
+          <q-btn
+            type="submit"
+            color="primary"
+            :label="$t('content.sendReply')"
+            :loading="content.loading"
+          />
+        </q-form>
+      </template>
     </template>
 
     <q-dialog v-model="rejectOpen">
@@ -215,6 +221,24 @@ const requestId = computed(() => {
 });
 const preview = computed(() => content.staffPreview);
 const nested = computed(() => preview.value?.nested);
+
+/** SC-PACK-70/72: prefer server `tasksOnly`; fall back if older payload omits the flag. */
+const isTasksOnly = computed(() => {
+  const p = preview.value;
+  if (!p) return false;
+  if (typeof p.tasksOnly === 'boolean') return p.tasksOnly;
+  return p.answersActionsAvailable === false || p.request.type === 'tasks';
+});
+
+const showAnswersActions = computed(
+  () =>
+    Boolean(preview.value) &&
+    preview.value!.request.status === 'pending' &&
+    !isTasksOnly.value &&
+    preview.value!.answersActionsAvailable !== false,
+);
+
+const showAnswersThread = computed(() => Boolean(preview.value) && !isTasksOnly.value);
 
 /** SC-PACK-52/44: omit fully moderated sets; no redundant «Открыть задания». */
 const actionableTaskSets = computed((): StaffTaskSetListItem[] => {

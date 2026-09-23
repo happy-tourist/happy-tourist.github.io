@@ -191,6 +191,8 @@ const answersRequestId = computed(() => {
 const ready = ref(false);
 const hubPackTitle = ref('');
 const hasLiveTasks = ref(false);
+/** SC-PACK-71: tasks-only hub — after approve leave to queue (no answers step). */
+const isTasksOnly = ref(false);
 const tasksPending = ref<{
   requestId: string;
   changeAuthorId: string;
@@ -246,6 +248,11 @@ async function load() {
     const hub = await content.loadStaffPreview(answersRequestId.value);
     hubPackTitle.value = hub.pack.title;
     hasLiveTasks.value = Boolean(hub.nested?.hasLiveTasks);
+    // Prefer server `tasksOnly` so dual-pending (answers hub) never redirects to queue.
+    isTasksOnly.value =
+      typeof hub.tasksOnly === 'boolean'
+        ? hub.tasksOnly
+        : hub.answersActionsAvailable === false || hub.request.type === 'tasks';
     tasksPending.value = hub.nested?.tasksPending ?? null;
     answerCards.value = hub.content.answerCards ?? [];
 
@@ -253,12 +260,18 @@ async function load() {
     tasksRequestId.value = pendingId;
 
     if (pendingId) {
-      const tasksPreview = await content.loadStaffPreview(pendingId);
-      displayTaskSets.value =
-        tasksPreview.nested?.tasksContent?.taskSets ?? tasksPreview.content.taskSets ?? [];
-      tasksMessages.value = tasksPreview.messages ?? [];
-      // Restore hub preview id for back-nav consistency after tasks load overwrote staffPreview.
-      await content.loadStaffPreview(answersRequestId.value);
+      // Tasks-only hub id === tasks request: nested.tasksContent already on first preview.
+      if (pendingId === answersRequestId.value && hub.nested?.tasksContent?.taskSets) {
+        displayTaskSets.value = hub.nested.tasksContent.taskSets;
+        tasksMessages.value = hub.messages ?? [];
+      } else {
+        const tasksPreview = await content.loadStaffPreview(pendingId);
+        displayTaskSets.value =
+          tasksPreview.nested?.tasksContent?.taskSets ?? tasksPreview.content.taskSets ?? [];
+        tasksMessages.value = tasksPreview.messages ?? [];
+        // Restore answers hub preview for back-nav after tasks load overwrote staffPreview.
+        await content.loadStaffPreview(answersRequestId.value);
+      }
     } else {
       // SC-PACK-51: never GET live pack here — unpublished packs yield pack_not_public.
       // After tasks approve staff leave via redirect; without pending show empty + live hint.
@@ -292,6 +305,11 @@ async function onApproveTasks() {
   if (!id) return;
   try {
     await content.approveRequest(id);
+    if (isTasksOnly.value) {
+      // SC-PACK-71 / D35: tasks-only — back to queue (no answers approve step).
+      await router.replace({ name: 'content-staff' });
+      return;
+    }
     // SC-PACK-51: return to answers hub — do not stay on empty/not-public tasks page.
     await router.replace({
       name: 'content-staff-request',
@@ -320,6 +338,10 @@ async function onCancelTasks() {
   if (!id) return;
   try {
     await content.cancelRequest(id);
+    if (isTasksOnly.value) {
+      await router.replace({ name: 'content-staff' });
+      return;
+    }
     await load();
   } catch {
     /* error in store */

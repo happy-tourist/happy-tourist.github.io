@@ -83,6 +83,8 @@ export interface StaffPendingItem {
   blocked: boolean;
   type?: ModerationRequestType;
   hasTasksPending?: boolean;
+  /** SC-PACK-70: queue row is tasks pending with no answers pending. */
+  tasksOnly?: boolean;
   hasLiveTasks?: boolean;
   updatedAt: string | Date;
 }
@@ -133,6 +135,10 @@ export interface StaffPreview {
   content: PackContent;
   messages: ModerationMessage[];
   nested?: StaffNestedTasks;
+  /** SC-PACK-70/72: hub opened via tasks request (live answers context). */
+  tasksOnly?: boolean;
+  /** SC-PACK-72: false when tasks-only — hide answers approve/reject/cancel. */
+  answersActionsAvailable?: boolean;
 }
 
 function httpErrorCode(e: unknown): string {

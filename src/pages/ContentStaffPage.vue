@@ -3,7 +3,7 @@
     <div class="row items-center justify-between q-mb-md">
       <div>
         <div class="text-h5">{{ $t('content.staffTitle') }}</div>
-        <div class="text-subtitle2 text-muted">{{ $t('content.staffAnswersHubSubtitle') }}</div>
+        <div class="text-subtitle2 text-muted">{{ $t('content.staffQueueSubtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
@@ -51,9 +51,13 @@
               </q-badge>
             </q-item-label>
             <q-item-label caption>
-              {{ $t('content.requestTypeAnswers') }} · {{ $t('content.statuses.pending') }} ·
-              {{ formatDate(item.updatedAt) }}
-              <template v-if="item.hasTasksPending">
+              {{
+                item.tasksOnly || item.type === 'tasks'
+                  ? $t('content.requestTypeTasks')
+                  : $t('content.requestTypeAnswers')
+              }}
+              · {{ $t('content.statuses.pending') }} · {{ formatDate(item.updatedAt) }}
+              <template v-if="item.hasTasksPending && !(item.tasksOnly || item.type === 'tasks')">
                 · {{ $t('content.hasTasksPending') }}
               </template>
             </q-item-label>
