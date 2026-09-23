@@ -474,17 +474,11 @@ export const useContentStore = defineStore('content', () => {
     return submitAnswers(packId);
   }
 
-  async function loadModeration(
-    packId: string,
-    type?: ModerationRequestType,
-  ) {
+  async function loadModeration(packId: string, type?: ModerationRequestType) {
     loading.value = true;
     error.value = null;
     try {
-      const qs =
-        type === 'answers' || type === 'tasks'
-          ? `?type=${encodeURIComponent(type)}`
-          : '';
+      const qs = type === 'answers' || type === 'tasks' ? `?type=${encodeURIComponent(type)}` : '';
       const { data } = await client.http.get<{
         request: ModerationRequest;
         messages: ModerationMessage[];
@@ -502,11 +496,7 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function postModerationMessage(
-    packId: string,
-    body: string,
-    type?: ModerationRequestType,
-  ) {
+  async function postModerationMessage(packId: string, body: string, type?: ModerationRequestType) {
     loading.value = true;
     error.value = null;
     try {

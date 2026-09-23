@@ -123,8 +123,7 @@ function load() {
   if (!packId.value) return;
   const q = route.query as Record<string, string | string[] | undefined>;
   const raw = q.type;
-  const type =
-    raw === 'answers' || raw === 'tasks' ? (raw as ModerationRequestType) : undefined;
+  const type = raw === 'answers' || raw === 'tasks' ? raw : undefined;
   void content.loadModeration(packId.value, type).catch(() => {
     /* error in store */
   });
@@ -165,11 +164,7 @@ function messageAuthorLabel(msg: ModerationMessage) {
 
 async function onReply() {
   try {
-    await content.postModerationMessage(
-      packId.value,
-      replyBody.value.trim(),
-      threadType.value,
-    );
+    await content.postModerationMessage(packId.value, replyBody.value.trim(), threadType.value);
     replyBody.value = '';
     await nextTick();
     replyFormRef.value?.resetValidation();
