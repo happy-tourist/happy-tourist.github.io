@@ -37,16 +37,13 @@
         </q-item>
       </template>
       <template v-else>
+        <!-- No :to on row — Quasar router-link races with side Edit/trash (SC-PACK-65/66). -->
         <q-item
           v-for="item in content.collection"
           :key="item.id"
           clickable
           v-ripple
-          :to="
-            item.hasLive
-              ? { name: 'content-pack', params: { id: item.id } }
-              : { name: 'content-pack-edit', params: { id: item.id } }
-          "
+          @click="onRowClick(item)"
         >
           <q-item-section>
             <q-item-label>
@@ -64,21 +61,23 @@
           </q-item-section>
           <q-item-section side>
             <div class="q-gutter-xs" @click.stop>
+              <!-- SC-PACK-25: blocked packs are not editable. -->
               <q-btn
+                v-if="!item.blocked"
                 flat
                 dense
                 icon="edit"
                 :aria-label="$t('content.edit')"
-                @click="onEdit(item.id)"
+                @click.stop="onEdit(item.id)"
               />
               <q-btn
                 flat
                 dense
-                icon="remove_circle_outline"
+                icon="delete"
                 color="negative"
                 :aria-label="$t('content.removeFromCollection')"
                 :loading="content.loading"
-                @click="confirmRemove(item.id)"
+                @click.stop="confirmRemove(item.id)"
               />
             </div>
           </q-item-section>
@@ -136,7 +135,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type ContentPackSummary } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -185,6 +184,16 @@ function onCreateClick() {
   void router.push({ name: 'content-pack-new' });
 }
 
+/** Row body: live view when published, else editor (draft-only). D28 / SC-PACK-65. */
+function onRowClick(item: ContentPackSummary) {
+  if (item.hasLive) {
+    void router.push({ name: 'content-pack', params: { id: item.id } });
+    return;
+  }
+  void router.push({ name: 'content-pack-edit', params: { id: item.id } });
+}
+
+/** Side Edit always opens editor (even when hasLive). SC-PACK-66. */
 function onEdit(packId: string) {
   if (!ensureEligible()) return;
   void router.push({ name: 'content-pack-edit', params: { id: packId } });

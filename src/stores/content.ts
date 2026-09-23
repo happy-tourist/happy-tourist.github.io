@@ -235,6 +235,9 @@ export const useContentStore = defineStore('content', () => {
   });
   const pendingAnswersRequestId = ref<string | null>(null);
   const pendingTasksRequestId = ref<string | null>(null);
+  /** Live GET D27/D29 hints for Edit UI (change author ids or null). */
+  const pendingAnswersAuthorId = ref<string | null>(null);
+  const pendingTasksAuthorId = ref<string | null>(null);
   const isAnswersPendingAuthor = ref(false);
   const isTasksPendingAuthor = ref(false);
   /** Compat: either pending answers or tasks request id. */
@@ -373,6 +376,10 @@ export const useContentStore = defineStore('content', () => {
       await client.http.post('/api/content/collection', {
         body: { packId },
       });
+      // D29 / SC-PACK-64: collect button must reflect membership without reload.
+      if (pack.value?.id === packId) {
+        pack.value = { ...pack.value, inCollection: true };
+      }
       return { ok: true, packId };
     } catch (e) {
       error.value = mapContentError(e);
@@ -390,6 +397,9 @@ export const useContentStore = defineStore('content', () => {
         body: { packId },
       });
       collection.value = collection.value.filter((p) => p.id !== packId);
+      if (pack.value?.id === packId) {
+        pack.value = { ...pack.value, inCollection: false };
+      }
       return { ok: true, packId };
     } catch (e) {
       error.value = mapContentError(e);
@@ -406,14 +416,22 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<{
         pack: ContentPackSummary;
         content: PackContent;
+        pendingAnswersAuthorId?: string | null;
+        pendingTasksAuthorId?: string | null;
       }>(`/api/content/packs/${packId}`);
       pack.value = data.pack;
       liveContent.value = data.content;
+      pendingAnswersAuthorId.value =
+        typeof data.pendingAnswersAuthorId === 'string' ? data.pendingAnswersAuthorId : null;
+      pendingTasksAuthorId.value =
+        typeof data.pendingTasksAuthorId === 'string' ? data.pendingTasksAuthorId : null;
       return data;
     } catch (e) {
       error.value = mapContentError(e);
       pack.value = null;
       liveContent.value = null;
+      pendingAnswersAuthorId.value = null;
+      pendingTasksAuthorId.value = null;
       throw e;
     } finally {
       loading.value = false;
@@ -816,6 +834,8 @@ export const useContentStore = defineStore('content', () => {
     tasksModeration,
     pendingAnswersRequestId,
     pendingTasksRequestId,
+    pendingAnswersAuthorId,
+    pendingTasksAuthorId,
     isAnswersPendingAuthor,
     isTasksPendingAuthor,
     pendingRequestId,

@@ -15,11 +15,18 @@
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
         <q-btn
+          v-if="showEdit"
+          color="primary"
+          icon="edit"
+          :label="$t('content.edit')"
+          @click="onEdit"
+        />
+        <q-btn
           color="primary"
           outline
-          :label="added ? $t('content.inCollection') : $t('content.addToCollection')"
+          :label="inCollection ? $t('content.inCollection') : $t('content.addToCollection')"
           :loading="content.loading"
-          :disable="Boolean(content.pack?.blocked) || added"
+          :disable="Boolean(content.pack?.blocked) || inCollection"
           @click="onAdd"
         />
       </div>
@@ -74,21 +81,49 @@
       </div>
       <div v-if="!live.taskSets.length" class="text-muted">{{ $t('content.emptyTasks') }}</div>
     </template>
+
+    <q-dialog v-model="gateOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ gateTitle }}</div>
+          <div class="q-mt-sm">{{ gateText }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            v-if="gateMode === 'login'"
+            color="primary"
+            :label="$t('content.gateLogin')"
+            :to="{ name: 'login', query: { redirect: editRedirect } }"
+          />
+          <q-btn
+            v-else
+            color="primary"
+            :label="$t('content.gateVerify')"
+            :to="{ name: 'account' }"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
+import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore } from '@/stores/content';
 
+const auth = useAuthStore();
 const content = useContentStore();
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 
-const added = ref(false);
+const gateOpen = ref(false);
+const gateMode = ref<'login' | 'verify'>('login');
 
 const packId = computed(() => {
   const params = route.params as Record<string, string | string[] | undefined>;
@@ -96,6 +131,35 @@ const packId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const live = computed(() => content.liveContent);
+/** D29 / SC-PACK-64: membership from live GET, not ephemeral local flag. */
+const inCollection = computed(() => Boolean(content.pack?.inCollection));
+
+/**
+ * D27 / SC-PACK-53/61–63: Edit when in collection; hide if any pending
+ * answers|tasks authored by someone else; pending author still sees Edit.
+ * SC-PACK-25: blocked packs are not editable.
+ */
+const showEdit = computed(() => {
+  if (!inCollection.value) return false;
+  if (content.pack?.blocked) return false;
+  const me = String(auth.user?.id ?? '');
+  const answersAuthor = content.pendingAnswersAuthorId;
+  const tasksAuthor = content.pendingTasksAuthorId;
+  if (answersAuthor && String(answersAuthor) !== me) return false;
+  if (tasksAuthor && String(tasksAuthor) !== me) return false;
+  return true;
+});
+
+const editRedirect = computed(() =>
+  packId.value ? `/content/packs/${packId.value}/edit` : '/content/collection',
+);
+
+const gateTitle = computed(() =>
+  gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
+);
+const gateText = computed(() =>
+  gateMode.value === 'login' ? t('content.gateLoginText') : t('content.gateVerifyText'),
+);
 
 const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
@@ -104,7 +168,6 @@ const errorLabel = computed(() => {
 
 function load() {
   if (!packId.value) return;
-  added.value = false;
   void content.loadLivePack(packId.value).catch(() => {
     /* error in store */
   });
@@ -113,10 +176,29 @@ function load() {
 onMounted(load);
 watch(packId, load);
 
+function ensureEligible(): boolean {
+  if (auth.user?.anonymous) {
+    gateMode.value = 'login';
+    gateOpen.value = true;
+    return false;
+  }
+  if (auth.needsEmailVerification) {
+    gateMode.value = 'verify';
+    gateOpen.value = true;
+    return false;
+  }
+  return true;
+}
+
+function onEdit() {
+  if (!packId.value) return;
+  if (!ensureEligible()) return;
+  void router.push({ name: 'content-pack-edit', params: { id: packId.value } });
+}
+
 async function onAdd() {
   try {
     await content.addToCollection(packId.value);
-    added.value = true;
   } catch {
     /* error in store */
   }
