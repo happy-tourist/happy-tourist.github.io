@@ -151,6 +151,7 @@
           :clickable="canOpenTasks"
           :disable="!canOpenTasks"
           v-ripple="canOpenTasks"
+          :class="{ 'bg-warning text-dark': content.taskSetHasCascadeGap(ts) }"
           @click="canOpenTasks && openTaskSet(ts.id)"
         >
           <q-item-section>
@@ -265,7 +266,7 @@
       <q-card style="min-width: 280px">
         <q-card-section>
           <div class="text-h6">{{ $t('content.deleteCardTitle') }}</div>
-          <div class="q-mt-sm">{{ $t('content.deleteCardConfirm') }}</div>
+          <div class="q-mt-sm">{{ deleteCardConfirmText }}</div>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
@@ -304,6 +305,7 @@ import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
   newLocalId,
+  taskIdsReferencingCard,
   useContentStore,
   type AnswerCard,
   type ModerationMessage,
@@ -353,15 +355,20 @@ const errorLabel = computed(() => {
 
 const readOnly = computed(() => Boolean(content.pack?.blocked) || Boolean(gateOpen.value));
 
+/** SC-PACK-83 / D48: same keys as task-set list marks (three-phase vocabulary). */
 const answersStatusLabel = computed(() => {
   const status = content.answersModeration.status;
-  // D41 / SC-PACK-49/77: three-phase + approved after closed cycle.
-  if (status === 'pending') return t('content.statusCyclePending');
-  if (status === 'rejected') return t('content.statusCycleRejected');
-  if (content.answersDirty) return t('content.statusCycleAwaitingSubmit');
-  if (status === 'approved') return t('content.statusCycleApproved');
+  if (status === 'pending') return t('content.taskSetStatusMarks.pending');
+  if (status === 'rejected') return t('content.taskSetStatusMarks.rejected');
+  if (content.answersDirty) return t('content.taskSetStatusMarks.needs_moderation');
+  if (status === 'approved') return t('content.taskSetStatusMarks.approved');
   return '';
 });
+
+/** SC-PACK-82 / D45: published confirm iff hasLive. */
+const deleteCardConfirmText = computed(() =>
+  content.pack?.hasLive ? t('content.deleteCardConfirmPublished') : t('content.deleteCardConfirm'),
+);
 
 const meetsAnswersMinima = computed(() => {
   if (!local.value) return false;
@@ -518,6 +525,7 @@ async function flushAutosave() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
     suppressAutosave = false;
+    content.pruneCascadeGaps(local.value);
   } catch {
     suppressAutosave = false;
   }
@@ -540,14 +548,16 @@ async function onAddOrUpdateCard() {
   const text = cardForm.content.trim();
   if (!text) return;
 
+  let cascadeTaskIds: string[] = [];
   if (editingCardId.value) {
     const card = local.value.answerCards.find((c) => c.id === editingCardId.value);
     if (card) {
       const prev = card.content;
       card.content = text;
       card.description = cardForm.description;
+      // D43: do not pre-clear slots — server cascade; track for yellow (SC-PACK-81).
       if (prev !== text) {
-        clearSlotsForCard(card.id);
+        cascadeTaskIds = taskIdsReferencingCard(local.value, card.id);
       }
     }
   } else {
@@ -559,18 +569,8 @@ async function onAddOrUpdateCard() {
   }
   resetCardForm();
   await flushAutosave();
-}
-
-function clearSlotsForCard(cardId: string) {
-  if (!local.value) return;
-  for (const ts of local.value.taskSets) {
-    for (const task of ts.tasks) {
-      for (const slot of task.slots) {
-        if (slot.answerCardId === cardId) {
-          slot.answerCardId = null;
-        }
-      }
-    }
+  if (cascadeTaskIds.length && local.value) {
+    content.markCascadeGaps(cascadeTaskIds, local.value);
   }
 }
 
@@ -579,20 +579,27 @@ function confirmDeleteCard(cardId: string) {
   deleteConfirmOpen.value = true;
 }
 
-function doDeleteCard() {
+async function doDeleteCard() {
   if (!local.value || !pendingDeleteCardId.value) return;
   const id = pendingDeleteCardId.value;
   const idx = local.value.answerCards.findIndex((c) => c.id === id);
-  if (idx >= 0) {
-    local.value.answerCards.splice(idx, 1);
-    clearSlotsForCard(id);
-    if (editingCardId.value === id) {
-      resetCardForm();
-    }
-    scheduleAutosave();
+  if (idx < 0) {
+    pendingDeleteCardId.value = null;
+    deleteConfirmOpen.value = false;
+    return;
+  }
+  // Snapshot refs before delete; server clears slots (D43) — do not pre-clear.
+  const cascadeTaskIds = taskIdsReferencingCard(local.value, id);
+  local.value.answerCards.splice(idx, 1);
+  if (editingCardId.value === id) {
+    resetCardForm();
   }
   pendingDeleteCardId.value = null;
   deleteConfirmOpen.value = false;
+  await flushAutosave();
+  if (cascadeTaskIds.length && local.value) {
+    content.markCascadeGaps(cascadeTaskIds, local.value);
+  }
 }
 
 async function doDeletePack() {

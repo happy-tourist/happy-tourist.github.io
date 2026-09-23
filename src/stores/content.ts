@@ -226,6 +226,27 @@ export function newLocalId(prefix = 'local'): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Task ids whose slots currently reference `cardId` (pre-cascade snapshot). */
+export function taskIdsReferencingCard(content: PackContent, cardId: string): string[] {
+  const out: string[] = [];
+  for (const ts of content.taskSets) {
+    for (const task of ts.tasks) {
+      if (task.slots.some((s) => s.answerCardId === cardId)) {
+        out.push(task.id);
+      }
+    }
+  }
+  return out;
+}
+
+function findTaskInContent(content: PackContent, taskId: string): ContentTask | null {
+  for (const ts of content.taskSets) {
+    const task = ts.tasks.find((t) => t.id === taskId);
+    if (task) return task;
+  }
+  return null;
+}
+
 /**
  * Content packs HTTP (catalog / collection / draft / dual submit / moderation / staff).
  * Pages show `error` via q-banner; map codes with contentErrorI18nKey.
@@ -240,6 +261,8 @@ export const useContentStore = defineStore('content', () => {
   const answersDirty = ref(false);
   const tasksDirty = ref(false);
   const taskSetMarks = ref<TaskSetMark[]>([]);
+  /** SC-PACK-81 / D46: tasks with empty slots after answers cascade — yellow until filled. */
+  const cascadeGapTaskIds = ref<string[]>([]);
   const answersModeration = ref<TypeModerationState>({
     status: 'none',
     requestId: null,
@@ -347,6 +370,7 @@ export const useContentStore = defineStore('content', () => {
     answersDirty.value = false;
     tasksDirty.value = false;
     taskSetMarks.value = [];
+    cascadeGapTaskIds.value = [];
     answersModeration.value = emptyModeration();
     tasksModeration.value = emptyModeration();
     pendingAnswersRequestId.value = null;
@@ -355,6 +379,63 @@ export const useContentStore = defineStore('content', () => {
     isTasksPendingAuthor.value = false;
     pendingRequestId.value = null;
     isPendingAuthor.value = false;
+  }
+
+  /** Drop cascade yellow when gaps are filled or the task is gone (D46). */
+  function pruneCascadeGaps(draftContent: PackContent | null) {
+    if (!draftContent) {
+      cascadeGapTaskIds.value = [];
+      return;
+    }
+    cascadeGapTaskIds.value = cascadeGapTaskIds.value.filter((id) => {
+      const task = findTaskInContent(draftContent, id);
+      return Boolean(task?.slots.some((s) => !s.answerCardId));
+    });
+  }
+
+  /**
+   * After reload, restore yellow when answers are dirty and slots are empty
+   * (SC-PACK-81 / D46 — session marks alone vanish on F5). Only seeds when
+   * the in-memory set is empty so unrelated empties after clean edits stay quiet.
+   */
+  function restoreCascadeGapsIfNeeded(draftContent: PackContent | null) {
+    if (!draftContent || !answersDirty.value || cascadeGapTaskIds.value.length > 0) {
+      pruneCascadeGaps(draftContent);
+      return;
+    }
+    const ids: string[] = [];
+    for (const ts of draftContent.taskSets) {
+      for (const task of ts.tasks) {
+        if (task.slots.some((s) => !s.answerCardId)) {
+          ids.push(task.id);
+        }
+      }
+    }
+    cascadeGapTaskIds.value = ids;
+  }
+
+  /**
+   * After cascade save: mark tasks that still have empty slots (SC-PACK-81).
+   * Call with task ids that referenced the changed/deleted card before save.
+   */
+  function markCascadeGaps(taskIds: string[], draftContent: PackContent) {
+    const next = new Set(cascadeGapTaskIds.value);
+    for (const id of taskIds) {
+      const task = findTaskInContent(draftContent, id);
+      if (task?.slots.some((s) => !s.answerCardId)) {
+        next.add(id);
+      }
+    }
+    cascadeGapTaskIds.value = [...next];
+    pruneCascadeGaps(draftContent);
+  }
+
+  function taskHasCascadeGap(taskId: string): boolean {
+    return cascadeGapTaskIds.value.includes(taskId);
+  }
+
+  function taskSetHasCascadeGap(taskSet: TaskSet): boolean {
+    return taskSet.tasks.some((t) => cascadeGapTaskIds.value.includes(t.id));
   }
 
   async function listCatalog() {
@@ -503,6 +584,7 @@ export const useContentStore = defineStore('content', () => {
       pack.value = data.pack;
       draft.value = data.draft;
       applyDraftFlags(data);
+      restoreCascadeGapsIfNeeded(data.draft);
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -548,6 +630,7 @@ export const useContentStore = defineStore('content', () => {
           needsModeration: Boolean(m.needsModeration),
         }));
       }
+      pruneCascadeGaps(data.draft);
       return data.draft;
     } catch (e) {
       error.value = mapContentError(e);
@@ -871,6 +954,11 @@ export const useContentStore = defineStore('content', () => {
     answersDirty,
     tasksDirty,
     taskSetMarks,
+    cascadeGapTaskIds,
+    markCascadeGaps,
+    pruneCascadeGaps,
+    taskHasCascadeGap,
+    taskSetHasCascadeGap,
     answersModeration,
     tasksModeration,
     pendingAnswersRequestId,

@@ -123,15 +123,32 @@
 
       <div class="text-h6 q-mb-sm">{{ $t('content.questionsList') }}</div>
       <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="(task, ti) in taskSet.tasks" :key="task.id">
+        <q-item
+          v-for="(task, ti) in taskSet.tasks"
+          :key="task.id"
+          :class="{ 'bg-warning text-dark': content.taskHasCascadeGap(task.id) }"
+        >
           <q-item-section>
             <q-item-label>{{ task.question || $t('content.taskN', { n: ti + 1 }) }}</q-item-label>
             <q-item-label caption>
               {{ $t('content.difficultyLabel') }}:
               {{ $t(`content.difficulty.${task.difficulty}`) }}
-              ·
-              {{ task.slots.map((s) => slotLabel(s)).join(' · ') }}
             </q-item-label>
+            <!-- SC-PACK-84 / D47: explicit answer slots on each task row -->
+            <div class="row q-gutter-xs q-mt-xs">
+              <q-chip
+                v-for="slot in task.slots"
+                :key="slot.id"
+                dense
+                :outline="!slot.answerCardId"
+                :color="slot.answerCardId ? 'primary' : 'grey'"
+              >
+                {{ slotLabel(slot) }}
+              </q-chip>
+              <span v-if="!task.slots.length" class="text-caption text-muted">
+                {{ $t('content.slotEmpty') }}
+              </span>
+            </div>
           </q-item-section>
           <q-item-section side>
             <div class="q-gutter-xs">
@@ -396,13 +413,13 @@ const canDeleteTaskSet = computed(() => {
   return Boolean(uid) && content.pack.createdBy === uid;
 });
 
+/** SC-PACK-83 / D48: same keys as list marks (three-phase vocabulary). */
 const tasksStatusLabel = computed(() => {
   const status = content.tasksModeration.status;
-  // D41 / SC-PACK-49: same three-phase vocabulary as answers.
-  if (status === 'pending') return t('content.statusCyclePending');
-  if (status === 'rejected') return t('content.statusCycleRejected');
-  if (content.tasksDirty) return t('content.statusCycleAwaitingSubmit');
-  if (status === 'approved') return t('content.statusCycleApproved');
+  if (status === 'pending') return t('content.taskSetStatusMarks.pending');
+  if (status === 'rejected') return t('content.taskSetStatusMarks.rejected');
+  if (content.tasksDirty) return t('content.taskSetStatusMarks.needs_moderation');
+  if (status === 'approved') return t('content.taskSetStatusMarks.approved');
   return '';
 });
 
@@ -499,6 +516,7 @@ async function flushAutosave() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
     suppressAutosave = false;
+    content.pruneCascadeGaps(local.value);
   } catch {
     suppressAutosave = false;
   }

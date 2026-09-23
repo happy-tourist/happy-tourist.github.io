@@ -155,6 +155,8 @@ export default {
     deleteCard: 'Удалить',
     deleteCardTitle: 'Удалить карточку?',
     deleteCardConfirm: 'Карточка будет удалена из черновика. Продолжить?',
+    /** SC-PACK-82 / D45: when pack hasLive (catalog). */
+    deleteCardConfirmPublished: 'Карточка будет удалена из опубликованного набора. Продолжить?',
     addTask: 'Добавить вопрос',
     saveTask: 'Сохранить вопрос',
     cancelEditTask: 'Отмена',
