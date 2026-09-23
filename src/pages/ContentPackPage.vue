@@ -70,11 +70,22 @@
               <q-item-label caption>
                 {{ $t('content.difficultyLabel') }}:
                 {{ $t(`content.difficulty.${task.difficulty}`) }}
-                ·
-                {{
-                  $t('content.slotsCount', { n: task.slots.filter((s) => s.answerCardId).length })
-                }}
               </q-item-label>
+              <!-- SC-PACK-88 / D8: slot chips (not slotsCount alone) -->
+              <div class="row q-gutter-xs q-mt-xs">
+                <q-chip
+                  v-for="slot in task.slots"
+                  :key="slot.id"
+                  dense
+                  :outline="!slot.answerCardId"
+                  :color="slot.answerCardId ? 'primary' : 'grey'"
+                >
+                  {{ slotLabel(slot) }}
+                </q-chip>
+                <span v-if="!task.slots.length" class="text-caption text-muted">
+                  {{ $t('content.slotEmpty') }}
+                </span>
+              </div>
             </q-item-section>
           </q-item>
         </q-list>
@@ -114,7 +125,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type TaskSlot } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -165,6 +176,15 @@ const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
   return key ? t(key) : (content.error ?? '');
 });
+
+/** SC-PACK-88 / D8: same chip labels as TasksPage. */
+function slotLabel(slot: TaskSlot) {
+  if (!slot.answerCardId || !live.value) {
+    return t('content.slotEmpty');
+  }
+  const card = live.value.answerCards.find((c) => c.id === slot.answerCardId);
+  return card?.content?.trim() || t('content.slotFilled');
+}
 
 function load() {
   if (!packId.value) return;

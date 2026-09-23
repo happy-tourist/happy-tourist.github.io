@@ -31,6 +31,25 @@
       </template>
     </q-banner>
 
+    <!-- SC-PACK-90: draft behind live — warn + pull. -->
+    <q-banner
+      v-if="content.draftStale && !content.error"
+      dense
+      rounded
+      class="bg-warning text-dark q-mb-md"
+    >
+      {{ $t('content.draftStaleBanner') }}
+      <template #action>
+        <q-btn
+          flat
+          dense
+          :label="$t('content.draftStalePull')"
+          :loading="content.loading"
+          @click="pullConfirmOpen = true"
+        />
+      </template>
+    </q-banner>
+
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local && taskSet">
@@ -126,7 +145,7 @@
         <q-item
           v-for="(task, ti) in taskSet.tasks"
           :key="task.id"
-          :class="{ 'bg-warning text-dark': content.taskHasCascadeGap(task.id) }"
+          :class="{ 'cascade-gap-outline': content.taskHasCascadeGap(task.id) }"
         >
           <q-item-section>
             <q-item-label>{{ task.question || $t('content.taskN', { n: ti + 1 }) }}</q-item-label>
@@ -141,7 +160,13 @@
                 :key="slot.id"
                 dense
                 :outline="!slot.answerCardId"
-                :color="slot.answerCardId ? 'primary' : 'grey'"
+                :color="
+                  slot.answerCardId
+                    ? 'primary'
+                    : content.taskHasCascadeGap(task.id)
+                      ? 'warning'
+                      : 'grey'
+                "
               >
                 {{ slotLabel(slot) }}
               </q-chip>
@@ -291,6 +316,24 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="pullConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.draftStalePull') }}</div>
+          <div class="q-mt-sm">{{ $t('content.draftStalePullConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="primary"
+            :label="$t('content.draftStalePull')"
+            :loading="content.loading"
+            @click="doPull"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -348,6 +391,7 @@ const taskForm = reactive<{
 const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
 const taskSetDeleteConfirmOpen = ref(false);
+const pullConfirmOpen = ref(false);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const tasksMessages = ref<ModerationMessage[]>([]);
@@ -413,7 +457,7 @@ const canDeleteTaskSet = computed(() => {
   return Boolean(uid) && content.pack.createdBy === uid;
 });
 
-/** SC-PACK-83 / D48: same keys as list marks (three-phase vocabulary). */
+/** SC-PACK-83 / D48 + SC-PACK-87 / D7: approved when tasks ok but no catalog live. */
 const tasksStatusLabel = computed(() => {
   const status = content.tasksModeration.status;
   if (status === 'pending') return t('content.taskSetStatusMarks.pending');
@@ -646,6 +690,24 @@ async function doDeleteTaskSet() {
   }
 }
 
+async function doPull() {
+  if (!packId.value) return;
+  try {
+    const data = await content.rebaseDraft(packId.value);
+    suppressAutosave = true;
+    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
+    suppressAutosave = false;
+    pullConfirmOpen.value = false;
+    if (!local.value?.taskSets.some((ts) => ts.id === taskSetId.value)) {
+      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+      return;
+    }
+    await loadTasksThread();
+  } catch {
+    /* error in store */
+  }
+}
+
 async function loadTasksThread() {
   const mod = content.tasksModeration;
   if (!mod.requestId || !mod.isAuthor || !packId.value) {
@@ -733,3 +795,11 @@ async function onReplyTasks() {
   }
 }
 </script>
+
+<style scoped>
+/* SC-PACK-85 / D8: yellow outline without row fill */
+.cascade-gap-outline {
+  outline: 2px solid var(--q-warning);
+  outline-offset: -2px;
+}
+</style>

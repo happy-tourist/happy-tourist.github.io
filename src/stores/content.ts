@@ -12,6 +12,9 @@ export interface ContentPackSummary {
   description: string;
   blocked: boolean;
   hasLive: boolean;
+  /** Staff-unpublished: last-live retained, catalog live cleared (D4). */
+  unpublishedByStaff?: boolean;
+  hasLastLive?: boolean;
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -196,6 +199,12 @@ const KNOWN_ERROR_CODES = [
   'approve_answers_need_live_tasks',
   'not_creator',
   'pack_published',
+  'pack_unpublished',
+  'pack_not_live',
+  'pack_already_live',
+  'no_last_live',
+  'last_task_set',
+  'task_set_not_found',
   'forbidden',
   'unauthenticated',
 ] as const;
@@ -263,6 +272,8 @@ export const useContentStore = defineStore('content', () => {
   const taskSetMarks = ref<TaskSetMark[]>([]);
   /** SC-PACK-81 / D46: tasks with empty slots after answers cascade — yellow until filled. */
   const cascadeGapTaskIds = ref<string[]>([]);
+  /** SC-PACK-90: personal draft base ≠ current live. */
+  const draftStale = ref(false);
   const answersModeration = ref<TypeModerationState>({
     status: 'none',
     requestId: null,
@@ -337,6 +348,7 @@ export const useContentStore = defineStore('content', () => {
     isTasksPendingAuthor?: boolean;
     pendingRequestId?: string | null;
     isPendingAuthor?: boolean;
+    draftStale?: boolean;
   }) {
     answersDirty.value = Boolean(data.answersDirty);
     if (typeof data.tasksDirty === 'boolean') {
@@ -364,6 +376,9 @@ export const useContentStore = defineStore('content', () => {
       data.isPendingAuthor !== undefined
         ? Boolean(data.isPendingAuthor)
         : isAnswersPendingAuthor.value || isTasksPendingAuthor.value;
+    if (typeof data.draftStale === 'boolean') {
+      draftStale.value = data.draftStale;
+    }
   }
 
   function clearDraftFlags() {
@@ -371,6 +386,7 @@ export const useContentStore = defineStore('content', () => {
     tasksDirty.value = false;
     taskSetMarks.value = [];
     cascadeGapTaskIds.value = [];
+    draftStale.value = false;
     answersModeration.value = emptyModeration();
     tasksModeration.value = emptyModeration();
     pendingAnswersRequestId.value = null;
@@ -580,10 +596,12 @@ export const useContentStore = defineStore('content', () => {
         isTasksPendingAuthor?: boolean;
         pendingRequestId?: string | null;
         isPendingAuthor?: boolean;
+        draftStale?: boolean;
       }>(`/api/content/packs/${packId}/draft`);
       pack.value = data.pack;
       draft.value = data.draft;
       applyDraftFlags(data);
+      draftStale.value = Boolean(data.draftStale);
       restoreCascadeGapsIfNeeded(data.draft);
       return data;
     } catch (e) {
@@ -886,6 +904,130 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /** Staff: remove pack from catalog; retain last-live (SC-PACK-92). */
+  async function unpublishPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        lastLiveRevisionId?: string;
+        lastLiveTasksRevisionId?: string;
+      }>(`/api/content/packs/${packId}/unpublish`);
+      const patch = (p: ContentPackSummary): ContentPackSummary =>
+        p.id === packId
+          ? {
+              ...p,
+              hasLive: false,
+              unpublishedByStaff: true,
+              hasLastLive: true,
+            }
+          : p;
+      collection.value = collection.value.map(patch);
+      catalog.value = catalog.value.filter((p) => p.id !== packId);
+      if (pack.value?.id === packId) {
+        pack.value = patch(pack.value);
+      }
+      draft.value = null;
+      clearDraftFlags();
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff: restore last-live into catalog without moderation (SC-PACK-94). */
+  async function republishPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        liveRevisionId?: string;
+        liveTasksRevisionId?: string;
+      }>(`/api/content/packs/${packId}/republish`);
+      const patch = (p: ContentPackSummary): ContentPackSummary =>
+        p.id === packId
+          ? {
+              ...p,
+              hasLive: true,
+              unpublishedByStaff: false,
+              hasLastLive: true,
+            }
+          : p;
+      collection.value = collection.value.map(patch);
+      if (pack.value?.id === packId) {
+        pack.value = patch(pack.value);
+      }
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff: remove one live task set when ≥2 remain (SC-PACK-95/96). */
+  async function unpublishLiveTaskSet(packId: string, taskSetId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        liveRevisionId?: string;
+        removedTaskSetId?: string;
+      }>(`/api/content/packs/${packId}/task-sets/${taskSetId}/unpublish`);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Pull current live into draft; keep local edits as new ids (SC-PACK-90/91). */
+  async function rebaseDraft(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        pack: ContentPackSummary;
+        draft: PackContent;
+        answersDirty?: boolean;
+        tasksDirty?: boolean;
+        taskSetMarks?: TaskSetMark[];
+        answersModeration?: TypeModerationState;
+        tasksModeration?: TypeModerationState;
+        pendingAnswersRequestId?: string | null;
+        pendingTasksRequestId?: string | null;
+        isAnswersPendingAuthor?: boolean;
+        isTasksPendingAuthor?: boolean;
+        pendingRequestId?: string | null;
+        isPendingAuthor?: boolean;
+        draftStale?: boolean;
+      }>(`/api/content/packs/${packId}/draft/rebase`);
+      pack.value = data.pack;
+      draft.value = data.draft;
+      applyDraftFlags(data);
+      draftStale.value = Boolean(data.draftStale);
+      restoreCascadeGapsIfNeeded(data.draft);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   /** Creator hard-deletes an unpublished pack (cascade). */
   async function deleteUnpublishedPack(packId: string) {
     loading.value = true;
@@ -955,6 +1097,7 @@ export const useContentStore = defineStore('content', () => {
     tasksDirty,
     taskSetMarks,
     cascadeGapTaskIds,
+    draftStale,
     markCascadeGaps,
     pruneCascadeGaps,
     taskHasCascadeGap,
@@ -986,6 +1129,7 @@ export const useContentStore = defineStore('content', () => {
     createPack,
     loadDraft,
     saveDraft,
+    rebaseDraft,
     submitAnswers,
     submitTasks,
     submitPack,
@@ -998,6 +1142,9 @@ export const useContentStore = defineStore('content', () => {
     rejectRequest,
     cancelRequest,
     postStaffMessage,
+    unpublishPack,
+    republishPack,
+    unpublishLiveTaskSet,
     deleteUnpublishedPack,
     deleteTaskSet,
   };

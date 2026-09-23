@@ -129,6 +129,7 @@ export default {
     untitled: 'Без названия',
     blocked: 'Заблокирован',
     draftOnly: 'Черновик',
+    unpublishedByStaff: 'Снят с публикации',
     addToCollection: 'В коллекцию',
     inCollection: 'В коллекции',
     removeFromCollection: 'Убрать из коллекции',
@@ -246,7 +247,22 @@ export default {
       rejected: 'Нужна доработка',
       needs_moderation: 'Ожидает отправки на модерацию',
       approved: 'Одобрено',
+      /** SC-PACK-86 / D7: answers approved + hasLive. */
+      published: 'Опубликовано',
     },
+    /** SC-PACK-90: draft behind live. */
+    draftStaleBanner: 'Набор изменился после публикации. Подтяните актуальную версию.',
+    draftStalePull: 'Подтянуть',
+    draftStalePullConfirm:
+      'Локальные правки сохранятся как новые сущности. Продолжить подтягивание?',
+    unpublish: 'Снять с публикации',
+    unpublishConfirm:
+      'Набор исчезнет из каталога. Все черновики и заявки модерации будут удалены. Продолжить?',
+    republish: 'Вернуть в каталог',
+    republishConfirm: 'Восстановить последнюю опубликованную версию в каталог без модерации?',
+    unpublishTaskSet: 'Снять набор с публикации',
+    unpublishTaskSetConfirm:
+      'Набор заданий будет убран из опубликованного пака. Все заявки модерации пака закроются. Черновики авторов сохранятся. Продолжить?',
     approve: 'Одобрить',
     approveAnswers: 'Одобрить ответы',
     approveTasks: 'Одобрить задания',
@@ -308,6 +324,12 @@ export default {
       approve_answers_need_live_tasks: 'Сначала одобрите задания — без live-заданий ответы нельзя.',
       not_creator: 'Удалить может только автор набора.',
       pack_published: 'Опубликованный набор нельзя удалить.',
+      pack_unpublished: 'Набор снят с публикации — редактирование недоступно.',
+      pack_not_live: 'Набор не опубликован в каталоге.',
+      pack_already_live: 'Набор уже в каталоге.',
+      no_last_live: 'Нет сохранённой опубликованной версии для восстановления.',
+      last_task_set: 'Нельзя снять последний набор заданий с публикации.',
+      task_set_not_found: 'Набор заданий не найден.',
       forbidden: 'Недостаточно прав для этого действия.',
       unauthenticated: 'Требуется вход.',
     },

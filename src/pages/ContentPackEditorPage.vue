@@ -27,6 +27,25 @@
       </template>
     </q-banner>
 
+    <!-- SC-PACK-90: draft behind live — warn + pull. -->
+    <q-banner
+      v-if="content.draftStale && !content.error"
+      dense
+      rounded
+      class="bg-warning text-dark q-mb-md"
+    >
+      {{ $t('content.draftStaleBanner') }}
+      <template #action>
+        <q-btn
+          flat
+          dense
+          :label="$t('content.draftStalePull')"
+          :loading="content.loading"
+          @click="pullConfirmOpen = true"
+        />
+      </template>
+    </q-banner>
+
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local">
@@ -151,7 +170,7 @@
           :clickable="canOpenTasks"
           :disable="!canOpenTasks"
           v-ripple="canOpenTasks"
-          :class="{ 'bg-warning text-dark': content.taskSetHasCascadeGap(ts) }"
+          :class="{ 'cascade-gap-outline': content.taskSetHasCascadeGap(ts) }"
           @click="canOpenTasks && openTaskSet(ts.id)"
         >
           <q-item-section>
@@ -170,7 +189,20 @@
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-icon name="chevron_right" />
+            <div class="row items-center no-wrap q-gutter-xs" @click.stop>
+              <!-- SC-PACK-95/96: staff unpublish live set on the RIGHT when ≥2 live sets. -->
+              <q-btn
+                v-if="liveTaskSetIdForDraft(ts)"
+                flat
+                dense
+                icon="unpublished"
+                color="warning"
+                :aria-label="$t('content.unpublishTaskSet')"
+                :loading="content.loading"
+                @click.stop="confirmUnpublishTaskSet(ts)"
+              />
+              <q-icon name="chevron_right" />
+            </div>
           </q-item-section>
         </q-item>
         <q-item v-if="!local.taskSets.length">
@@ -292,6 +324,42 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="pullConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.draftStalePull') }}</div>
+          <div class="q-mt-sm">{{ $t('content.draftStalePullConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="primary"
+            :label="$t('content.draftStalePull')"
+            :loading="content.loading"
+            @click="doPull"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <q-dialog v-model="unpublishTaskSetConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishTaskSet') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishTaskSetConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublishTaskSet')"
+            :loading="content.loading"
+            @click="doUnpublishTaskSet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -335,6 +403,9 @@ const cardForm = reactive({ content: '', description: '' });
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
 const packDeleteConfirmOpen = ref(false);
+const pullConfirmOpen = ref(false);
+const unpublishTaskSetConfirmOpen = ref(false);
+const pendingUnpublishTaskSetId = ref<string | null>(null);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const answersMessages = ref<ModerationMessage[]>([]);
@@ -355,13 +426,16 @@ const errorLabel = computed(() => {
 
 const readOnly = computed(() => Boolean(content.pack?.blocked) || Boolean(gateOpen.value));
 
-/** SC-PACK-83 / D48: same keys as task-set list marks (three-phase vocabulary). */
+/** SC-PACK-83 / D48 + SC-PACK-86 / D7: published when approved + hasLive. */
 const answersStatusLabel = computed(() => {
   const status = content.answersModeration.status;
   if (status === 'pending') return t('content.taskSetStatusMarks.pending');
   if (status === 'rejected') return t('content.taskSetStatusMarks.rejected');
   if (content.answersDirty) return t('content.taskSetStatusMarks.needs_moderation');
-  if (status === 'approved') return t('content.taskSetStatusMarks.approved');
+  if (status === 'approved') {
+    if (content.pack?.hasLive) return t('content.taskSetStatusMarks.published');
+    return t('content.taskSetStatusMarks.approved');
+  }
   return '';
 });
 
@@ -424,9 +498,38 @@ const tasksGateHint = computed(() => {
 
 const canDeletePack = computed(() => {
   if (!content.pack || content.pack.hasLive) return false;
+  // D4: staff-unpublished retains lastLive — creator hard-delete forbidden.
+  if (content.pack.hasLastLive || content.pack.unpublishedByStaff) return false;
   const uid = String(auth.user?.id ?? '');
   return Boolean(uid) && content.pack.createdBy === uid;
 });
+
+const liveTaskSets = computed(() => content.liveContent?.taskSets ?? []);
+
+/**
+ * Draft task-set ids diverge from live after copyRevision remaps.
+ * Match by content fingerprint; API must receive the **live** id (SC-PACK-95/96).
+ */
+function taskSetFingerprint(ts: TaskSet): string {
+  return JSON.stringify({
+    authorUserId: ts.authorUserId ?? '',
+    tasks: ts.tasks.map((t) => ({
+      question: t.question,
+      difficulty: t.difficulty,
+      slotCount: t.slots.length,
+      filled: t.slots.filter((s) => Boolean(s.answerCardId)).length,
+    })),
+  });
+}
+
+/** Live task-set id for a draft row, or null when unpublish is not allowed. */
+function liveTaskSetIdForDraft(draftTs: TaskSet): string | null {
+  if (!auth.isStaff || !content.pack?.hasLive) return null;
+  if (liveTaskSets.value.length < 2) return null;
+  const fp = taskSetFingerprint(draftTs);
+  const match = liveTaskSets.value.find((ts) => taskSetFingerprint(ts) === fp);
+  return match?.id ?? null;
+}
 
 const canReplyAnswers = computed(() => {
   const mod = content.answersModeration;
@@ -613,6 +716,42 @@ async function doDeletePack() {
   }
 }
 
+function confirmUnpublishTaskSet(draftTs: TaskSet) {
+  const liveId = liveTaskSetIdForDraft(draftTs);
+  if (!liveId) return;
+  pendingUnpublishTaskSetId.value = liveId;
+  unpublishTaskSetConfirmOpen.value = true;
+}
+
+async function doUnpublishTaskSet() {
+  const liveTsId = pendingUnpublishTaskSetId.value;
+  if (!liveTsId || !packId.value) return;
+  try {
+    await content.unpublishLiveTaskSet(packId.value, liveTsId);
+    unpublishTaskSetConfirmOpen.value = false;
+    pendingUnpublishTaskSetId.value = null;
+    await content.loadLivePack(packId.value).catch(() => {
+      /* live may 404 if unpublished entirely — ignore */
+    });
+  } catch {
+    /* error in store */
+  }
+}
+
+async function doPull() {
+  if (!packId.value) return;
+  try {
+    const data = await content.rebaseDraft(packId.value);
+    suppressAutosave = true;
+    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
+    suppressAutosave = false;
+    pullConfirmOpen.value = false;
+    await loadAnswersThread();
+  } catch {
+    /* error in store */
+  }
+}
+
 async function onAddTaskSet() {
   if (!local.value || !canOpenTasks.value) return;
   await flushAutosave();
@@ -673,6 +812,12 @@ async function load() {
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
     suppressAutosave = false;
     await loadAnswersThread();
+    // Staff task-set unpublish needs live set ids/count (SC-PACK-95/96).
+    if (auth.isStaff && content.pack?.hasLive) {
+      await content.loadLivePack(packId.value).catch(() => {
+        /* ignore */
+      });
+    }
   } catch {
     /* error in store */
   }
@@ -712,3 +857,11 @@ async function onReplyAnswers() {
   }
 }
 </script>
+
+<style scoped>
+/* SC-PACK-85 / D8: yellow outline without row fill */
+.cascade-gap-outline {
+  outline: 2px solid var(--q-warning);
+  outline-offset: -2px;
+}
+</style>

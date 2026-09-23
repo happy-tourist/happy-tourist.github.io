@@ -45,13 +45,21 @@
                 {{ $t('content.difficultyLabel') }}:
                 {{ $t(`content.difficulty.${task.difficulty}`) }}
               </q-item-label>
-              <q-item-label caption>
-                {{
-                  task.slots
-                    .map((s) => cardContent(s.answerCardId) || $t('content.slotEmpty'))
-                    .join(' · ')
-                }}
-              </q-item-label>
+              <!-- SC-PACK-89 / D8: slot chips instead of joined text -->
+              <div class="row q-gutter-xs q-mt-xs">
+                <q-chip
+                  v-for="slot in task.slots"
+                  :key="slot.id"
+                  dense
+                  :outline="!slot.answerCardId"
+                  :color="slot.answerCardId ? 'primary' : 'grey'"
+                >
+                  {{ slotLabel(slot) }}
+                </q-chip>
+                <span v-if="!task.slots.length" class="text-caption text-muted">
+                  {{ $t('content.slotEmpty') }}
+                </span>
+              </div>
             </q-item-section>
           </q-item>
           <q-item v-if="!ts.tasks.length">
@@ -245,6 +253,15 @@ function cardContent(answerCardId: string | null) {
   const fromHub = answerCards.value.find((c) => c.id === answerCardId);
   if (fromHub) return fromHub.content;
   return '';
+}
+
+/** SC-PACK-89 / D8: chip label like TasksPage. */
+function slotLabel(slot: { id: string; answerCardId: string | null }) {
+  if (!slot.answerCardId) {
+    return t('content.slotEmpty');
+  }
+  const text = cardContent(slot.answerCardId).trim();
+  return text || t('content.slotFilled');
 }
 
 async function load() {
