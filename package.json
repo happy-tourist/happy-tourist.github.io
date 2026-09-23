@@ -32,6 +32,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@intlify/unplugin-vue-i18n": "^11.0.0",
+    "@noble/hashes": "^2.4.0",
     "@quasar/app-vite": "^3.8.3",
     "@types/node": "^22.19.11",
     "@vitejs/plugin-vue": "^6.0.9",
@@ -45,6 +46,7 @@
     "jsdom": "^29.1.1",
     "postcss": "^8.5.8",
     "prettier": "^3.8.1",
+    "sass": "^1.104.0",
     "typescript": "^6.0.0",
     "vite-plugin-checker": "^0.14.5",
     "vitest": "^3.2.7",
