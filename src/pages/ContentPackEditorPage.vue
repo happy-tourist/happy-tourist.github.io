@@ -157,10 +157,10 @@
             <q-item-label>
               {{ $t('content.taskSetLabel', { n: si + 1 }) }}
               <q-badge
-                v-if="taskSetNeedsModeration(ts.id)"
-                color="warning"
+                v-if="taskSetMarkLabel(ts.id)"
+                :color="taskSetMarkColor(ts.id)"
                 class="q-ml-sm"
-                :label="$t('content.needsModerationMark')"
+                :label="taskSetMarkLabel(ts.id)"
               />
             </q-item-label>
             <q-item-label caption>
@@ -355,8 +355,10 @@ const readOnly = computed(() => Boolean(content.pack?.blocked) || Boolean(gateOp
 
 const answersStatusLabel = computed(() => {
   const status = content.answersModeration.status;
+  // D41 / SC-PACK-49/77: three-phase + approved after closed cycle.
   if (status === 'pending') return t('content.statusCyclePending');
   if (status === 'rejected') return t('content.statusCycleRejected');
+  if (content.answersDirty) return t('content.statusCycleAwaitingSubmit');
   if (status === 'approved') return t('content.statusCycleApproved');
   return '';
 });
@@ -425,8 +427,29 @@ const canReplyAnswers = computed(() => {
   return mod.status === 'pending' || mod.status === 'rejected';
 });
 
-function taskSetNeedsModeration(taskSetId: string) {
-  return content.taskSetMarks.some((m) => m.id === taskSetId && m.needsModeration);
+/** SC-PACK-48: pending/rejected override dirty; dirty → awaits submit. */
+function taskSetPhaseMark(taskSetId: string): 'pending' | 'rejected' | 'needs_moderation' | 'none' {
+  const tasksStatus = content.tasksModeration.status;
+  if (tasksStatus === 'pending') return 'pending';
+  if (tasksStatus === 'rejected') return 'rejected';
+  if (content.taskSetMarks.some((m) => m.id === taskSetId && m.needsModeration)) {
+    return 'needs_moderation';
+  }
+  return 'none';
+}
+
+function taskSetMarkLabel(taskSetId: string) {
+  const mark = taskSetPhaseMark(taskSetId);
+  if (mark === 'none') return '';
+  return t(`content.taskSetStatusMarks.${mark}`);
+}
+
+function taskSetMarkColor(taskSetId: string) {
+  const mark = taskSetPhaseMark(taskSetId);
+  if (mark === 'pending') return 'warning';
+  if (mark === 'rejected') return 'negative';
+  if (mark === 'needs_moderation') return 'orange';
+  return 'grey';
 }
 
 function taskSetAttribution(ts: TaskSet) {

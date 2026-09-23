@@ -76,6 +76,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/content/my-moderation',
+    name: 'content-my-moderation',
+    component: () => import('@/pages/ContentMyModerationPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/content/packs/new',
     name: 'content-pack-new',
     component: () => import('@/pages/ContentPackCreatePage.vue'),

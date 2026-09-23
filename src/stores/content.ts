@@ -89,6 +89,18 @@ export interface StaffPendingItem {
   updatedAt: string | Date;
 }
 
+/** Author «На модерации» row (D40 / SC-PACK-75). */
+export interface MyModerationItem {
+  requestId: string;
+  packId: string;
+  type: ModerationRequestType;
+  status: string;
+  title: string;
+  answersStatus?: string | null;
+  tasksStatus?: string | null;
+  updatedAt: string | Date;
+}
+
 export type ModerationCycleStatus = 'none' | 'pending' | 'rejected' | 'approved';
 
 export type TaskSetStatusMark = 'none' | 'pending' | 'rejected' | 'needs_moderation' | 'approved';
@@ -178,6 +190,7 @@ const KNOWN_ERROR_CODES = [
   'pack_not_found',
   'request_not_found',
   'not_pending',
+  'not_approvable',
   'not_cancellable',
   'thread_closed',
   'approve_answers_need_live_tasks',
@@ -253,6 +266,7 @@ export const useContentStore = defineStore('content', () => {
   const moderationMessages = ref<ModerationMessage[]>([]);
   const staffPending = ref<StaffPendingItem[]>([]);
   const staffPreview = ref<StaffPreview | null>(null);
+  const myModeration = ref<MyModerationItem[]>([]);
   const loading = ref(false);
   const saving = ref(false);
   const error = ref<string | null>(null);
@@ -671,6 +685,27 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /** D40 / SC-PACK-75/76: caller’s open (pending|rejected) packs. */
+  async function listMyModeration() {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.get<{ items: MyModerationItem[] }>(
+        '/api/content/my-moderation',
+      );
+      myModeration.value = (data?.items ?? []).map((item: MyModerationItem) => ({
+        ...item,
+        type: item.type === 'tasks' ? 'tasks' : 'answers',
+      }));
+    } catch (e) {
+      error.value = mapContentError(e);
+      myModeration.value = [];
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   async function loadStaffPreview(requestId: string) {
     loading.value = true;
     error.value = null;
@@ -850,6 +885,7 @@ export const useContentStore = defineStore('content', () => {
     moderationMessages,
     staffPending,
     staffPreview,
+    myModeration,
     loading,
     saving,
     error,
@@ -868,6 +904,7 @@ export const useContentStore = defineStore('content', () => {
     loadModeration,
     postModerationMessage,
     listStaffPending,
+    listMyModeration,
     loadStaffPreview,
     approveRequest,
     rejectRequest,

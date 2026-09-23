@@ -398,8 +398,10 @@ const canDeleteTaskSet = computed(() => {
 
 const tasksStatusLabel = computed(() => {
   const status = content.tasksModeration.status;
+  // D41 / SC-PACK-49: same three-phase vocabulary as answers.
   if (status === 'pending') return t('content.statusCyclePending');
   if (status === 'rejected') return t('content.statusCycleRejected');
+  if (content.tasksDirty) return t('content.statusCycleAwaitingSubmit');
   if (status === 'approved') return t('content.statusCycleApproved');
   return '';
 });

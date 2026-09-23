@@ -63,7 +63,12 @@
         {{ $t('content.emptyTasks') }}
       </div>
 
-      <div v-if="tasksPending && tasksPending.status === 'pending'" class="q-gutter-sm q-mb-lg">
+      <div
+        v-if="
+          tasksPending && (tasksPending.status === 'pending' || tasksPending.status === 'rejected')
+        "
+        class="q-gutter-sm q-mb-lg"
+      >
         <div class="text-subtitle2">{{ $t('content.approveTasksFirst') }}</div>
         <q-btn
           color="positive"
@@ -72,6 +77,7 @@
           @click="onApproveTasks"
         />
         <q-btn
+          v-if="tasksPending.status === 'pending'"
           color="warning"
           :label="$t('content.rejectTasks')"
           :loading="content.loading"

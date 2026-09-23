@@ -8,6 +8,12 @@
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
         <q-btn
+          flat
+          icon="hourglass_top"
+          :label="$t('content.myModerationNav')"
+          :to="{ name: 'content-my-moderation' }"
+        />
+        <q-btn
           v-if="auth.isStaff"
           flat
           icon="rate_review"

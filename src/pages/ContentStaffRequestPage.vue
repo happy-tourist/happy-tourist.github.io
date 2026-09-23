@@ -103,6 +103,7 @@
           @click="onApproveAnswers"
         />
         <q-btn
+          v-if="canRejectAnswers"
           color="warning"
           :label="$t('content.rejectAnswers')"
           :loading="content.loading"
@@ -230,13 +231,17 @@ const isTasksOnly = computed(() => {
   return p.answersActionsAvailable === false || p.request.type === 'tasks';
 });
 
+/** SC-PACK-70/72 + SC-PACK-74: actions for open pending|rejected; hide when tasks-only. */
 const showAnswersActions = computed(
   () =>
     Boolean(preview.value) &&
-    preview.value!.request.status === 'pending' &&
+    (preview.value!.request.status === 'pending' || preview.value!.request.status === 'rejected') &&
     !isTasksOnly.value &&
     preview.value!.answersActionsAvailable !== false,
 );
+
+/** Reject only from pending (server not_pending for already-rejected). */
+const canRejectAnswers = computed(() => preview.value?.request.status === 'pending');
 
 const showAnswersThread = computed(() => Boolean(preview.value) && !isTasksOnly.value);
 
