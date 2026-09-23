@@ -168,6 +168,14 @@
           :disable="readOnly || !canSubmitTasks"
           @click="onSubmitTasks"
         />
+        <q-btn
+          v-if="canDeleteTaskSet"
+          color="negative"
+          outline
+          :label="$t('content.deleteTaskSet')"
+          :loading="content.loading"
+          @click="taskSetDeleteConfirmOpen = true"
+        />
       </div>
       <div v-if="!canSubmitTasks" class="text-caption text-muted q-mt-sm">
         {{ submitTasksHint }}
@@ -248,6 +256,24 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="taskSetDeleteConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.deleteTaskSetTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.deleteTaskSetConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="negative"
+            :label="$t('content.deleteTaskSet')"
+            :loading="content.loading"
+            @click="doDeleteTaskSet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -304,6 +330,7 @@ const taskForm = reactive<{
 });
 const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
+const taskSetDeleteConfirmOpen = ref(false);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const tasksMessages = ref<ModerationMessage[]>([]);
@@ -333,9 +360,15 @@ const taskSet = computed(
   () => local.value?.taskSets.find((ts) => ts.id === taskSetId.value) ?? null,
 );
 
-const locked = computed(
-  () => content.answersDirty || !local.value?.answerCards.length || Boolean(content.pack?.blocked),
-);
+const locked = computed(() => {
+  if (!local.value?.answerCards.length || Boolean(content.pack?.blocked)) return true;
+  // D1′: answers-pending author A MAY edit even if answers dirty; others blocked.
+  if (content.pendingAnswersRequestId) {
+    return !content.isAnswersPendingAuthor;
+  }
+  // Dirty without pending → lock for everyone.
+  return content.answersDirty;
+});
 
 const readOnly = computed(
   () => Boolean(content.pack?.blocked) || Boolean(gateOpen.value) || locked.value,
@@ -345,6 +378,9 @@ const tasksGateHint = computed(() => {
   if (!local.value?.answerCards.length) {
     return t('content.tasksNeedCards');
   }
+  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) {
+    return t('content.tasksLockedPendingOther');
+  }
   if (content.answersDirty) {
     return t('content.tasksLockedDirty');
   }
@@ -352,6 +388,12 @@ const tasksGateHint = computed(() => {
     return t('content.blocked');
   }
   return '';
+});
+
+const canDeleteTaskSet = computed(() => {
+  if (!content.pack || content.pack.hasLive) return false;
+  const uid = String(auth.user?.id ?? '');
+  return Boolean(uid) && content.pack.createdBy === uid;
 });
 
 const tasksStatusLabel = computed(() => {
@@ -379,9 +421,13 @@ const meetsTasksMinima = computed(() => {
   return taskCount >= 2;
 });
 
-/** SC-PACK-43/46: dirty + minima; block if foreign answers pending or foreign tasks pending. */
+/**
+ * SC-PACK-43/46: tasksDirty + minima; foreign pending blocked.
+ * Submit still requires clean answers (server answers_dirty) — D1′ only unlocks create/edit.
+ */
 const canSubmitTasks = computed(() => {
   if (!local.value || readOnly.value) return false;
+  if (content.answersDirty) return false;
   if (!meetsTasksMinima.value) return false;
   if (!content.tasksDirty) return false;
   if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) return false;
@@ -395,6 +441,9 @@ const submitTasksHint = computed(() => {
   }
   if (content.pendingTasksRequestId && !content.isTasksPendingAuthor) {
     return t('content.submitLockedOther');
+  }
+  if (content.answersDirty) {
+    return t('content.tasksLockedDirty');
   }
   if (!meetsTasksMinima.value) {
     return t('content.submitTasksHint');
@@ -566,6 +615,17 @@ function doDeleteTask() {
   deleteConfirmOpen.value = false;
 }
 
+async function doDeleteTaskSet() {
+  if (!canDeleteTaskSet.value || !packId.value || !taskSetId.value) return;
+  try {
+    await content.deleteTaskSet(packId.value, taskSetId.value);
+    taskSetDeleteConfirmOpen.value = false;
+    await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+  } catch {
+    /* error in store */
+  }
+}
+
 async function loadTasksThread() {
   const mod = content.tasksModeration;
   if (!mod.requestId || !mod.isAuthor || !packId.value) {
@@ -594,7 +654,16 @@ async function load() {
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
     suppressAutosave = false;
 
-    if (!local.value.answerCards.length || content.answersDirty) {
+    if (!local.value.answerCards.length) {
+      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+      return;
+    }
+    // D1′: allow answers-pending author through even when answers dirty.
+    const dirtyBlocks =
+      content.answersDirty && !(content.pendingAnswersRequestId && content.isAnswersPendingAuthor);
+    const foreignPending =
+      Boolean(content.pendingAnswersRequestId) && !content.isAnswersPendingAuthor;
+    if (dirtyBlocks || foreignPending) {
       await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
       return;
     }

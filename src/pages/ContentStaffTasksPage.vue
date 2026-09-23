@@ -259,19 +259,9 @@ async function load() {
       tasksMessages.value = tasksPreview.messages ?? [];
       // Restore hub preview id for back-nav consistency after tasks load overwrote staffPreview.
       await content.loadStaffPreview(answersRequestId.value);
-    } else if (hub.pack.id) {
-      try {
-        const live = await content.loadLivePack(hub.pack.id);
-        displayTaskSets.value = live.content.taskSets ?? [];
-        // Prefer live answer labels when pending tasks absent.
-        if (live.content.answerCards?.length) {
-          answerCards.value = live.content.answerCards;
-        }
-      } catch {
-        displayTaskSets.value = [];
-      }
-      tasksMessages.value = [];
     } else {
+      // SC-PACK-51: never GET live pack here — unpublished packs yield pack_not_public.
+      // After tasks approve staff leave via redirect; without pending show empty + live hint.
       displayTaskSets.value = [];
       tasksMessages.value = [];
     }
@@ -302,7 +292,11 @@ async function onApproveTasks() {
   if (!id) return;
   try {
     await content.approveRequest(id);
-    await load();
+    // SC-PACK-51: return to answers hub — do not stay on empty/not-public tasks page.
+    await router.replace({
+      name: 'content-staff-request',
+      params: { id: answersRequestId.value },
+    });
   } catch {
     /* error in store */
   }

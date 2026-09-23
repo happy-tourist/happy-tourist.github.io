@@ -185,6 +185,14 @@
           :disable="readOnly || !canSubmitAnswers"
           @click="onSubmitAnswers"
         />
+        <q-btn
+          v-if="canDeletePack"
+          color="negative"
+          outline
+          :label="$t('content.deletePack')"
+          :loading="content.loading"
+          @click="packDeleteConfirmOpen = true"
+        />
       </div>
       <div v-if="!canSubmitAnswers" class="text-caption text-muted q-mt-sm">
         {{ submitAnswersHint }}
@@ -265,6 +273,24 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="packDeleteConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.deletePackTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.deletePackConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="negative"
+            :label="$t('content.deletePack')"
+            :loading="content.loading"
+            @click="doDeletePack"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -306,6 +332,7 @@ const editingCardId = ref<string | null>(null);
 const cardForm = reactive({ content: '', description: '' });
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
+const packDeleteConfirmOpen = ref(false);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const answersMessages = ref<ModerationMessage[]>([]);
@@ -364,6 +391,11 @@ const submitAnswersHint = computed(() => {
 const canOpenTasks = computed(() => {
   if (readOnly.value || !local.value) return false;
   if (!local.value.answerCards.length) return false;
+  // D1′ / SC-PACK-57/58: answers-pending author A MAY edit tasks (even if dirty);
+  // others blocked; dirty without pending blocks everyone.
+  if (content.pendingAnswersRequestId) {
+    return content.isAnswersPendingAuthor;
+  }
   if (content.answersDirty) return false;
   return true;
 });
@@ -372,10 +404,19 @@ const tasksGateHint = computed(() => {
   if (!local.value?.answerCards.length) {
     return t('content.tasksNeedCards');
   }
+  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) {
+    return t('content.tasksLockedPendingOther');
+  }
   if (content.answersDirty) {
     return t('content.addTaskSetTooltip');
   }
   return '';
+});
+
+const canDeletePack = computed(() => {
+  if (!content.pack || content.pack.hasLive) return false;
+  const uid = String(auth.user?.id ?? '');
+  return Boolean(uid) && content.pack.createdBy === uid;
 });
 
 const canReplyAnswers = computed(() => {
@@ -529,6 +570,17 @@ function doDeleteCard() {
   }
   pendingDeleteCardId.value = null;
   deleteConfirmOpen.value = false;
+}
+
+async function doDeletePack() {
+  if (!canDeletePack.value || !packId.value) return;
+  try {
+    await content.deleteUnpublishedPack(packId.value);
+    packDeleteConfirmOpen.value = false;
+    await router.replace({ name: 'content-collection' });
+  } catch {
+    /* error in store */
+  }
 }
 
 async function onAddTaskSet() {

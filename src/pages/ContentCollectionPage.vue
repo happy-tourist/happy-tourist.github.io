@@ -74,11 +74,11 @@
               <q-btn
                 flat
                 dense
-                icon="delete"
+                icon="remove_circle_outline"
                 color="negative"
                 :aria-label="$t('content.removeFromCollection')"
                 :loading="content.loading"
-                @click="onRemove(item.id)"
+                @click="confirmRemove(item.id)"
               />
             </div>
           </q-item-section>
@@ -109,6 +109,24 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="removeConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.removeFromCollectionTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.removeFromCollectionConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="negative"
+            :label="$t('content.removeFromCollection')"
+            :loading="content.loading"
+            @click="doRemove"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -127,6 +145,8 @@ const { t } = useI18n();
 
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
+const removeConfirmOpen = ref(false);
+const pendingRemoveId = ref<string | null>(null);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
@@ -170,9 +190,18 @@ function onEdit(packId: string) {
   void router.push({ name: 'content-pack-edit', params: { id: packId } });
 }
 
-async function onRemove(packId: string) {
+function confirmRemove(packId: string) {
+  pendingRemoveId.value = packId;
+  removeConfirmOpen.value = true;
+}
+
+async function doRemove() {
+  const packId = pendingRemoveId.value;
+  if (!packId) return;
   try {
     await content.removeFromCollection(packId);
+    removeConfirmOpen.value = false;
+    pendingRemoveId.value = null;
   } catch {
     /* error in store */
   }

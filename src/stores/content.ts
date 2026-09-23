@@ -175,6 +175,8 @@ const KNOWN_ERROR_CODES = [
   'not_cancellable',
   'thread_closed',
   'approve_answers_need_live_tasks',
+  'not_creator',
+  'pack_published',
   'forbidden',
   'unauthenticated',
 ] as const;
@@ -742,20 +744,20 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function blockPack(packId: string) {
+  /** Creator hard-deletes an unpublished pack (cascade). */
+  async function deleteUnpublishedPack(packId: string) {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await client.http.post(`/api/content/packs/${packId}/block`);
+      const { data } = await client.http.post('/api/content/pack/delete', {
+        body: { packId },
+      });
+      collection.value = collection.value.filter((p) => p.id !== packId);
       if (pack.value?.id === packId) {
-        pack.value = { ...pack.value, blocked: true };
+        pack.value = null;
       }
-      if (staffPreview.value?.pack.id === packId) {
-        staffPreview.value = {
-          ...staffPreview.value,
-          pack: { ...staffPreview.value.pack, blocked: true },
-        };
-      }
+      draft.value = null;
+      clearDraftFlags();
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -765,18 +767,31 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function unblockPack(packId: string) {
+  /** Creator deletes one task set from draft (+ unpublished liveTasks). */
+  async function deleteTaskSet(packId: string, taskSetId: string) {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await client.http.post(`/api/content/packs/${packId}/unblock`);
-      if (pack.value?.id === packId) {
-        pack.value = { ...pack.value, blocked: false };
-      }
-      if (staffPreview.value?.pack.id === packId) {
-        staffPreview.value = {
-          ...staffPreview.value,
-          pack: { ...staffPreview.value.pack, blocked: false },
+      const { data } = await client.http.post('/api/content/task-set/delete', {
+        body: { packId, taskSetId },
+      });
+      if (data?.draft) {
+        draft.value = data.draft as PackContent;
+        const flags: {
+          tasksDirty?: boolean;
+          taskSetMarks?: TaskSetMark[];
+        } = {};
+        if (typeof data.tasksDirty === 'boolean') {
+          flags.tasksDirty = data.tasksDirty;
+        }
+        if (Array.isArray(data.taskSetMarks)) {
+          flags.taskSetMarks = data.taskSetMarks as TaskSetMark[];
+        }
+        applyDraftFlags(flags);
+      } else if (draft.value) {
+        draft.value = {
+          ...draft.value,
+          taskSets: draft.value.taskSets.filter((ts) => ts.id !== taskSetId),
         };
       }
       return data;
@@ -832,8 +847,8 @@ export const useContentStore = defineStore('content', () => {
     rejectRequest,
     cancelRequest,
     postStaffMessage,
-    blockPack,
-    unblockPack,
+    deleteUnpublishedPack,
+    deleteTaskSet,
   };
 });
 

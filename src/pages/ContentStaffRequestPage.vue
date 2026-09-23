@@ -53,7 +53,7 @@
 
       <q-list bordered separator class="rounded-borders q-mb-lg">
         <q-item
-          v-for="(ts, si) in taskSetList"
+          v-for="(ts, si) in actionableTaskSets"
           :key="ts.id"
           clickable
           v-ripple
@@ -78,19 +78,17 @@
             <q-icon name="chevron_right" />
           </q-item-section>
         </q-item>
-        <q-item v-if="!taskSetList.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyTaskSets') }}</q-item-section>
+        <q-item v-if="!actionableTaskSets.length">
+          <q-item-section class="text-muted">
+            <template v-if="nested?.hasLiveTasks && !nested?.tasksPending">
+              {{ $t('content.tasksLiveHint') }}
+            </template>
+            <template v-else>
+              {{ $t('content.emptyTaskSets') }}
+            </template>
+          </q-item-section>
         </q-item>
       </q-list>
-
-      <div class="q-mb-lg">
-        <q-btn
-          flat
-          color="primary"
-          :label="$t('content.openStaffTasks')"
-          :to="{ name: 'content-staff-request-tasks', params: { id: requestId } }"
-        />
-      </div>
 
       <div v-if="preview.request.status === 'pending'" class="q-gutter-sm q-mb-lg">
         <q-btn
@@ -116,25 +114,6 @@
         <div v-if="!canApproveAnswers" class="text-caption text-muted">
           {{ $t('content.approveAnswersNeedLiveTasks') }}
         </div>
-      </div>
-
-      <div class="q-gutter-sm q-mb-lg">
-        <q-btn
-          v-if="!preview.pack.blocked"
-          color="negative"
-          outline
-          :label="$t('content.block')"
-          :loading="content.loading"
-          @click="onBlock"
-        />
-        <q-btn
-          v-else
-          color="primary"
-          outline
-          :label="$t('content.unblock')"
-          :loading="content.loading"
-          @click="onUnblock"
-        />
       </div>
 
       <div class="text-h6 q-mb-sm">{{ $t('content.threadAnswers') }}</div>
@@ -236,7 +215,16 @@ const requestId = computed(() => {
 });
 const preview = computed(() => content.staffPreview);
 const nested = computed(() => preview.value?.nested);
-const taskSetList = computed((): StaffTaskSetListItem[] => nested.value?.taskSetList ?? []);
+
+/** SC-PACK-52/44: omit fully moderated sets; no redundant «Открыть задания». */
+const actionableTaskSets = computed((): StaffTaskSetListItem[] => {
+  const all = nested.value?.taskSetList ?? [];
+  if (!nested.value?.tasksPending) {
+    return all.filter((ts) => ts.statusMark !== 'approved');
+  }
+  return all;
+});
+
 const canApproveAnswers = computed(() => Boolean(nested.value?.hasLiveTasks));
 
 const replyBody = ref('');
@@ -335,24 +323,6 @@ async function onCancelAnswers() {
   try {
     await content.cancelRequest(requestId.value);
     await router.replace({ name: 'content-staff' });
-  } catch {
-    /* error in store */
-  }
-}
-
-async function onBlock() {
-  if (!preview.value) return;
-  try {
-    await content.blockPack(preview.value.pack.id);
-  } catch {
-    /* error in store */
-  }
-}
-
-async function onUnblock() {
-  if (!preview.value) return;
-  try {
-    await content.unblockPack(preview.value.pack.id);
   } catch {
     /* error in store */
   }

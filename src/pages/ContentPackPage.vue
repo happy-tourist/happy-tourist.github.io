@@ -22,7 +22,6 @@
           :disable="Boolean(content.pack?.blocked) || added"
           @click="onAdd"
         />
-        <q-btn flat icon="edit" :label="$t('content.edit')" @click="onEdit" />
       </div>
     </div>
 
@@ -75,49 +74,20 @@
       </div>
       <div v-if="!live.taskSets.length" class="text-muted">{{ $t('content.emptyTasks') }}</div>
     </template>
-
-    <q-dialog v-model="gateOpen">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-h6">{{ gateTitle }}</div>
-          <div class="q-mt-sm">{{ gateText }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
-          <q-btn
-            v-if="gateMode === 'login'"
-            color="primary"
-            :label="$t('content.gateLogin')"
-            :to="{ name: 'login', query: { redirect: editRedirect } }"
-          />
-          <q-btn
-            v-else
-            color="primary"
-            :label="$t('content.gateVerify')"
-            :to="{ name: 'account' }"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
-import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore } from '@/stores/content';
 
-const auth = useAuthStore();
 const content = useContentStore();
 const route = useRoute();
-const router = useRouter();
 const { t } = useI18n();
 
-const gateOpen = ref(false);
-const gateMode = ref<'login' | 'verify'>('login');
 const added = ref(false);
 
 const packId = computed(() => {
@@ -126,14 +96,6 @@ const packId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const live = computed(() => content.liveContent);
-const editRedirect = computed(() => `/content/packs/${packId.value}/edit`);
-
-const gateTitle = computed(() =>
-  gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
-);
-const gateText = computed(() =>
-  gateMode.value === 'login' ? t('content.gateLoginText') : t('content.gateVerifyText'),
-);
 
 const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
@@ -158,19 +120,5 @@ async function onAdd() {
   } catch {
     /* error in store */
   }
-}
-
-function onEdit() {
-  if (auth.user?.anonymous) {
-    gateMode.value = 'login';
-    gateOpen.value = true;
-    return;
-  }
-  if (auth.needsEmailVerification) {
-    gateMode.value = 'verify';
-    gateOpen.value = true;
-    return;
-  }
-  void router.push({ name: 'content-pack-edit', params: { id: packId.value } });
 }
 </script>
