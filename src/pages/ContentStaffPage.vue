@@ -52,14 +52,11 @@
             </q-item-label>
             <q-item-label caption>
               {{
-                item.tasksOnly || item.type === 'tasks'
-                  ? $t('content.requestTypeTasks')
-                  : $t('content.requestTypeAnswers')
+                item.type === 'task_set' || item.type === 'tasks'
+                  ? $t('content.requestTypeTaskSet')
+                  : $t('content.requestTypePack')
               }}
               · {{ queueStatusLabel(item.status) }} · {{ formatDate(item.updatedAt) }}
-              <template v-if="item.hasTasksPending && !(item.tasksOnly || item.type === 'tasks')">
-                · {{ $t('content.hasTasksPending') }}
-              </template>
             </q-item-label>
           </q-item-section>
           <q-item-section side>
@@ -111,10 +108,10 @@ function formatDate(value: string | Date) {
   return d.toLocaleString('ru-RU');
 }
 
-/** SC-PACK-19/73: rejected rows show «нужна доработка». */
+/** Open queue: pending | needs_revision. */
 function queueStatusLabel(status: string) {
   if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'rejected') return t('content.statuses.rejected');
+  if (status === 'needs_revision' || status === 'rejected') return t('content.statuses.needs_revision');
   return status;
 }
 

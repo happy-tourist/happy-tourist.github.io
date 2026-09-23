@@ -14,12 +14,22 @@
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+        <!-- SC-PACK-53/111/112: staff Edit without collection. -->
         <q-btn
-          v-if="showEdit"
+          v-if="showStaffEdit"
           color="primary"
           icon="edit"
           :label="$t('content.edit')"
-          @click="onEdit"
+          :loading="content.loading"
+          @click="onStaffEdit"
+        />
+        <!-- SC-PACK-106/107: non-staff add-only, no full Edit. -->
+        <q-btn
+          v-if="showAddTaskSet"
+          color="secondary"
+          icon="playlist_add"
+          :label="$t('content.addTaskSetNav')"
+          @click="onAddTaskSet"
         />
         <q-btn
           color="primary"
@@ -71,7 +81,6 @@
                 {{ $t('content.difficultyLabel') }}:
                 {{ $t(`content.difficulty.${task.difficulty}`) }}
               </q-item-label>
-              <!-- SC-PACK-88 / D8: slot chips (not slotsCount alone) -->
               <div class="row q-gutter-xs q-mt-xs">
                 <q-chip
                   v-for="slot in task.slots"
@@ -142,22 +151,19 @@ const packId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const live = computed(() => content.liveContent);
-/** D29 / SC-PACK-64: membership from live GET, not ephemeral local flag. */
 const inCollection = computed(() => Boolean(content.pack?.inCollection));
 
+/** SC-PACK-112: staff Edit without collection; hide if blocked. */
+const showStaffEdit = computed(() => auth.isStaff && !content.pack?.blocked);
+
 /**
- * D27 / SC-PACK-53/61–63: Edit when in collection; hide if any pending
- * answers|tasks authored by someone else; pending author still sees Edit.
- * SC-PACK-25: blocked packs are not editable.
+ * SC-PACK-53/106/107: non-staff never get full Edit on live;
+ * verified + inCollection may add a task set.
  */
-const showEdit = computed(() => {
+const showAddTaskSet = computed(() => {
+  if (auth.isStaff || content.pack?.blocked) return false;
   if (!inCollection.value) return false;
-  if (content.pack?.blocked) return false;
-  const me = String(auth.user?.id ?? '');
-  const answersAuthor = content.pendingAnswersAuthorId;
-  const tasksAuthor = content.pendingTasksAuthorId;
-  if (answersAuthor && String(answersAuthor) !== me) return false;
-  if (tasksAuthor && String(tasksAuthor) !== me) return false;
+  if (auth.user?.anonymous || auth.needsEmailVerification) return false;
   return true;
 });
 
@@ -177,7 +183,6 @@ const errorLabel = computed(() => {
   return key ? t(key) : (content.error ?? '');
 });
 
-/** SC-PACK-88 / D8: same chip labels as TasksPage. */
 function slotLabel(slot: TaskSlot) {
   if (!slot.answerCardId || !live.value) {
     return t('content.slotEmpty');
@@ -210,10 +215,20 @@ function ensureEligible(): boolean {
   return true;
 }
 
-function onEdit() {
+async function onStaffEdit() {
+  if (!packId.value) return;
+  try {
+    await content.acquireEditLock(packId.value);
+    await router.push({ name: 'content-pack-edit', params: { id: packId.value } });
+  } catch {
+    /* error in store — edit_locked shown via banner */
+  }
+}
+
+function onAddTaskSet() {
   if (!packId.value) return;
   if (!ensureEligible()) return;
-  void router.push({ name: 'content-pack-edit', params: { id: packId.value } });
+  void router.push({ name: 'content-pack-add-task-set', params: { id: packId.value } });
 }
 
 async function onAdd() {

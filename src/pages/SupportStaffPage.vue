@@ -83,6 +83,7 @@
             <q-item-label>{{ topicLabel(item.topic) }}</q-item-label>
             <q-item-label caption>
               {{ statusLabel(item.status) }}
+              <template v-if="item.packId"> · {{ item.packId }}</template>
               · {{ formatDate(item.updatedAt) }}
             </q-item-label>
           </q-item-section>
@@ -165,7 +166,8 @@ function topicLabel(value: string) {
     value === 'suggestion' ||
     value === 'feedback' ||
     value === 'question' ||
-    value === 'other'
+    value === 'other' ||
+    value === 'change_pack'
   ) {
     return t(`support.topics.${value}`);
   }

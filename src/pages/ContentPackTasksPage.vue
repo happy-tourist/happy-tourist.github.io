@@ -31,25 +31,6 @@
       </template>
     </q-banner>
 
-    <!-- SC-PACK-90: draft behind live — warn + pull. -->
-    <q-banner
-      v-if="content.draftStale && !content.error"
-      dense
-      rounded
-      class="bg-warning text-dark q-mb-md"
-    >
-      {{ $t('content.draftStaleBanner') }}
-      <template #action>
-        <q-btn
-          flat
-          dense
-          :label="$t('content.draftStalePull')"
-          :loading="content.loading"
-          @click="pullConfirmOpen = true"
-        />
-      </template>
-    </q-banner>
-
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local && taskSet">
@@ -204,13 +185,6 @@
 
       <div class="row q-gutter-sm">
         <q-btn
-          color="secondary"
-          :label="$t('content.submitTasks')"
-          :loading="content.loading"
-          :disable="readOnly || !canSubmitTasks"
-          @click="onSubmitTasks"
-        />
-        <q-btn
           v-if="canDeleteTaskSet"
           color="negative"
           outline
@@ -219,47 +193,9 @@
           @click="taskSetDeleteConfirmOpen = true"
         />
       </div>
-      <div v-if="!canSubmitTasks" class="text-caption text-muted q-mt-sm">
-        {{ submitTasksHint }}
+      <div class="text-caption text-muted q-mt-sm">
+        {{ $t('content.tasksSaveHint') }}
       </div>
-
-      <div class="text-h6 q-mt-xl q-mb-sm">{{ $t('content.threadTasks') }}</div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="msg in tasksMessages" :key="msg.id">
-          <q-item-section>
-            <q-item-label>{{ messageAuthorLabel(msg) }}</q-item-label>
-            <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
-            <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!tasksMessages.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
-        </q-item>
-      </q-list>
-
-      <q-form
-        v-if="canReplyTasks"
-        ref="replyFormRef"
-        class="q-gutter-md"
-        @submit.prevent="onReplyTasks"
-      >
-        <q-input
-          v-model="replyBody"
-          type="textarea"
-          outlined
-          dense
-          autogrow
-          lazy-rules
-          :label="$t('content.reply')"
-          :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
-        />
-        <q-btn
-          type="submit"
-          color="primary"
-          :label="$t('content.sendReply')"
-          :loading="content.loading"
-        />
-      </q-form>
     </template>
 
     <q-dialog v-model="gateOpen" persistent>
@@ -316,32 +252,13 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
-
-    <q-dialog v-model="pullConfirmOpen">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-h6">{{ $t('content.draftStalePull') }}</div>
-          <div class="q-mt-sm">{{ $t('content.draftStalePullConfirm') }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
-          <q-btn
-            color="primary"
-            :label="$t('content.draftStalePull')"
-            :loading="content.loading"
-            @click="doPull"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -350,7 +267,6 @@ import {
   useContentStore,
   type ContentTask,
   type Difficulty,
-  type ModerationMessage,
   type PackContent,
   type TaskSlot,
 } from '@/stores/content';
@@ -391,12 +307,10 @@ const taskForm = reactive<{
 const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
 const taskSetDeleteConfirmOpen = ref(false);
-const pullConfirmOpen = ref(false);
-const replyBody = ref('');
-const replyFormRef = ref<QForm | null>(null);
-const tasksMessages = ref<ModerationMessage[]>([]);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressAutosave = false;
+
+const staffMode = computed(() => Boolean(content.staffEditTarget));
 
 const difficultyOptions = computed(() =>
   ([1, 2, 3] as Difficulty[]).map((value) => ({
@@ -421,15 +335,7 @@ const taskSet = computed(
   () => local.value?.taskSets.find((ts) => ts.id === taskSetId.value) ?? null,
 );
 
-const locked = computed(() => {
-  if (!local.value?.answerCards.length || Boolean(content.pack?.blocked)) return true;
-  // D1′: answers-pending author A MAY edit even if answers dirty; others blocked.
-  if (content.pendingAnswersRequestId) {
-    return !content.isAnswersPendingAuthor;
-  }
-  // Dirty without pending → lock for everyone.
-  return content.answersDirty;
-});
+const locked = computed(() => Boolean(content.pack?.blocked) || !local.value?.answerCards.length);
 
 const readOnly = computed(
   () => Boolean(content.pack?.blocked) || Boolean(gateOpen.value) || locked.value,
@@ -439,12 +345,6 @@ const tasksGateHint = computed(() => {
   if (!local.value?.answerCards.length) {
     return t('content.tasksNeedCards');
   }
-  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) {
-    return t('content.tasksLockedPendingOther');
-  }
-  if (content.answersDirty) {
-    return t('content.tasksLockedDirty');
-  }
   if (content.pack?.blocked) {
     return t('content.blocked');
   }
@@ -452,18 +352,20 @@ const tasksGateHint = computed(() => {
 });
 
 const canDeleteTaskSet = computed(() => {
-  if (!content.pack || content.pack.hasLive) return false;
+  if (!content.pack || content.pack.hasLive || staffMode.value) return false;
   const uid = String(auth.user?.id ?? '');
   return Boolean(uid) && content.pack.createdBy === uid;
 });
 
-/** SC-PACK-83 / D48 + SC-PACK-87 / D7: approved when tasks ok but no catalog live. */
 const tasksStatusLabel = computed(() => {
-  const status = content.tasksModeration.status;
+  const status = content.moderationStatus;
   if (status === 'pending') return t('content.taskSetStatusMarks.pending');
-  if (status === 'rejected') return t('content.taskSetStatusMarks.rejected');
-  if (content.tasksDirty) return t('content.taskSetStatusMarks.needs_moderation');
-  if (status === 'approved') return t('content.taskSetStatusMarks.approved');
+  if (status === 'needs_revision' || status === 'rejected') {
+    return t('content.taskSetStatusMarks.rejected');
+  }
+  if (content.pack?.hasLive || staffMode.value) {
+    return t('content.taskSetStatusMarks.published');
+  }
   return '';
 });
 
@@ -471,57 +373,12 @@ const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answer
 
 const canSaveQuestion = computed(() => Boolean(taskForm.question.trim()) && hasFilledSlot.value);
 
-const meetsTasksMinima = computed(() => {
-  if (!local.value) return false;
-  let taskCount = 0;
-  for (const ts of local.value.taskSets) {
-    for (const task of ts.tasks) {
-      taskCount += 1;
-      if (!task.slots.length || task.slots.some((s) => !s.answerCardId)) return false;
-      if (![1, 2, 3].includes(task.difficulty)) return false;
-    }
+async function persist(body: PackContent, opts?: { quiet?: boolean }) {
+  if (staffMode.value) {
+    return content.staffSavePack(packId.value, body, opts);
   }
-  return taskCount >= 2;
-});
-
-/**
- * SC-PACK-43/46: tasksDirty + minima; foreign pending blocked.
- * Submit still requires clean answers (server answers_dirty) — D1′ only unlocks create/edit.
- */
-const canSubmitTasks = computed(() => {
-  if (!local.value || readOnly.value) return false;
-  if (content.answersDirty) return false;
-  if (!meetsTasksMinima.value) return false;
-  if (!content.tasksDirty) return false;
-  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) return false;
-  if (content.pendingTasksRequestId && !content.isTasksPendingAuthor) return false;
-  return true;
-});
-
-const submitTasksHint = computed(() => {
-  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) {
-    return t('content.submitLockedOther');
-  }
-  if (content.pendingTasksRequestId && !content.isTasksPendingAuthor) {
-    return t('content.submitLockedOther');
-  }
-  if (content.answersDirty) {
-    return t('content.tasksLockedDirty');
-  }
-  if (!meetsTasksMinima.value) {
-    return t('content.submitTasksHint');
-  }
-  if (!content.tasksDirty) {
-    return t('content.submitTasksHintNotDirty');
-  }
-  return t('content.submitTasksHint');
-});
-
-const canReplyTasks = computed(() => {
-  const mod = content.tasksModeration;
-  if (!mod.isAuthor || !mod.requestId) return false;
-  return mod.status === 'pending' || mod.status === 'rejected';
-});
+  return content.saveDraft(packId.value, body, opts);
+}
 
 function checkGate(): boolean {
   if (auth.user?.anonymous) {
@@ -556,7 +413,7 @@ async function flushAutosave() {
   clearAutosaveTimer();
   if (!local.value || readOnly.value || !packId.value) return;
   try {
-    const saved = await content.saveDraft(packId.value, local.value, { quiet: true });
+    const saved = await persist(local.value, { quiet: true });
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(saved)) as PackContent;
     suppressAutosave = false;
@@ -612,24 +469,6 @@ function slotLabel(slot: TaskSlot) {
   }
   const card = local.value.answerCards.find((c) => c.id === slot.answerCardId);
   return card?.content?.trim() || t('content.slotFilled');
-}
-
-function messageAuthorLabel(msg: ModerationMessage) {
-  if (msg.authorKind === 'staff') {
-    return t('content.authorStaff');
-  }
-  if (msg.authorUserId === String(auth.user?.id ?? '')) {
-    return t('content.authorYou');
-  }
-  return t('content.authorUser');
-}
-
-function formatDate(value: string | Date) {
-  const d = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) {
-    return String(value);
-  }
-  return d.toLocaleString('ru-RU');
 }
 
 async function onAddOrUpdateTask() {
@@ -690,62 +529,29 @@ async function doDeleteTaskSet() {
   }
 }
 
-async function doPull() {
-  if (!packId.value) return;
-  try {
-    const data = await content.rebaseDraft(packId.value);
-    suppressAutosave = true;
-    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
-    suppressAutosave = false;
-    pullConfirmOpen.value = false;
-    if (!local.value?.taskSets.some((ts) => ts.id === taskSetId.value)) {
-      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
-      return;
-    }
-    await loadTasksThread();
-  } catch {
-    /* error in store */
-  }
-}
-
-async function loadTasksThread() {
-  const mod = content.tasksModeration;
-  if (!mod.requestId || !mod.isAuthor || !packId.value) {
-    tasksMessages.value = [];
-    return;
-  }
-  if (mod.status !== 'pending' && mod.status !== 'rejected') {
-    tasksMessages.value = [];
-    return;
-  }
-  try {
-    const data = await content.loadModeration(packId.value, 'tasks');
-    tasksMessages.value = data.messages ?? [];
-  } catch {
-    tasksMessages.value = [];
-  }
-}
-
 async function load() {
   if (!packId.value || !taskSetId.value) return;
   if (!checkGate()) return;
   clearAutosaveTimer();
   try {
-    const data = await content.loadDraft(packId.value);
+    let payload: PackContent;
+    if (content.staffEditTarget || (auth.isStaff && content.pack?.hasLive)) {
+      if (!content.staffEditTarget) {
+        await content.acquireEditLock(packId.value);
+        await content.loadStaffEdit(packId.value);
+      }
+      payload = content.draft!;
+    } else if (content.draft && content.pack?.id === packId.value && !content.pack.hasLive) {
+      payload = content.draft;
+    } else {
+      const data = await content.loadDraft(packId.value);
+      payload = data.draft;
+    }
     suppressAutosave = true;
-    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
+    local.value = JSON.parse(JSON.stringify(payload)) as PackContent;
     suppressAutosave = false;
 
     if (!local.value.answerCards.length) {
-      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
-      return;
-    }
-    // D1′: allow answers-pending author through even when answers dirty.
-    const dirtyBlocks =
-      content.answersDirty && !(content.pendingAnswersRequestId && content.isAnswersPendingAuthor);
-    const foreignPending =
-      Boolean(content.pendingAnswersRequestId) && !content.isAnswersPendingAuthor;
-    if (dirtyBlocks || foreignPending) {
       await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
       return;
     }
@@ -753,9 +559,7 @@ async function load() {
     const found = local.value.taskSets.some((ts) => ts.id === taskSetId.value);
     if (!found) {
       await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
-      return;
     }
-    await loadTasksThread();
   } catch {
     /* error in store */
   }
@@ -766,38 +570,9 @@ watch([packId, taskSetId], load);
 onBeforeUnmount(() => {
   clearAutosaveTimer();
 });
-
-async function onSubmitTasks() {
-  if (!local.value || !checkGate() || !canSubmitTasks.value) return;
-  clearAutosaveTimer();
-  try {
-    await content.saveDraft(packId.value, local.value);
-    await content.submitTasks(packId.value);
-    const data = await content.loadDraft(packId.value);
-    suppressAutosave = true;
-    local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
-    suppressAutosave = false;
-    await loadTasksThread();
-  } catch {
-    /* error in store */
-  }
-}
-
-async function onReplyTasks() {
-  try {
-    await content.postModerationMessage(packId.value, replyBody.value.trim(), 'tasks');
-    tasksMessages.value = [...content.moderationMessages];
-    replyBody.value = '';
-    await nextTick();
-    replyFormRef.value?.resetValidation();
-  } catch {
-    /* error in store */
-  }
-}
 </script>
 
 <style scoped>
-/* SC-PACK-85 / D8: yellow outline without row fill */
 .cascade-gap-outline {
   outline: 2px solid var(--q-warning);
   outline-offset: -2px;

@@ -40,6 +40,7 @@
         <q-form ref="createFormRef" class="q-gutter-md" @submit.prevent="onCreate">
           <q-select
             v-model="topic"
+            data-test-id="support-topic"
             :options="topicOptions"
             emit-value
             map-options
@@ -48,9 +49,39 @@
             lazy-rules
             :label="$t('support.topic')"
             :rules="[(v) => !!v || $t('support.topicRequired')]"
+            @update:model-value="onTopicChange"
           />
+          <q-select
+            v-if="topic === 'change_pack'"
+            v-model="packId"
+            data-test-id="support-pack"
+            :options="packOptions"
+            emit-value
+            map-options
+            outlined
+            dense
+            lazy-rules
+            :loading="catalogLoading"
+            :label="$t('support.pack')"
+            :rules="[(v) => !!v || $t('support.packRequired')]"
+          >
+            <template #option="scope">
+              <q-item v-bind="scope.itemProps">
+                <q-item-section>
+                  <q-item-label>{{ scope.opt.title }}</q-item-label>
+                  <q-item-label v-if="scope.opt.description" caption>
+                    {{ scope.opt.description }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </template>
+            <template #selected-item="scope">
+              <span>{{ scope.opt?.title ?? scope.opt?.label ?? '' }}</span>
+            </template>
+          </q-select>
           <q-input
             v-model="body"
+            data-test-id="support-body"
             type="textarea"
             outlined
             dense
@@ -61,6 +92,7 @@
           />
           <q-btn
             type="submit"
+            data-test-id="support-submit"
             color="primary"
             :label="$t('support.submit')"
             :loading="support.loading"
@@ -93,6 +125,7 @@
             <q-item-label>{{ topicLabel(item.topic) }}</q-item-label>
             <q-item-label caption>
               {{ statusLabel(item.status) }}
+              <template v-if="item.packId"> · {{ item.packId }}</template>
               · {{ formatDate(item.updatedAt) }}
             </q-item-label>
           </q-item-section>
@@ -106,12 +139,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
+import { useContentStore } from '@/stores/content';
 import {
   SUPPORT_TOPICS,
   supportErrorI18nKey,
@@ -121,12 +155,15 @@ import {
 
 const auth = useAuthStore();
 const support = useSupportStore();
+const content = useContentStore();
 const router = useRouter();
 const { t } = useI18n();
 
 const topic = ref<SupportTopic>('problem');
+const packId = ref<string | null>(null);
 const body = ref('');
 const createFormRef = ref<QForm | null>(null);
+const catalogLoading = ref(false);
 
 const topicOptions = computed(() =>
   SUPPORT_TOPICS.map((value) => ({
@@ -135,9 +172,40 @@ const topicOptions = computed(() =>
   })),
 );
 
+/** Catalog options: title + description (SC-SUP-29). */
+const packOptions = computed(() =>
+  content.catalog.map((p) => ({
+    label: p.description ? `${p.title} — ${p.description}` : p.title,
+    value: p.id,
+    title: p.title,
+    description: p.description,
+  })),
+);
+
 const errorLabel = computed(() => {
   const key = supportErrorI18nKey(support.error);
   return key ? t(key) : (support.error ?? '');
+});
+
+async function loadCatalogIfNeeded() {
+  if (topic.value !== 'change_pack') return;
+  catalogLoading.value = true;
+  try {
+    await content.listCatalog();
+  } catch {
+    /* error in content store; support banner may still show create errors */
+  } finally {
+    catalogLoading.value = false;
+  }
+}
+
+function onTopicChange() {
+  packId.value = null;
+  void loadCatalogIfNeeded();
+}
+
+watch(topic, () => {
+  void loadCatalogIfNeeded();
 });
 
 onMounted(() => {
@@ -152,7 +220,8 @@ function topicLabel(value: string) {
     value === 'suggestion' ||
     value === 'feedback' ||
     value === 'question' ||
-    value === 'other'
+    value === 'other' ||
+    value === 'change_pack'
   ) {
     return t(`support.topics.${value}`);
   }
@@ -181,8 +250,11 @@ function formatDate(value: string | Date) {
 
 async function onCreate() {
   try {
-    const created = await support.createTicket(topic.value, body.value.trim());
+    const opts =
+      topic.value === 'change_pack' && packId.value ? { packId: packId.value } : undefined;
+    const created = await support.createTicket(topic.value, body.value.trim(), opts);
     body.value = '';
+    packId.value = null;
     await nextTick();
     createFormRef.value?.resetValidation();
     await support.listOwnTickets().catch(() => undefined);

@@ -5,6 +5,15 @@
         <div class="text-h5">{{ $t('support.ticketTitle') }}</div>
         <div v-if="support.ticket" class="text-subtitle2 text-muted">
           {{ topicLabel(support.ticket.topic) }} · {{ statusLabel(support.ticket.status) }}
+          <template v-if="support.ticket.packId">
+            ·
+            <router-link
+              :to="{ name: 'content-pack', params: { id: support.ticket.packId } }"
+              class="text-primary"
+            >
+              {{ support.ticket.packId }}
+            </router-link>
+          </template>
         </div>
       </div>
       <q-btn flat :label="$t('support.backToList')" :to="{ name: 'support' }" />
@@ -161,7 +170,8 @@ function topicLabel(value: string) {
     value === 'suggestion' ||
     value === 'feedback' ||
     value === 'question' ||
-    value === 'other'
+    value === 'other' ||
+    value === 'change_pack'
   ) {
     return t(`support.topics.${value}`);
   }

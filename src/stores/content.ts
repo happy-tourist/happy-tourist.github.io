@@ -4,7 +4,8 @@ import { ref } from 'vue';
 import { client } from '@/boot/colyseus';
 
 export type Difficulty = 1 | 2 | 3;
-export type ModerationRequestType = 'answers' | 'tasks';
+/** API request types after simplify-content-pack-editing (D2). */
+export type ModerationRequestType = 'pack' | 'task_set';
 
 export interface ContentPackSummary {
   id: string;
@@ -12,9 +13,6 @@ export interface ContentPackSummary {
   description: string;
   blocked: boolean;
   hasLive: boolean;
-  /** Staff-unpublished: last-live retained, catalog live cleared (D4). */
-  unpublishedByStaff?: boolean;
-  hasLastLive?: boolean;
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -63,7 +61,7 @@ export interface ModerationRequest {
   changeAuthorId: string;
   revisionId: string;
   status: string;
-  type?: ModerationRequestType;
+  type?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -84,29 +82,33 @@ export interface StaffPendingItem {
   status: string;
   title: string;
   blocked: boolean;
-  type?: ModerationRequestType;
-  hasTasksPending?: boolean;
-  /** SC-PACK-70: queue row is tasks pending with no answers pending. */
-  tasksOnly?: boolean;
-  hasLiveTasks?: boolean;
+  type?: string;
+  taskSetCount?: number;
+  cardCount?: number;
   updatedAt: string | Date;
 }
 
-/** Author «На модерации» row (D40 / SC-PACK-75). */
+/** Author «На модерации» row — open pending | needs_revision. */
 export interface MyModerationItem {
   requestId: string;
   packId: string;
-  type: ModerationRequestType;
+  type: string;
   status: string;
   title: string;
-  answersStatus?: string | null;
-  tasksStatus?: string | null;
   updatedAt: string | Date;
 }
 
-export type ModerationCycleStatus = 'none' | 'pending' | 'rejected' | 'approved';
+export type ModerationCycleStatus =
+  'none' | 'pending' | 'needs_revision' | 'rejected' | 'approved' | 'cancelled';
 
-export type TaskSetStatusMark = 'none' | 'pending' | 'rejected' | 'needs_moderation' | 'approved';
+export type TaskSetStatusMark =
+  | 'none'
+  | 'pending'
+  | 'rejected'
+  | 'needs_revision'
+  | 'needs_moderation'
+  | 'approved'
+  | 'published';
 
 export interface TypeModerationState {
   status: ModerationCycleStatus;
@@ -115,45 +117,28 @@ export interface TypeModerationState {
   isAuthor: boolean;
 }
 
-export interface TaskSetMark {
-  id: string;
-  needsModeration: boolean;
-}
-
-export interface StaffTaskSetListItem {
-  id: string;
-  authorUserId: string;
-  coauthorLabels: string[];
-  taskCount: number;
-  needsModeration: boolean;
-  statusMark: TaskSetStatusMark;
-}
-
-export interface StaffNestedTasks {
-  tasksPending: {
-    requestId: string;
-    changeAuthorId: string;
-    status: string;
-    type: string;
-  } | null;
-  taskSetList?: StaffTaskSetListItem[];
-  tasksContent: {
-    taskSets: TaskSet[];
-    title: string;
-  } | null;
-  hasLiveTasks: boolean;
-}
-
 export interface StaffPreview {
   request: ModerationRequest;
   pack: ContentPackSummary;
   content: PackContent;
   messages: ModerationMessage[];
-  nested?: StaffNestedTasks;
-  /** SC-PACK-70/72: hub opened via tasks request (live answers context). */
-  tasksOnly?: boolean;
-  /** SC-PACK-72: false when tasks-only — hide answers approve/reject/cancel. */
-  answersActionsAvailable?: boolean;
+  canApprove?: boolean;
+}
+
+export interface EditLockSnapshot {
+  lockedBy: string | null;
+  lockedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface AddTaskSetState {
+  pack: ContentPackSummary;
+  liveCards: AnswerCard[];
+  draft: { title: string; description: string; taskSets: TaskSet[] };
+  pendingRequestId: string | null;
+  moderationStatus: string | null;
+  foreignPending: boolean;
+  stagedRevisionId?: string | null;
 }
 
 function httpErrorCode(e: unknown): string {
@@ -178,10 +163,12 @@ const KNOWN_ERROR_CODES = [
   'pack_blocked',
   'pack_pending_lock',
   'pack_pending_other',
+  'task_set_pending_other',
   'answers_dirty',
   'tasks_need_cards',
   'submit_need_cards',
   'submit_need_tasks',
+  'submit_need_task_sets',
   'submit_empty_slots',
   'empty_title',
   'empty_card_content',
@@ -196,15 +183,16 @@ const KNOWN_ERROR_CODES = [
   'not_approvable',
   'not_cancellable',
   'thread_closed',
-  'approve_answers_need_live_tasks',
   'not_creator',
   'pack_published',
-  'pack_unpublished',
-  'pack_not_live',
-  'pack_already_live',
-  'no_last_live',
-  'last_task_set',
   'task_set_not_found',
+  'edit_locked',
+  'edit_lock_required',
+  'no_working_copy',
+  'use_submit_pack',
+  'use_submit_add_task_set',
+  'approve_need_task_sets',
+  'approve_need_cards',
   'forbidden',
   'unauthenticated',
 ] as const;
@@ -256,51 +244,40 @@ function findTaskInContent(content: PackContent, taskId: string): ContentTask | 
   return null;
 }
 
+function normalizeRequestType(raw: unknown): string {
+  if (raw === 'task_set' || raw === 'tasks') return 'task_set';
+  if (raw === 'pack' || raw === 'answers') return 'pack';
+  return typeof raw === 'string' ? raw : 'pack';
+}
+
 /**
- * Content packs HTTP (catalog / collection / draft / dual submit / moderation / staff).
+ * Content packs HTTP: working copy, unified submit, add-task-set, staff lock/save.
  * Pages show `error` via q-banner; map codes with contentErrorI18nKey.
- * No badge state for «submit answers» reminders (SC-PACK / D10).
  */
 export const useContentStore = defineStore('content', () => {
   const catalog = ref<ContentPackSummary[]>([]);
   const collection = ref<ContentPackSummary[]>([]);
   const pack = ref<ContentPackSummary | null>(null);
   const liveContent = ref<PackContent | null>(null);
+  /** Working copy / staff edit payload (API still uses `draft` field name). */
   const draft = ref<PackContent | null>(null);
-  const answersDirty = ref(false);
-  const tasksDirty = ref(false);
-  const taskSetMarks = ref<TaskSetMark[]>([]);
-  /** SC-PACK-81 / D46: tasks with empty slots after answers cascade — yellow until filled. */
   const cascadeGapTaskIds = ref<string[]>([]);
-  /** SC-PACK-90: personal draft base ≠ current live. */
-  const draftStale = ref(false);
-  const answersModeration = ref<TypeModerationState>({
-    status: 'none',
-    requestId: null,
-    changeAuthorId: null,
-    isAuthor: false,
-  });
-  const tasksModeration = ref<TypeModerationState>({
-    status: 'none',
-    requestId: null,
-    changeAuthorId: null,
-    isAuthor: false,
-  });
-  const pendingAnswersRequestId = ref<string | null>(null);
-  const pendingTasksRequestId = ref<string | null>(null);
-  /** Live GET D27/D29 hints for Edit UI (change author ids or null). */
-  const pendingAnswersAuthorId = ref<string | null>(null);
-  const pendingTasksAuthorId = ref<string | null>(null);
-  const isAnswersPendingAuthor = ref(false);
-  const isTasksPendingAuthor = ref(false);
-  /** Compat: either pending answers or tasks request id. */
   const pendingRequestId = ref<string | null>(null);
   const isPendingAuthor = ref(false);
+  const moderationStatus = ref<string | null>(null);
+  /** Compat aliases used by older page helpers. */
+  const pendingAnswersAuthorId = ref<string | null>(null);
+  const pendingTasksAuthorId = ref<string | null>(null);
+  const pendingPackAuthorId = ref<string | null>(null);
+  const pendingTaskSetAuthorId = ref<string | null>(null);
   const moderationRequest = ref<ModerationRequest | null>(null);
   const moderationMessages = ref<ModerationMessage[]>([]);
   const staffPending = ref<StaffPendingItem[]>([]);
   const staffPreview = ref<StaffPreview | null>(null);
   const myModeration = ref<MyModerationItem[]>([]);
+  const addTaskSet = ref<AddTaskSetState | null>(null);
+  const editLock = ref<EditLockSnapshot | null>(null);
+  const staffEditTarget = ref<'live' | 'working' | null>(null);
   const loading = ref(false);
   const saving = ref(false);
   const error = ref<string | null>(null);
@@ -309,95 +286,14 @@ export const useContentStore = defineStore('content', () => {
     error.value = null;
   }
 
-  function emptyModeration(): TypeModerationState {
-    return {
-      status: 'none',
-      requestId: null,
-      changeAuthorId: null,
-      isAuthor: false,
-    };
-  }
-
-  function normalizeModeration(raw: unknown): TypeModerationState {
-    if (!raw || typeof raw !== 'object') return emptyModeration();
-    const m = raw as Partial<TypeModerationState>;
-    const status =
-      m.status === 'pending' ||
-      m.status === 'rejected' ||
-      m.status === 'approved' ||
-      m.status === 'none'
-        ? m.status
-        : 'none';
-    return {
-      status,
-      requestId: typeof m.requestId === 'string' ? m.requestId : null,
-      changeAuthorId: typeof m.changeAuthorId === 'string' ? m.changeAuthorId : null,
-      isAuthor: Boolean(m.isAuthor),
-    };
-  }
-
-  function applyDraftFlags(data: {
-    answersDirty?: boolean;
-    tasksDirty?: boolean;
-    taskSetMarks?: TaskSetMark[];
-    answersModeration?: TypeModerationState;
-    tasksModeration?: TypeModerationState;
-    pendingAnswersRequestId?: string | null;
-    pendingTasksRequestId?: string | null;
-    isAnswersPendingAuthor?: boolean;
-    isTasksPendingAuthor?: boolean;
-    pendingRequestId?: string | null;
-    isPendingAuthor?: boolean;
-    draftStale?: boolean;
-  }) {
-    answersDirty.value = Boolean(data.answersDirty);
-    if (typeof data.tasksDirty === 'boolean') {
-      tasksDirty.value = data.tasksDirty;
-    }
-    if (Array.isArray(data.taskSetMarks)) {
-      taskSetMarks.value = data.taskSetMarks.map((m: TaskSetMark) => ({
-        id: m.id,
-        needsModeration: Boolean(m.needsModeration),
-      }));
-    }
-    if (data.answersModeration !== undefined) {
-      answersModeration.value = normalizeModeration(data.answersModeration);
-    }
-    if (data.tasksModeration !== undefined) {
-      tasksModeration.value = normalizeModeration(data.tasksModeration);
-    }
-    pendingAnswersRequestId.value = data.pendingAnswersRequestId ?? null;
-    pendingTasksRequestId.value = data.pendingTasksRequestId ?? null;
-    isAnswersPendingAuthor.value = Boolean(data.isAnswersPendingAuthor);
-    isTasksPendingAuthor.value = Boolean(data.isTasksPendingAuthor);
-    pendingRequestId.value =
-      data.pendingRequestId ?? data.pendingAnswersRequestId ?? data.pendingTasksRequestId ?? null;
-    isPendingAuthor.value =
-      data.isPendingAuthor !== undefined
-        ? Boolean(data.isPendingAuthor)
-        : isAnswersPendingAuthor.value || isTasksPendingAuthor.value;
-    if (typeof data.draftStale === 'boolean') {
-      draftStale.value = data.draftStale;
-    }
-  }
-
-  function clearDraftFlags() {
-    answersDirty.value = false;
-    tasksDirty.value = false;
-    taskSetMarks.value = [];
+  function clearWorkingFlags() {
     cascadeGapTaskIds.value = [];
-    draftStale.value = false;
-    answersModeration.value = emptyModeration();
-    tasksModeration.value = emptyModeration();
-    pendingAnswersRequestId.value = null;
-    pendingTasksRequestId.value = null;
-    isAnswersPendingAuthor.value = false;
-    isTasksPendingAuthor.value = false;
     pendingRequestId.value = null;
     isPendingAuthor.value = false;
+    moderationStatus.value = null;
   }
 
-  /** Drop cascade yellow when gaps are filled or the task is gone (D46). */
+  /** Drop cascade yellow when gaps are filled or the task is gone. */
   function pruneCascadeGaps(draftContent: PackContent | null) {
     if (!draftContent) {
       cascadeGapTaskIds.value = [];
@@ -409,31 +305,6 @@ export const useContentStore = defineStore('content', () => {
     });
   }
 
-  /**
-   * After reload, restore yellow when answers are dirty and slots are empty
-   * (SC-PACK-81 / D46 — session marks alone vanish on F5). Only seeds when
-   * the in-memory set is empty so unrelated empties after clean edits stay quiet.
-   */
-  function restoreCascadeGapsIfNeeded(draftContent: PackContent | null) {
-    if (!draftContent || !answersDirty.value || cascadeGapTaskIds.value.length > 0) {
-      pruneCascadeGaps(draftContent);
-      return;
-    }
-    const ids: string[] = [];
-    for (const ts of draftContent.taskSets) {
-      for (const task of ts.tasks) {
-        if (task.slots.some((s) => !s.answerCardId)) {
-          ids.push(task.id);
-        }
-      }
-    }
-    cascadeGapTaskIds.value = ids;
-  }
-
-  /**
-   * After cascade save: mark tasks that still have empty slots (SC-PACK-81).
-   * Call with task ids that referenced the changed/deleted card before save.
-   */
   function markCascadeGaps(taskIds: string[], draftContent: PackContent) {
     const next = new Set(cascadeGapTaskIds.value);
     for (const id of taskIds) {
@@ -493,7 +364,6 @@ export const useContentStore = defineStore('content', () => {
       await client.http.post('/api/content/collection', {
         body: { packId },
       });
-      // D29 / SC-PACK-64: collect button must reflect membership without reload.
       if (pack.value?.id === packId) {
         pack.value = { ...pack.value, inCollection: true };
       }
@@ -533,20 +403,34 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<{
         pack: ContentPackSummary;
         content: PackContent;
+        pendingPackAuthorId?: string | null;
+        pendingTaskSetAuthorId?: string | null;
         pendingAnswersAuthorId?: string | null;
         pendingTasksAuthorId?: string | null;
       }>(`/api/content/packs/${packId}`);
       pack.value = data.pack;
       liveContent.value = data.content;
-      pendingAnswersAuthorId.value =
-        typeof data.pendingAnswersAuthorId === 'string' ? data.pendingAnswersAuthorId : null;
-      pendingTasksAuthorId.value =
-        typeof data.pendingTasksAuthorId === 'string' ? data.pendingTasksAuthorId : null;
+      pendingPackAuthorId.value =
+        typeof data.pendingPackAuthorId === 'string'
+          ? data.pendingPackAuthorId
+          : typeof data.pendingAnswersAuthorId === 'string'
+            ? data.pendingAnswersAuthorId
+            : null;
+      pendingTaskSetAuthorId.value =
+        typeof data.pendingTaskSetAuthorId === 'string'
+          ? data.pendingTaskSetAuthorId
+          : typeof data.pendingTasksAuthorId === 'string'
+            ? data.pendingTasksAuthorId
+            : null;
+      pendingAnswersAuthorId.value = pendingPackAuthorId.value;
+      pendingTasksAuthorId.value = pendingTaskSetAuthorId.value;
       return data;
     } catch (e) {
       error.value = mapContentError(e);
       pack.value = null;
       liveContent.value = null;
+      pendingPackAuthorId.value = null;
+      pendingTaskSetAuthorId.value = null;
       pendingAnswersAuthorId.value = null;
       pendingTasksAuthorId.value = null;
       throw e;
@@ -567,8 +451,7 @@ export const useContentStore = defineStore('content', () => {
       });
       pack.value = data.pack;
       draft.value = data.draft;
-      clearDraftFlags();
-      answersDirty.value = true;
+      clearWorkingFlags();
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -578,6 +461,7 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /** Creator working copy (unpublished only). */
   async function loadDraft(packId: string) {
     loading.value = true;
     error.value = null;
@@ -585,24 +469,16 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<{
         pack: ContentPackSummary;
         draft: PackContent;
-        answersDirty?: boolean;
-        tasksDirty?: boolean;
-        taskSetMarks?: TaskSetMark[];
-        answersModeration?: TypeModerationState;
-        tasksModeration?: TypeModerationState;
-        pendingAnswersRequestId?: string | null;
-        pendingTasksRequestId?: string | null;
-        isAnswersPendingAuthor?: boolean;
-        isTasksPendingAuthor?: boolean;
         pendingRequestId?: string | null;
         isPendingAuthor?: boolean;
-        draftStale?: boolean;
+        moderationStatus?: string | null;
       }>(`/api/content/packs/${packId}/draft`);
       pack.value = data.pack;
       draft.value = data.draft;
-      applyDraftFlags(data);
-      draftStale.value = Boolean(data.draftStale);
-      restoreCascadeGapsIfNeeded(data.draft);
+      pendingRequestId.value = data.pendingRequestId ?? null;
+      isPendingAuthor.value = Boolean(data.isPendingAuthor);
+      moderationStatus.value = data.moderationStatus ?? null;
+      pruneCascadeGaps(data.draft);
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -624,9 +500,6 @@ export const useContentStore = defineStore('content', () => {
     try {
       const { data } = await client.http.post<{
         draft: PackContent;
-        answersDirty?: boolean;
-        tasksDirty?: boolean;
-        taskSetMarks?: TaskSetMark[];
       }>(`/api/content/packs/${packId}/draft`, {
         body: {
           title: body.title,
@@ -636,18 +509,6 @@ export const useContentStore = defineStore('content', () => {
         },
       });
       draft.value = data.draft;
-      if (typeof data.answersDirty === 'boolean') {
-        answersDirty.value = data.answersDirty;
-      }
-      if (typeof data.tasksDirty === 'boolean') {
-        tasksDirty.value = data.tasksDirty;
-      }
-      if (Array.isArray(data.taskSetMarks)) {
-        taskSetMarks.value = data.taskSetMarks.map((m: TaskSetMark) => ({
-          id: m.id,
-          needsModeration: Boolean(m.needsModeration),
-        }));
-      }
       pruneCascadeGaps(data.draft);
       return data.draft;
     } catch (e) {
@@ -662,75 +523,252 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function submitAnswers(packId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        request: {
-          id: string;
-          packId: string;
-          status: string;
-          changeAuthorId: string;
-          type?: string;
-        };
-      }>(`/api/content/packs/${packId}/submit/answers`);
-      pendingAnswersRequestId.value = data.request.id;
-      isAnswersPendingAuthor.value = true;
-      answersDirty.value = false;
-      pendingRequestId.value = data.request.id;
-      isPendingAuthor.value = true;
-      return data.request;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  async function submitTasks(packId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        request: {
-          id: string;
-          packId: string;
-          status: string;
-          changeAuthorId: string;
-          type?: string;
-        };
-      }>(`/api/content/packs/${packId}/submit/tasks`);
-      pendingTasksRequestId.value = data.request.id;
-      isTasksPendingAuthor.value = true;
-      tasksDirty.value = false;
-      taskSetMarks.value = taskSetMarks.value.map((m) => ({ ...m, needsModeration: false }));
-      pendingRequestId.value = data.request.id;
-      isPendingAuthor.value = true;
-      return data.request;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  /** @deprecated Use submitAnswers / submitTasks. Kept for compile safety during migration. */
+  /** Unified first-publish submit (SC-PACK-102). */
   async function submitPack(packId: string) {
-    return submitAnswers(packId);
-  }
-
-  async function loadModeration(packId: string, type?: ModerationRequestType) {
     loading.value = true;
     error.value = null;
     try {
-      const qs = type === 'answers' || type === 'tasks' ? `?type=${encodeURIComponent(type)}` : '';
+      const { data } = await client.http.post<{
+        request: {
+          id: string;
+          packId: string;
+          status: string;
+          changeAuthorId: string;
+          type?: string;
+        };
+      }>(`/api/content/packs/${packId}/submit`);
+      pendingRequestId.value = data.request.id;
+      isPendingAuthor.value = true;
+      moderationStatus.value = data.request.status;
+      return data.request;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function loadAddTaskSet(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.get<AddTaskSetState>(
+        `/api/content/packs/${packId}/add-task-set`,
+      );
+      addTaskSet.value = data;
+      pack.value = data.pack;
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      addTaskSet.value = null;
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function saveAddTaskSet(
+    packId: string,
+    body: { title?: string; description?: string; taskSets: TaskSet[] },
+    opts?: { quiet?: boolean },
+  ) {
+    const quiet = Boolean(opts?.quiet);
+    if (quiet) {
+      saving.value = true;
+    } else {
+      loading.value = true;
+    }
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        draft: { title: string; description: string; taskSets: TaskSet[] };
+        pendingRequestId?: string | null;
+        moderationStatus?: string | null;
+        stagedRevisionId?: string | null;
+      }>(`/api/content/packs/${packId}/add-task-set`, {
+        body: {
+          title: body.title,
+          description: body.description,
+          taskSets: body.taskSets,
+        },
+      });
+      if (addTaskSet.value) {
+        addTaskSet.value = {
+          ...addTaskSet.value,
+          draft: data.draft,
+          pendingRequestId: data.pendingRequestId ?? null,
+          moderationStatus: data.moderationStatus ?? null,
+          stagedRevisionId: data.stagedRevisionId ?? addTaskSet.value.stagedRevisionId ?? null,
+        };
+      }
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      if (quiet) {
+        saving.value = false;
+      } else {
+        loading.value = false;
+      }
+    }
+  }
+
+  async function submitAddTaskSet(
+    packId: string,
+    body?: {
+      title?: string;
+      description?: string;
+      taskSets?: TaskSet[];
+      stagedRevisionId?: string;
+    },
+  ) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        request: {
+          id: string;
+          packId: string;
+          status: string;
+          changeAuthorId: string;
+          type?: string;
+        };
+      }>(`/api/content/packs/${packId}/add-task-set/submit`, {
+        body: body ?? {},
+      });
+      if (addTaskSet.value) {
+        addTaskSet.value = {
+          ...addTaskSet.value,
+          pendingRequestId: data.request.id,
+          moderationStatus: data.request.status,
+        };
+      }
+      return data.request;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function acquireEditLock(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        lock: EditLockSnapshot;
+      }>(`/api/content/packs/${packId}/edit-lock`);
+      editLock.value = data.lock;
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function refreshEditLock(packId: string) {
+    try {
+      const { data } = await client.http.get<{
+        lock: EditLockSnapshot;
+        heldByMe: boolean;
+      }>(`/api/content/packs/${packId}/edit-lock`);
+      editLock.value = data.lock;
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    }
+  }
+
+  async function releaseEditLock(packId: string) {
+    try {
+      await client.http.post(`/api/content/packs/${packId}/edit-unlock`);
+      editLock.value = null;
+      staffEditTarget.value = null;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    }
+  }
+
+  /** Staff editor payload (requires lock). */
+  async function loadStaffEdit(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.get<{
+        pack: ContentPackSummary;
+        content: PackContent;
+        target: 'live' | 'working';
+        lock: EditLockSnapshot;
+      }>(`/api/content/packs/${packId}/staff-edit`);
+      pack.value = data.pack;
+      draft.value = data.content;
+      staffEditTarget.value = data.target;
+      editLock.value = data.lock;
+      pruneCascadeGaps(data.content);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      draft.value = null;
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function staffSavePack(packId: string, body: PackContent, opts?: { quiet?: boolean }) {
+    const quiet = Boolean(opts?.quiet);
+    if (quiet) {
+      saving.value = true;
+    } else {
+      loading.value = true;
+    }
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        content: PackContent;
+        moderationRequestCreated: boolean;
+        target: 'live' | 'working';
+      }>(`/api/content/packs/${packId}/staff-save`, {
+        body: {
+          title: body.title,
+          description: body.description,
+          answerCards: body.answerCards,
+          taskSets: body.taskSets,
+        },
+      });
+      draft.value = data.content;
+      staffEditTarget.value = data.target;
+      pruneCascadeGaps(data.content);
+      return data.content;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      if (quiet) {
+        saving.value = false;
+      } else {
+        loading.value = false;
+      }
+    }
+  }
+
+  async function loadModeration(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
       const { data } = await client.http.get<{
         request: ModerationRequest;
         messages: ModerationMessage[];
-      }>(`/api/content/packs/${packId}/moderation${qs}`);
+      }>(`/api/content/packs/${packId}/moderation`);
       moderationRequest.value = data.request;
       moderationMessages.value = data.messages ?? [];
       return data;
@@ -744,19 +782,15 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function postModerationMessage(packId: string, body: string, type?: ModerationRequestType) {
+  async function postModerationMessage(packId: string, body: string) {
     loading.value = true;
     error.value = null;
     try {
-      const payload: { body: string; type?: ModerationRequestType } = { body };
-      if (type === 'answers' || type === 'tasks') {
-        payload.type = type;
-      }
       const { data } = await client.http.post<{
         request: ModerationRequest;
         messages: ModerationMessage[];
       }>(`/api/content/packs/${packId}/moderation/messages`, {
-        body: payload,
+        body: { body },
       });
       moderationRequest.value = data.request;
       moderationMessages.value = data.messages ?? [];
@@ -776,7 +810,10 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<{ items: StaffPendingItem[] }>(
         '/api/content/staff/pending',
       );
-      staffPending.value = data?.items ?? [];
+      staffPending.value = (data?.items ?? []).map((item: StaffPendingItem) => ({
+        ...item,
+        type: normalizeRequestType(item.type),
+      }));
     } catch (e) {
       error.value = mapContentError(e);
       staffPending.value = [];
@@ -786,7 +823,6 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  /** D40 / SC-PACK-75/76: caller’s open (pending|rejected) packs. */
   async function listMyModeration() {
     loading.value = true;
     error.value = null;
@@ -796,7 +832,7 @@ export const useContentStore = defineStore('content', () => {
       );
       myModeration.value = (data?.items ?? []).map((item: MyModerationItem) => ({
         ...item,
-        type: item.type === 'tasks' ? 'tasks' : 'answers',
+        type: normalizeRequestType(item.type),
       }));
     } catch (e) {
       error.value = mapContentError(e);
@@ -814,11 +850,18 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.get<StaffPreview>(
         `/api/content/staff/requests/${requestId}`,
       );
-      staffPreview.value = data;
-      moderationRequest.value = data.request;
+      const preview: StaffPreview = {
+        ...data,
+        request: {
+          ...data.request,
+          type: normalizeRequestType(data.request.type),
+        },
+      };
+      staffPreview.value = preview;
+      moderationRequest.value = preview.request;
       moderationMessages.value = data.messages ?? [];
       pack.value = data.pack;
-      return data;
+      return preview;
     } catch (e) {
       error.value = mapContentError(e);
       staffPreview.value = null;
@@ -835,7 +878,7 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.post<{
         ok: boolean;
         packId: string;
-        liveRevisionId: string;
+        liveRevisionId?: string;
       }>(`/api/content/staff/requests/${requestId}/approve`);
       return data;
     } catch (e) {
@@ -846,13 +889,17 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  async function rejectRequest(requestId: string, comment: string) {
+  /** Staff «Доработать» → needs_revision (SC-PACK-104). */
+  async function needsRevisionRequest(requestId: string, comment: string) {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await client.http.post(`/api/content/staff/requests/${requestId}/reject`, {
-        body: { comment },
-      });
+      const { data } = await client.http.post(
+        `/api/content/staff/requests/${requestId}/needs-revision`,
+        {
+          body: { comment },
+        },
+      );
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -862,11 +909,22 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
+  /** @deprecated alias — prefer needsRevisionRequest. */
+  async function rejectRequest(requestId: string, comment: string) {
+    return needsRevisionRequest(requestId, comment);
+  }
+
+  /** Author or staff cancel open request (SC-PACK-105). */
   async function cancelRequest(requestId: string) {
     loading.value = true;
     error.value = null;
     try {
-      const { data } = await client.http.post(`/api/content/staff/requests/${requestId}/cancel`);
+      const { data } = await client.http.post(`/api/content/requests/${requestId}/cancel`);
+      if (pendingRequestId.value === requestId) {
+        pendingRequestId.value = null;
+        isPendingAuthor.value = false;
+        moderationStatus.value = null;
+      }
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -904,131 +962,6 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  /** Staff: remove pack from catalog; retain last-live (SC-PACK-92). */
-  async function unpublishPack(packId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        ok: boolean;
-        packId: string;
-        lastLiveRevisionId?: string;
-        lastLiveTasksRevisionId?: string;
-      }>(`/api/content/packs/${packId}/unpublish`);
-      const patch = (p: ContentPackSummary): ContentPackSummary =>
-        p.id === packId
-          ? {
-              ...p,
-              hasLive: false,
-              unpublishedByStaff: true,
-              hasLastLive: true,
-            }
-          : p;
-      collection.value = collection.value.map(patch);
-      catalog.value = catalog.value.filter((p) => p.id !== packId);
-      if (pack.value?.id === packId) {
-        pack.value = patch(pack.value);
-      }
-      draft.value = null;
-      clearDraftFlags();
-      return data;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  /** Staff: restore last-live into catalog without moderation (SC-PACK-94). */
-  async function republishPack(packId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        ok: boolean;
-        packId: string;
-        liveRevisionId?: string;
-        liveTasksRevisionId?: string;
-      }>(`/api/content/packs/${packId}/republish`);
-      const patch = (p: ContentPackSummary): ContentPackSummary =>
-        p.id === packId
-          ? {
-              ...p,
-              hasLive: true,
-              unpublishedByStaff: false,
-              hasLastLive: true,
-            }
-          : p;
-      collection.value = collection.value.map(patch);
-      if (pack.value?.id === packId) {
-        pack.value = patch(pack.value);
-      }
-      return data;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  /** Staff: remove one live task set when ≥2 remain (SC-PACK-95/96). */
-  async function unpublishLiveTaskSet(packId: string, taskSetId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        ok: boolean;
-        packId: string;
-        liveRevisionId?: string;
-        removedTaskSetId?: string;
-      }>(`/api/content/packs/${packId}/task-sets/${taskSetId}/unpublish`);
-      return data;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  /** Pull current live into draft; keep local edits as new ids (SC-PACK-90/91). */
-  async function rebaseDraft(packId: string) {
-    loading.value = true;
-    error.value = null;
-    try {
-      const { data } = await client.http.post<{
-        pack: ContentPackSummary;
-        draft: PackContent;
-        answersDirty?: boolean;
-        tasksDirty?: boolean;
-        taskSetMarks?: TaskSetMark[];
-        answersModeration?: TypeModerationState;
-        tasksModeration?: TypeModerationState;
-        pendingAnswersRequestId?: string | null;
-        pendingTasksRequestId?: string | null;
-        isAnswersPendingAuthor?: boolean;
-        isTasksPendingAuthor?: boolean;
-        pendingRequestId?: string | null;
-        isPendingAuthor?: boolean;
-        draftStale?: boolean;
-      }>(`/api/content/packs/${packId}/draft/rebase`);
-      pack.value = data.pack;
-      draft.value = data.draft;
-      applyDraftFlags(data);
-      draftStale.value = Boolean(data.draftStale);
-      restoreCascadeGapsIfNeeded(data.draft);
-      return data;
-    } catch (e) {
-      error.value = mapContentError(e);
-      throw e;
-    } finally {
-      loading.value = false;
-    }
-  }
-
-  /** Creator hard-deletes an unpublished pack (cascade). */
   async function deleteUnpublishedPack(packId: string) {
     loading.value = true;
     error.value = null;
@@ -1037,11 +970,9 @@ export const useContentStore = defineStore('content', () => {
         body: { packId },
       });
       collection.value = collection.value.filter((p) => p.id !== packId);
-      if (pack.value?.id === packId) {
-        pack.value = null;
-      }
       draft.value = null;
-      clearDraftFlags();
+      pack.value = null;
+      clearWorkingFlags();
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -1051,7 +982,6 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  /** Creator deletes one task set from draft (+ unpublished liveTasks). */
   async function deleteTaskSet(packId: string, taskSetId: string) {
     loading.value = true;
     error.value = null;
@@ -1061,17 +991,6 @@ export const useContentStore = defineStore('content', () => {
       });
       if (data?.draft) {
         draft.value = data.draft as PackContent;
-        const flags: {
-          tasksDirty?: boolean;
-          taskSetMarks?: TaskSetMark[];
-        } = {};
-        if (typeof data.tasksDirty === 'boolean') {
-          flags.tasksDirty = data.tasksDirty;
-        }
-        if (Array.isArray(data.taskSetMarks)) {
-          flags.taskSetMarks = data.taskSetMarks as TaskSetMark[];
-        }
-        applyDraftFlags(flags);
       } else if (draft.value) {
         draft.value = {
           ...draft.value,
@@ -1093,30 +1012,26 @@ export const useContentStore = defineStore('content', () => {
     pack,
     liveContent,
     draft,
-    answersDirty,
-    tasksDirty,
-    taskSetMarks,
     cascadeGapTaskIds,
-    draftStale,
     markCascadeGaps,
     pruneCascadeGaps,
     taskHasCascadeGap,
     taskSetHasCascadeGap,
-    answersModeration,
-    tasksModeration,
-    pendingAnswersRequestId,
-    pendingTasksRequestId,
-    pendingAnswersAuthorId,
-    pendingTasksAuthorId,
-    isAnswersPendingAuthor,
-    isTasksPendingAuthor,
     pendingRequestId,
     isPendingAuthor,
+    moderationStatus,
+    pendingAnswersAuthorId,
+    pendingTasksAuthorId,
+    pendingPackAuthorId,
+    pendingTaskSetAuthorId,
     moderationRequest,
     moderationMessages,
     staffPending,
     staffPreview,
     myModeration,
+    addTaskSet,
+    editLock,
+    staffEditTarget,
     loading,
     saving,
     error,
@@ -1129,22 +1044,25 @@ export const useContentStore = defineStore('content', () => {
     createPack,
     loadDraft,
     saveDraft,
-    rebaseDraft,
-    submitAnswers,
-    submitTasks,
     submitPack,
+    loadAddTaskSet,
+    saveAddTaskSet,
+    submitAddTaskSet,
+    acquireEditLock,
+    refreshEditLock,
+    releaseEditLock,
+    loadStaffEdit,
+    staffSavePack,
     loadModeration,
     postModerationMessage,
     listStaffPending,
     listMyModeration,
     loadStaffPreview,
     approveRequest,
+    needsRevisionRequest,
     rejectRequest,
     cancelRequest,
     postStaffMessage,
-    unpublishPack,
-    republishPack,
-    unpublishLiveTaskSet,
     deleteUnpublishedPack,
     deleteTaskSet,
   };

@@ -42,15 +42,15 @@
           :key="item.requestId"
           clickable
           v-ripple
-          :to="{ name: 'content-pack-edit', params: { id: item.packId } }"
+          :to="myModerationLink(item)"
         >
           <q-item-section>
             <q-item-label>{{ item.title || $t('content.untitled') }}</q-item-label>
             <q-item-label caption>
               {{
-                item.type === 'tasks'
-                  ? $t('content.requestTypeTasks')
-                  : $t('content.requestTypeAnswers')
+                item.type === 'task_set' || item.type === 'tasks'
+                  ? $t('content.requestTypeTaskSet')
+                  : $t('content.requestTypePack')
               }}
               · {{ queueStatusLabel(item.status) }} · {{ formatDate(item.updatedAt) }}
             </q-item-label>
@@ -68,7 +68,7 @@
 import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type MyModerationItem } from '@/stores/content';
 
 const content = useContentStore();
 const { t } = useI18n();
@@ -88,10 +88,17 @@ onMounted(() => {
   void load();
 });
 
-/** D41: pending → на модерации; rejected → нужна доработка. */
+function myModerationLink(item: MyModerationItem) {
+  if (item.type === 'task_set' || item.type === 'tasks') {
+    return { name: 'content-pack-add-task-set', params: { id: item.packId } };
+  }
+  return { name: 'content-pack-edit', params: { id: item.packId } };
+}
+
+/** pending → на модерации; needs_revision → нужна доработка. */
 function queueStatusLabel(status: string) {
   if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'rejected') return t('content.statuses.rejected');
+  if (status === 'needs_revision' || status === 'rejected') return t('content.statuses.needs_revision');
   return status;
 }
 

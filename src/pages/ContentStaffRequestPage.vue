@@ -9,7 +9,7 @@
           </q-badge>
         </div>
         <div class="text-subtitle2 text-muted">
-          {{ isTasksOnly ? $t('content.requestTypeTasks') : $t('content.requestTypeAnswers') }}
+          {{ requestTypeLabel }}
           <template v-if="preview"> · {{ statusLabel(preview.request.status) }}</template>
         </div>
       </div>
@@ -30,148 +30,112 @@
         {{ preview.content.description }}
       </div>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="card in preview.content.answerCards" :key="card.id">
-          <q-item-section>
-            <q-item-label>{{ card.content }}</q-item-label>
-            <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
-          </q-item-section>
-        </q-item>
-      </q-list>
+      <template v-if="isPackRequest">
+        <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
+        <q-list bordered separator class="rounded-borders q-mb-lg">
+          <q-item v-for="card in preview.content.answerCards" :key="card.id">
+            <q-item-section>
+              <q-item-label>{{ card.content }}</q-item-label>
+              <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-item v-if="!preview.content.answerCards.length">
+            <q-item-section class="text-muted">{{ $t('content.emptyCards') }}</q-item-section>
+          </q-item>
+        </q-list>
+      </template>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.nestedTasks') }}</div>
-      <div v-if="nested?.tasksPending" class="q-mb-sm text-caption text-muted">
-        {{ $t('content.tasksPendingHint') }}
+      <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
+      <div v-for="(ts, si) in preview.content.taskSets" :key="ts.id" class="q-mb-md">
+        <div class="text-subtitle1 q-mb-xs">
+          {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+        </div>
+        <q-list bordered separator class="rounded-borders">
+          <q-item v-for="task in ts.tasks" :key="task.id">
+            <q-item-section>
+              <q-item-label>{{ task.question }}</q-item-label>
+              <q-item-label caption>
+                {{ $t('content.difficultyLabel') }}:
+                {{ $t(`content.difficulty.${task.difficulty}`) }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+        </q-list>
       </div>
-      <div v-else-if="nested?.hasLiveTasks" class="q-mb-sm text-caption text-muted">
-        {{ $t('content.tasksLiveHint') }}
-      </div>
-      <div v-else class="q-mb-sm text-caption text-muted">
-        {{ $t('content.tasksMissingHint') }}
-      </div>
-
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item
-          v-for="(ts, si) in actionableTaskSets"
-          :key="ts.id"
-          clickable
-          v-ripple
-          :to="{ name: 'content-staff-request-tasks', params: { id: requestId } }"
-        >
-          <q-item-section>
-            <q-item-label>
-              {{ $t('content.taskSetLabel', { n: si + 1 }) }}
-              <q-badge
-                v-if="taskSetMarkLabel(ts.statusMark)"
-                :color="taskSetMarkColor(ts.statusMark)"
-                class="q-ml-sm"
-                :label="taskSetMarkLabel(ts.statusMark)"
-              />
-            </q-item-label>
-            <q-item-label caption>
-              {{ taskSetAttribution(ts) }} ·
-              {{ $t('content.tasksCount', { n: ts.taskCount }) }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <q-icon name="chevron_right" />
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!actionableTaskSets.length">
-          <q-item-section class="text-muted">
-            <template v-if="nested?.hasLiveTasks && !nested?.tasksPending">
-              {{ $t('content.tasksLiveHint') }}
-            </template>
-            <template v-else>
-              {{ $t('content.emptyTaskSets') }}
-            </template>
-          </q-item-section>
-        </q-item>
-      </q-list>
-
-      <div v-if="isTasksOnly" class="q-mb-md text-caption text-muted">
-        {{ $t('content.tasksOnlyHubHint') }}
+      <div v-if="!preview.content.taskSets.length" class="text-muted q-mb-lg">
+        {{ $t('content.emptyTaskSets') }}
       </div>
 
-      <div v-if="showAnswersActions" class="q-gutter-sm q-mb-lg">
+      <div v-if="isOpen" class="q-gutter-sm q-mb-lg">
         <q-btn
           color="positive"
-          :label="$t('content.approveAnswers')"
+          :label="$t('content.approve')"
           :loading="content.loading"
-          :disable="!canApproveAnswers"
-          @click="onApproveAnswers"
+          :disable="!canApprove"
+          @click="onApprove"
         />
         <q-btn
-          v-if="canRejectAnswers"
           color="warning"
-          :label="$t('content.rejectAnswers')"
+          :label="$t('content.needsRevision')"
           :loading="content.loading"
-          @click="openReject"
+          @click="openNeedsRevision"
         />
         <q-btn
           color="grey"
           outline
-          :label="$t('content.cancelAnswersPending')"
+          :label="$t('content.cancelPending')"
           :loading="content.loading"
-          @click="onCancelAnswers"
+          @click="onCancel"
         />
-        <div v-if="!canApproveAnswers" class="text-caption text-muted">
-          {{ $t('content.approveAnswersNeedLiveTasks') }}
+        <div v-if="!canApprove" class="text-caption text-muted">
+          {{ $t('content.approveNeedTaskSets') }}
         </div>
       </div>
 
-      <template v-if="showAnswersThread">
-        <div class="text-h6 q-mb-sm">{{ $t('content.threadAnswers') }}</div>
-        <q-list bordered separator class="rounded-borders q-mb-lg">
-          <q-item v-for="msg in preview.messages" :key="msg.id">
-            <q-item-section>
-              <q-item-label>
-                {{
-                  msg.authorKind === 'staff' ? $t('content.authorStaff') : $t('content.authorUser')
-                }}
-              </q-item-label>
-              <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
-              <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
-            </q-item-section>
-          </q-item>
-          <q-item v-if="!preview.messages.length">
-            <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
-          </q-item>
-        </q-list>
+      <div class="text-h6 q-mb-sm">{{ $t('content.moderationThread') }}</div>
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item v-for="msg in preview.messages" :key="msg.id">
+          <q-item-section>
+            <q-item-label>
+              {{
+                msg.authorKind === 'staff' ? $t('content.authorStaff') : $t('content.authorUser')
+              }}
+            </q-item-label>
+            <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
+            <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!preview.messages.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
+        </q-item>
+      </q-list>
 
-        <q-form
-          v-if="preview.request.status === 'pending' || preview.request.status === 'rejected'"
-          ref="replyFormRef"
-          class="q-gutter-md"
-          @submit.prevent="onStaffReply"
-        >
-          <q-input
-            v-model="replyBody"
-            type="textarea"
-            outlined
-            dense
-            autogrow
-            lazy-rules
-            :label="$t('content.reply')"
-            :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
-          />
-          <q-btn
-            type="submit"
-            color="primary"
-            :label="$t('content.sendReply')"
-            :loading="content.loading"
-          />
-        </q-form>
-      </template>
+      <q-form v-if="isOpen" ref="replyFormRef" class="q-gutter-md" @submit.prevent="onStaffReply">
+        <q-input
+          v-model="replyBody"
+          type="textarea"
+          outlined
+          dense
+          autogrow
+          lazy-rules
+          :label="$t('content.reply')"
+          :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
+        />
+        <q-btn
+          type="submit"
+          color="primary"
+          :label="$t('content.sendReply')"
+          :loading="content.loading"
+        />
+      </q-form>
     </template>
 
-    <q-dialog v-model="rejectOpen">
+    <q-dialog v-model="needsRevisionOpen">
       <q-card style="min-width: 320px">
         <q-card-section>
-          <div class="text-h6">{{ $t('content.rejectTitle') }}</div>
+          <div class="text-h6">{{ $t('content.needsRevisionTitle') }}</div>
           <q-input
-            v-model="rejectComment"
+            v-model="needsRevisionComment"
             type="textarea"
             outlined
             dense
@@ -184,10 +148,10 @@
           <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
           <q-btn
             color="warning"
-            :label="$t('content.reject')"
-            :disable="!rejectComment.trim()"
+            :label="$t('content.needsRevision')"
+            :disable="!needsRevisionComment.trim()"
             :loading="content.loading"
-            @click="onReject"
+            @click="onNeedsRevision"
           />
         </q-card-actions>
       </q-card>
@@ -202,12 +166,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
-import {
-  contentErrorI18nKey,
-  useContentStore,
-  type StaffTaskSetListItem,
-  type TaskSetStatusMark,
-} from '@/stores/content';
+import { contentErrorI18nKey, useContentStore } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -221,50 +180,53 @@ const requestId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const preview = computed(() => content.staffPreview);
-const nested = computed(() => preview.value?.nested);
 
-/** SC-PACK-70/72: prefer server `tasksOnly`; fall back if older payload omits the flag. */
-const isTasksOnly = computed(() => {
-  const p = preview.value;
-  if (!p) return false;
-  if (typeof p.tasksOnly === 'boolean') return p.tasksOnly;
-  return p.answersActionsAvailable === false || p.request.type === 'tasks';
+const isPackRequest = computed(() => {
+  const type = preview.value?.request.type;
+  return type !== 'task_set' && type !== 'tasks';
 });
 
-/** SC-PACK-70/72 + SC-PACK-74: actions for open pending|rejected; hide when tasks-only. */
-const showAnswersActions = computed(
-  () =>
-    Boolean(preview.value) &&
-    (preview.value!.request.status === 'pending' || preview.value!.request.status === 'rejected') &&
-    !isTasksOnly.value &&
-    preview.value!.answersActionsAvailable !== false,
+const requestTypeLabel = computed(() =>
+  isPackRequest.value ? t('content.requestTypePack') : t('content.requestTypeTaskSet'),
 );
 
-/** Reject only from pending (server not_pending for already-rejected). */
-const canRejectAnswers = computed(() => preview.value?.request.status === 'pending');
-
-const showAnswersThread = computed(() => Boolean(preview.value) && !isTasksOnly.value);
-
-/** SC-PACK-52/44: omit fully moderated sets; no redundant «Открыть задания». */
-const actionableTaskSets = computed((): StaffTaskSetListItem[] => {
-  const all = nested.value?.taskSetList ?? [];
-  if (!nested.value?.tasksPending) {
-    return all.filter((ts) => ts.statusMark !== 'approved');
-  }
-  return all;
+const isOpen = computed(() => {
+  const status = preview.value?.request.status;
+  return status === 'pending' || status === 'needs_revision' || status === 'rejected';
 });
 
-const canApproveAnswers = computed(() => Boolean(nested.value?.hasLiveTasks));
+const canApprove = computed(() => {
+  if (typeof preview.value?.canApprove === 'boolean') return preview.value.canApprove;
+  const c = preview.value?.content;
+  if (!c) return false;
+  if (!isPackRequest.value) {
+    return c.taskSets.length >= 1 && c.taskSets.every((ts) => ts.tasks.length >= 2);
+  }
+  return c.answerCards.length >= 2 && c.taskSets.length >= 1;
+});
 
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
-const rejectOpen = ref(false);
-const rejectComment = ref('');
+const needsRevisionOpen = ref(false);
+const needsRevisionComment = ref('');
 
 const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
   return key ? t(key) : (content.error ?? '');
 });
+
+function statusLabel(status: string) {
+  if (status === 'pending') return t('content.statuses.pending');
+  if (status === 'needs_revision' || status === 'rejected') return t('content.statuses.needs_revision');
+  if (status === 'approved') return t('content.statuses.approved');
+  return status;
+}
+
+function formatDate(value: string | Date) {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('ru-RU');
+}
 
 function load() {
   if (!requestId.value) return;
@@ -282,53 +244,8 @@ onMounted(() => {
 });
 watch(requestId, load);
 
-function statusLabel(value: string) {
-  if (
-    value === 'pending' ||
-    value === 'approved' ||
-    value === 'rejected' ||
-    value === 'cancelled'
-  ) {
-    return t(`content.statuses.${value}`);
-  }
-  return value;
-}
-
-function taskSetMarkLabel(mark: TaskSetStatusMark) {
-  if (mark === 'none') return '';
-  return t(`content.taskSetStatusMarks.${mark}`);
-}
-
-function taskSetMarkColor(mark: TaskSetStatusMark) {
-  if (mark === 'pending') return 'warning';
-  if (mark === 'rejected') return 'negative';
-  if (mark === 'needs_moderation') return 'orange';
-  if (mark === 'approved') return 'positive';
-  return 'grey';
-}
-
-function taskSetAttribution(ts: StaffTaskSetListItem) {
-  const labels = ts.coauthorLabels?.filter(Boolean) ?? [];
-  if (labels.length) {
-    return labels.join(', ');
-  }
-  return t('content.authorUser');
-}
-
-function formatDate(value: string | Date) {
-  const d = typeof value === 'string' ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) {
-    return String(value);
-  }
-  return d.toLocaleString('ru-RU');
-}
-
-function openReject() {
-  rejectComment.value = '';
-  rejectOpen.value = true;
-}
-
-async function onApproveAnswers() {
+async function onApprove() {
+  if (!requestId.value || !canApprove.value) return;
   try {
     await content.approveRequest(requestId.value);
     await router.replace({ name: 'content-staff' });
@@ -337,18 +254,24 @@ async function onApproveAnswers() {
   }
 }
 
-async function onReject() {
+function openNeedsRevision() {
+  needsRevisionComment.value = '';
+  needsRevisionOpen.value = true;
+}
+
+async function onNeedsRevision() {
+  if (!requestId.value || !needsRevisionComment.value.trim()) return;
   try {
-    await content.rejectRequest(requestId.value, rejectComment.value.trim());
-    rejectOpen.value = false;
-    rejectComment.value = '';
-    await content.loadStaffPreview(requestId.value);
+    await content.needsRevisionRequest(requestId.value, needsRevisionComment.value.trim());
+    needsRevisionOpen.value = false;
+    load();
   } catch {
     /* error in store */
   }
 }
 
-async function onCancelAnswers() {
+async function onCancel() {
+  if (!requestId.value) return;
   try {
     await content.cancelRequest(requestId.value);
     await router.replace({ name: 'content-staff' });
@@ -358,6 +281,7 @@ async function onCancelAnswers() {
 }
 
 async function onStaffReply() {
+  if (!requestId.value || !replyBody.value.trim()) return;
   try {
     await content.postStaffMessage(requestId.value, replyBody.value.trim());
     replyBody.value = '';

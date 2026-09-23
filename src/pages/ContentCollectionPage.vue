@@ -43,7 +43,7 @@
         </q-item>
       </template>
       <template v-else>
-        <!-- No :to on row — Quasar router-link races with side Edit/trash (SC-PACK-65/66). -->
+        <!-- No :to on row — Quasar router-link races with side actions (SC-PACK-65/66). -->
         <q-item
           v-for="item in content.collection"
           :key="item.id"
@@ -57,14 +57,7 @@
               <q-badge v-if="item.blocked" color="negative" class="q-ml-sm">
                 {{ $t('content.blocked') }}
               </q-badge>
-              <q-badge
-                v-if="item.unpublishedByStaff && !item.hasLive"
-                color="warning"
-                class="q-ml-sm"
-              >
-                {{ $t('content.unpublishedByStaff') }}
-              </q-badge>
-              <q-badge v-else-if="!item.hasLive" color="grey" class="q-ml-sm">
+              <q-badge v-if="!item.hasLive" color="grey" class="q-ml-sm">
                 {{ $t('content.draftOnly') }}
               </q-badge>
             </q-item-label>
@@ -74,36 +67,22 @@
           </q-item-section>
           <q-item-section side>
             <div class="q-gutter-xs" @click.stop>
-              <!-- SC-PACK-25: blocked; SC-PACK-93: hide Edit for non-staff after staff-unpublish. -->
+              <!-- SC-PACK-106/107: published non-staff → add-task-set only; staff Edit. -->
               <q-btn
                 v-if="canEditPack(item)"
                 flat
                 dense
                 icon="edit"
                 :aria-label="$t('content.edit')"
-                @click.stop="onEdit(item.id)"
+                @click.stop="onEdit(item)"
               />
-              <!-- SC-PACK-92: staff unpublish from collection (next to Edit). -->
               <q-btn
-                v-if="auth.isStaff && item.hasLive && !item.blocked"
+                v-else-if="canAddTaskSet(item)"
                 flat
                 dense
-                icon="unpublished"
-                color="warning"
-                :aria-label="$t('content.unpublish')"
-                :loading="content.loading"
-                @click.stop="confirmUnpublish(item.id)"
-              />
-              <!-- SC-PACK-94: staff republish last-live into catalog. -->
-              <q-btn
-                v-if="auth.isStaff && item.unpublishedByStaff && !item.hasLive && !item.blocked"
-                flat
-                dense
-                icon="published_with_changes"
-                color="primary"
-                :aria-label="$t('content.republish')"
-                :loading="content.loading"
-                @click.stop="confirmRepublish(item.id)"
+                icon="playlist_add"
+                :aria-label="$t('content.addTaskSetNav')"
+                @click.stop="onAddTaskSet(item.id)"
               />
               <q-btn
                 flat
@@ -161,42 +140,6 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
-
-    <q-dialog v-model="unpublishConfirmOpen">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-h6">{{ $t('content.unpublish') }}</div>
-          <div class="q-mt-sm">{{ $t('content.unpublishConfirm') }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
-          <q-btn
-            color="warning"
-            :label="$t('content.unpublish')"
-            :loading="content.loading"
-            @click="doUnpublish"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-
-    <q-dialog v-model="republishConfirmOpen">
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-h6">{{ $t('content.republish') }}</div>
-          <div class="q-mt-sm">{{ $t('content.republishConfirm') }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
-          <q-btn
-            color="primary"
-            :label="$t('content.republish')"
-            :loading="content.loading"
-            @click="doRepublish"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
   </q-page>
 </template>
 
@@ -217,10 +160,6 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const removeConfirmOpen = ref(false);
 const pendingRemoveId = ref<string | null>(null);
-const unpublishConfirmOpen = ref(false);
-const pendingUnpublishId = ref<string | null>(null);
-const republishConfirmOpen = ref(false);
-const pendingRepublishId = ref<string | null>(null);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
@@ -259,14 +198,22 @@ function onCreateClick() {
   void router.push({ name: 'content-pack-new' });
 }
 
-/** SC-PACK-93: non-staff cannot Edit after staff-unpublish; staff may still Edit. */
+/** Full Edit: unpublished creator, or staff any pack (SC-PACK-106/111/112). */
 function canEditPack(item: ContentPackSummary): boolean {
   if (item.blocked) return false;
-  if (item.unpublishedByStaff && !auth.isStaff) return false;
+  if (auth.isStaff) return true;
+  if (item.hasLive) return false;
+  const uid = String(auth.user?.id ?? '');
+  return Boolean(uid) && item.createdBy === uid;
+}
+
+/** SC-PACK-107/108: verified collector on published pack. */
+function canAddTaskSet(item: ContentPackSummary): boolean {
+  if (item.blocked || !item.hasLive || auth.isStaff) return false;
+  if (auth.user?.anonymous || auth.needsEmailVerification) return false;
   return true;
 }
 
-/** Row body: live view when published, else editor (draft-only). D28 / SC-PACK-65. */
 function onRowClick(item: ContentPackSummary) {
   if (item.hasLive) {
     void router.push({ name: 'content-pack', params: { id: item.id } });
@@ -276,10 +223,14 @@ function onRowClick(item: ContentPackSummary) {
   void router.push({ name: 'content-pack-edit', params: { id: item.id } });
 }
 
-/** Side Edit always opens editor (even when hasLive). SC-PACK-66. */
-function onEdit(packId: string) {
+function onEdit(item: ContentPackSummary) {
   if (!ensureEligible()) return;
-  void router.push({ name: 'content-pack-edit', params: { id: packId } });
+  void router.push({ name: 'content-pack-edit', params: { id: item.id } });
+}
+
+function onAddTaskSet(packId: string) {
+  if (!ensureEligible()) return;
+  void router.push({ name: 'content-pack-add-task-set', params: { id: packId } });
 }
 
 function confirmRemove(packId: string) {
@@ -294,40 +245,6 @@ async function doRemove() {
     await content.removeFromCollection(packId);
     removeConfirmOpen.value = false;
     pendingRemoveId.value = null;
-  } catch {
-    /* error in store */
-  }
-}
-
-function confirmUnpublish(packId: string) {
-  pendingUnpublishId.value = packId;
-  unpublishConfirmOpen.value = true;
-}
-
-async function doUnpublish() {
-  const packId = pendingUnpublishId.value;
-  if (!packId) return;
-  try {
-    await content.unpublishPack(packId);
-    unpublishConfirmOpen.value = false;
-    pendingUnpublishId.value = null;
-  } catch {
-    /* error in store */
-  }
-}
-
-function confirmRepublish(packId: string) {
-  pendingRepublishId.value = packId;
-  republishConfirmOpen.value = true;
-}
-
-async function doRepublish() {
-  const packId = pendingRepublishId.value;
-  if (!packId) return;
-  try {
-    await content.republishPack(packId);
-    republishConfirmOpen.value = false;
-    pendingRepublishId.value = null;
   } catch {
     /* error in store */
   }

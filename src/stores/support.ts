@@ -3,7 +3,14 @@ import { ref } from 'vue';
 
 import { client } from '@/boot/colyseus';
 
-export const SUPPORT_TOPICS = ['problem', 'suggestion', 'feedback', 'question', 'other'] as const;
+export const SUPPORT_TOPICS = [
+  'problem',
+  'suggestion',
+  'feedback',
+  'question',
+  'other',
+  'change_pack',
+] as const;
 export type SupportTopic = (typeof SUPPORT_TOPICS)[number];
 
 export const SUPPORT_STATUSES = [
@@ -26,6 +33,8 @@ export interface SupportTicket {
   authorUserId: string;
   topic: string;
   status: string;
+  /** Catalog pack id when topic is `change_pack` (SC-SUP-27). */
+  packId?: string | null;
   createdAt: string | Date;
   updatedAt: string | Date;
   awaitingSince?: string | Date | null;
@@ -92,6 +101,9 @@ function mapSupportError(e: unknown): string {
   if (code.includes('invalid_topic')) {
     return 'invalid_topic';
   }
+  if (code.includes('pack_required') || code.includes('pack_not_in_catalog')) {
+    return 'pack_required';
+  }
   if (
     code.includes('staff_required') ||
     code.includes('admin_required') ||
@@ -112,6 +124,7 @@ export function supportErrorI18nKey(
   | 'support.errors.ticket_closed'
   | 'support.errors.empty_body'
   | 'support.errors.invalid_topic'
+  | 'support.errors.pack_required'
   | 'support.errors.forbidden'
   | null {
   switch (code) {
@@ -127,6 +140,8 @@ export function supportErrorI18nKey(
       return 'support.errors.empty_body';
     case 'invalid_topic':
       return 'support.errors.invalid_topic';
+    case 'pack_required':
+      return 'support.errors.pack_required';
     case 'forbidden':
       return 'support.errors.forbidden';
     default:
@@ -166,21 +181,35 @@ export const useSupportStore = defineStore('support', () => {
     }
   }
 
-  async function createTicket(topic: SupportTopic, body: string) {
+  async function createTicket(topic: SupportTopic, body: string, opts?: { packId?: string }) {
     loading.value = true;
     error.value = null;
     try {
+      // SC-SUP-28: change_pack requires catalog packId before HTTP.
+      if (topic === 'change_pack' && !opts?.packId?.trim()) {
+        error.value = 'pack_required';
+        throw new Error('pack_required');
+      }
+      const payload: { topic: SupportTopic; body: string; packId?: string } = {
+        topic,
+        body,
+      };
+      if (topic === 'change_pack' && opts?.packId) {
+        payload.packId = opts.packId;
+      }
       const { data } = await client.http.post<{
         ticket: SupportTicket;
         messages: SupportMessage[];
       }>('/api/support/tickets', {
-        body: { topic, body },
+        body: payload,
       });
       ticket.value = data.ticket;
       messages.value = data.messages ?? [];
       return data.ticket;
     } catch (e) {
-      error.value = mapSupportError(e);
+      if (error.value !== 'pack_required') {
+        error.value = mapSupportError(e);
+      }
       throw e;
     } finally {
       loading.value = false;

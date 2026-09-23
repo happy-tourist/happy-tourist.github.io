@@ -112,6 +112,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/content/packs/:id/add-task-set',
+    name: 'content-pack-add-task-set',
+    component: () => import('@/pages/ContentPackAddTaskSetPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/content/packs/:id/tasks/:taskSetId',
     name: 'content-pack-tasks',
     component: () => import('@/pages/ContentPackTasksPage.vue'),

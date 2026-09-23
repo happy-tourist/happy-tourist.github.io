@@ -90,6 +90,12 @@ declare module 'vue-router' {
         { id: string },
         { id: string }
       >;
+      'content-pack-add-task-set': RouteRecordInfo<
+        'content-pack-add-task-set',
+        '/content/packs/:id/add-task-set',
+        { id: string },
+        { id: string }
+      >;
       'content-pack-tasks': RouteRecordInfo<
         'content-pack-tasks',
         '/content/packs/:id/tasks/:taskSetId',

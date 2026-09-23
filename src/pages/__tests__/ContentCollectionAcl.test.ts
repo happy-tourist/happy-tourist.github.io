@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContentCollectionPage from '@/pages/ContentCollectionPage.vue';
 import type { ContentPackSummary } from '@/stores/content';
 
-const { contentState, authState, listCollection, unpublishPack, republishPack } = vi.hoisted(() => {
+const { contentState, authState, listCollection, routerPush } = vi.hoisted(() => {
   const contentState = {
     error: null as string | null,
     loading: false,
@@ -13,14 +13,13 @@ const { contentState, authState, listCollection, unpublishPack, republishPack } 
   const authState = {
     user: { id: 'u1', anonymous: false } as { id: string; anonymous: boolean } | null,
     needsEmailVerification: false,
-    isStaff: true,
+    isStaff: false,
   };
   return {
     contentState,
     authState,
     listCollection: vi.fn().mockResolvedValue(undefined),
-    unpublishPack: vi.fn().mockResolvedValue({ ok: true }),
-    republishPack: vi.fn().mockResolvedValue({ ok: true }),
+    routerPush: vi.fn(),
   };
 });
 
@@ -29,7 +28,7 @@ vi.mock('vue-router', async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+    useRouter: () => ({ push: routerPush, replace: vi.fn() }),
     useRoute: () => ({ params: {}, query: {}, path: '/content/collection' }),
   };
 });
@@ -46,8 +45,6 @@ vi.mock('@/stores/content', async (importOriginal) => {
     useContentStore: vi.fn(() => ({
       ...contentState,
       listCollection,
-      unpublishPack,
-      republishPack,
       removeFromCollection: vi.fn(),
     })),
   };
@@ -62,14 +59,12 @@ const livePack: ContentPackSummary = {
   createdBy: 'u1',
 };
 
-const staffUnpublished: ContentPackSummary = {
+const draftPack: ContentPackSummary = {
   id: 'p2',
-  title: 'Unpublished',
+  title: 'Draft',
   description: '',
   blocked: false,
   hasLive: false,
-  unpublishedByStaff: true,
-  hasLastLive: true,
   createdBy: 'u1',
 };
 
@@ -91,38 +86,23 @@ const stubs = {
   'q-card-actions': { template: '<div><slot /></div>' },
 };
 
-describe('collection staff unpublish/republish (SC-PACK-92…94)', () => {
+describe('collection ACL (SC-PACK-106/107)', () => {
   beforeEach(() => {
     contentState.error = null;
     contentState.loading = false;
     contentState.collection = [structuredClone(livePack)];
     authState.user = { id: 'u1', anonymous: false };
     authState.needsEmailVerification = false;
-    authState.isStaff = true;
+    authState.isStaff = false;
     listCollection.mockClear();
-    unpublishPack.mockClear();
-    republishPack.mockClear();
+    routerPush.mockClear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-92: staff sees unpublish next to Edit on live pack', async () => {
-    const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
-    await flushPromises();
-
-    expect(
-      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.edit'),
-    ).toBe(true);
-    expect(
-      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.unpublish'),
-    ).toBe(true);
-  });
-
-  it('SC-PACK-93: non-staff hides Edit after staff-unpublish; remove stays', async () => {
-    authState.isStaff = false;
-    contentState.collection = [structuredClone(staffUnpublished)];
+  it('SC-PACK-106: published non-staff sees add-task-set, not Edit', async () => {
     const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
     await flushPromises();
 
@@ -130,46 +110,34 @@ describe('collection staff unpublish/republish (SC-PACK-92…94)', () => {
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.edit'),
     ).toBe(false);
     expect(
+      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.addTaskSetNav'),
+    ).toBe(true);
+    expect(
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.unpublish'),
     ).toBe(false);
-    expect(
-      wrapper
-        .findAll('button')
-        .some((b) => b.attributes('aria-label') === 'content.removeFromCollection'),
-    ).toBe(true);
   });
 
-  it('SC-PACK-94: staff sees republish when unpublishedByStaff', async () => {
-    contentState.collection = [structuredClone(staffUnpublished)];
+  it('SC-PACK-112: staff sees Edit on published pack', async () => {
+    authState.isStaff = true;
     const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
     await flushPromises();
 
-    expect(
-      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.republish'),
-    ).toBe(true);
     expect(
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.edit'),
     ).toBe(true);
-
-    const republishBtn = wrapper
-      .findAll('button')
-      .find((b) => b.attributes('aria-label') === 'content.republish');
-    await republishBtn!.trigger('click');
-    await flushPromises();
-    const confirm = wrapper
-      .findAll('button')
-      .filter((b) => b.text().includes('content.republish'))
-      .at(-1);
-    await confirm!.trigger('click');
-    await flushPromises();
-    expect(republishPack).toHaveBeenCalledWith('p2');
+    expect(
+      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.addTaskSetNav'),
+    ).toBe(false);
   });
 
-  it('SC-PACK-93: staff-unpublished row shows unpublished badge, not draftOnly', async () => {
-    contentState.collection = [structuredClone(staffUnpublished)];
+  it('unpublished creator sees Edit', async () => {
+    contentState.collection = [structuredClone(draftPack)];
     const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
     await flushPromises();
-    expect(wrapper.text()).toContain('content.unpublishedByStaff');
-    expect(wrapper.text()).not.toContain('content.draftOnly');
+
+    expect(
+      wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.edit'),
+    ).toBe(true);
+    expect(wrapper.text()).toContain('content.draftOnly');
   });
 });
