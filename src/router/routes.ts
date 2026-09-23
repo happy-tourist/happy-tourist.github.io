@@ -94,6 +94,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresStaff: true },
   },
   {
+    path: '/content/staff/requests/:id/tasks',
+    name: 'content-staff-request-tasks',
+    component: () => import('@/pages/ContentStaffTasksPage.vue'),
+    meta: { requiresAuth: true, requiresStaff: true },
+  },
+  {
     path: '/content/packs/:id/edit',
     name: 'content-pack-edit',
     component: () => import('@/pages/ContentPackEditorPage.vue'),

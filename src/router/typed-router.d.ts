@@ -78,6 +78,12 @@ declare module 'vue-router' {
         { id: string },
         { id: string }
       >;
+      'content-staff-request-tasks': RouteRecordInfo<
+        'content-staff-request-tasks',
+        '/content/staff/requests/:id/tasks',
+        { id: string },
+        { id: string }
+      >;
       'content-pack-edit': RouteRecordInfo<
         'content-pack-edit',
         '/content/packs/:id/edit',

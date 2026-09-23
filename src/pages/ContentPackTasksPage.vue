@@ -4,8 +4,8 @@
       <div>
         <div class="text-h5">{{ $t('content.tasksTitle') }}</div>
         <div class="text-subtitle2 text-muted">
-          <template v-if="content.pendingTasksRequestId && content.isTasksPendingAuthor">
-            {{ $t('content.statusPendingTasks') }}
+          <template v-if="tasksStatusLabel">
+            {{ tasksStatusLabel }}
           </template>
           <template v-else-if="locked">
             {{ tasksGateHint }}
@@ -21,16 +21,6 @@
           :label="$t('content.backToAnswers')"
           :to="{ name: 'content-pack-edit', params: { id: packId } }"
         />
-        <q-btn
-          v-if="content.pendingTasksRequestId"
-          flat
-          :label="$t('content.moderationThread')"
-          :to="{
-            name: 'content-pack-moderation',
-            params: { id: packId },
-            query: { type: 'tasks' },
-          }"
-        />
       </div>
     </div>
 
@@ -40,10 +30,6 @@
         <q-btn flat dense label="OK" @click="content.error = null" />
       </template>
     </q-banner>
-
-    <div v-if="content.saving" class="text-caption text-muted q-mb-sm">
-      {{ $t('content.autosaving') }}
-    </div>
 
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
@@ -113,8 +99,13 @@
                 type="submit"
                 color="primary"
                 :label="editingTaskId ? $t('content.saveTask') : $t('content.addTask')"
-                :disable="readOnly || !taskForm.question.trim()"
-              />
+                :loading="content.saving"
+                :disable="readOnly || !canSaveQuestion"
+              >
+                <q-tooltip v-if="!canSaveQuestion && taskForm.question.trim()">
+                  {{ $t('content.questionNeedsSlot') }}
+                </q-tooltip>
+              </q-btn>
               <q-btn
                 v-if="editingTaskId"
                 flat
@@ -122,6 +113,9 @@
                 :disable="readOnly"
                 @click="resetTaskForm"
               />
+            </div>
+            <div v-if="taskForm.question.trim() && !hasFilledSlot" class="text-caption text-muted">
+              {{ $t('content.questionNeedsSlot') }}
             </div>
           </q-form>
         </q-card-section>
@@ -176,8 +170,46 @@
         />
       </div>
       <div v-if="!canSubmitTasks" class="text-caption text-muted q-mt-sm">
-        {{ $t('content.submitTasksHint') }}
+        {{ submitTasksHint }}
       </div>
+
+      <div class="text-h6 q-mt-xl q-mb-sm">{{ $t('content.threadTasks') }}</div>
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item v-for="msg in tasksMessages" :key="msg.id">
+          <q-item-section>
+            <q-item-label>{{ messageAuthorLabel(msg) }}</q-item-label>
+            <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
+            <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!tasksMessages.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
+        </q-item>
+      </q-list>
+
+      <q-form
+        v-if="canReplyTasks"
+        ref="replyFormRef"
+        class="q-gutter-md"
+        @submit.prevent="onReplyTasks"
+      >
+        <q-input
+          v-model="replyBody"
+          type="textarea"
+          outlined
+          dense
+          autogrow
+          lazy-rules
+          :label="$t('content.reply')"
+          :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
+        />
+        <q-btn
+          type="submit"
+          color="primary"
+          :label="$t('content.sendReply')"
+          :loading="content.loading"
+        />
+      </q-form>
     </template>
 
     <q-dialog v-model="gateOpen" persistent>
@@ -220,9 +252,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -231,6 +264,7 @@ import {
   useContentStore,
   type ContentTask,
   type Difficulty,
+  type ModerationMessage,
   type PackContent,
   type TaskSlot,
 } from '@/stores/content';
@@ -270,6 +304,9 @@ const taskForm = reactive<{
 });
 const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
+const replyBody = ref('');
+const replyFormRef = ref<QForm | null>(null);
+const tasksMessages = ref<ModerationMessage[]>([]);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressAutosave = false;
 
@@ -317,8 +354,20 @@ const tasksGateHint = computed(() => {
   return '';
 });
 
-const canSubmitTasks = computed(() => {
-  if (!local.value || readOnly.value) return false;
+const tasksStatusLabel = computed(() => {
+  const status = content.tasksModeration.status;
+  if (status === 'pending') return t('content.statusCyclePending');
+  if (status === 'rejected') return t('content.statusCycleRejected');
+  if (status === 'approved') return t('content.statusCycleApproved');
+  return '';
+});
+
+const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answerCardId)));
+
+const canSaveQuestion = computed(() => Boolean(taskForm.question.trim()) && hasFilledSlot.value);
+
+const meetsTasksMinima = computed(() => {
+  if (!local.value) return false;
   let taskCount = 0;
   for (const ts of local.value.taskSets) {
     for (const task of ts.tasks) {
@@ -328,6 +377,38 @@ const canSubmitTasks = computed(() => {
     }
   }
   return taskCount >= 2;
+});
+
+/** SC-PACK-43/46: dirty + minima; block if foreign answers pending or foreign tasks pending. */
+const canSubmitTasks = computed(() => {
+  if (!local.value || readOnly.value) return false;
+  if (!meetsTasksMinima.value) return false;
+  if (!content.tasksDirty) return false;
+  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) return false;
+  if (content.pendingTasksRequestId && !content.isTasksPendingAuthor) return false;
+  return true;
+});
+
+const submitTasksHint = computed(() => {
+  if (content.pendingAnswersRequestId && !content.isAnswersPendingAuthor) {
+    return t('content.submitLockedOther');
+  }
+  if (content.pendingTasksRequestId && !content.isTasksPendingAuthor) {
+    return t('content.submitLockedOther');
+  }
+  if (!meetsTasksMinima.value) {
+    return t('content.submitTasksHint');
+  }
+  if (!content.tasksDirty) {
+    return t('content.submitTasksHintNotDirty');
+  }
+  return t('content.submitTasksHint');
+});
+
+const canReplyTasks = computed(() => {
+  const mod = content.tasksModeration;
+  if (!mod.isAuthor || !mod.requestId) return false;
+  return mod.status === 'pending' || mod.status === 'rejected';
 });
 
 function checkGate(): boolean {
@@ -420,8 +501,26 @@ function slotLabel(slot: TaskSlot) {
   return card?.content?.trim() || t('content.slotFilled');
 }
 
-function onAddOrUpdateTask() {
-  if (!taskSet.value || readOnly.value) return;
+function messageAuthorLabel(msg: ModerationMessage) {
+  if (msg.authorKind === 'staff') {
+    return t('content.authorStaff');
+  }
+  if (msg.authorUserId === String(auth.user?.id ?? '')) {
+    return t('content.authorYou');
+  }
+  return t('content.authorUser');
+}
+
+function formatDate(value: string | Date) {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) {
+    return String(value);
+  }
+  return d.toLocaleString('ru-RU');
+}
+
+async function onAddOrUpdateTask() {
+  if (!taskSet.value || readOnly.value || !canSaveQuestion.value) return;
   const question = taskForm.question.trim();
   if (!question) return;
   const slots = JSON.parse(JSON.stringify(taskForm.slots)) as TaskSlot[];
@@ -445,7 +544,7 @@ function onAddOrUpdateTask() {
     });
   }
   resetTaskForm();
-  scheduleAutosave();
+  await flushAutosave();
 }
 
 function confirmDeleteTask(taskId: string) {
@@ -467,6 +566,24 @@ function doDeleteTask() {
   deleteConfirmOpen.value = false;
 }
 
+async function loadTasksThread() {
+  const mod = content.tasksModeration;
+  if (!mod.requestId || !mod.isAuthor || !packId.value) {
+    tasksMessages.value = [];
+    return;
+  }
+  if (mod.status !== 'pending' && mod.status !== 'rejected') {
+    tasksMessages.value = [];
+    return;
+  }
+  try {
+    const data = await content.loadModeration(packId.value, 'tasks');
+    tasksMessages.value = data.messages ?? [];
+  } catch {
+    tasksMessages.value = [];
+  }
+}
+
 async function load() {
   if (!packId.value || !taskSetId.value) return;
   if (!checkGate()) return;
@@ -485,7 +602,9 @@ async function load() {
     const found = local.value.taskSets.some((ts) => ts.id === taskSetId.value);
     if (!found) {
       await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+      return;
     }
+    await loadTasksThread();
   } catch {
     /* error in store */
   }
@@ -507,6 +626,19 @@ async function onSubmitTasks() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
     suppressAutosave = false;
+    await loadTasksThread();
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onReplyTasks() {
+  try {
+    await content.postModerationMessage(packId.value, replyBody.value.trim(), 'tasks');
+    tasksMessages.value = [...content.moderationMessages];
+    replyBody.value = '';
+    await nextTick();
+    replyFormRef.value?.resetValidation();
   } catch {
     /* error in store */
   }

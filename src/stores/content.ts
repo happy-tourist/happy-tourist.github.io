@@ -87,6 +87,31 @@ export interface StaffPendingItem {
   updatedAt: string | Date;
 }
 
+export type ModerationCycleStatus = 'none' | 'pending' | 'rejected' | 'approved';
+
+export type TaskSetStatusMark = 'none' | 'pending' | 'rejected' | 'needs_moderation' | 'approved';
+
+export interface TypeModerationState {
+  status: ModerationCycleStatus;
+  requestId: string | null;
+  changeAuthorId: string | null;
+  isAuthor: boolean;
+}
+
+export interface TaskSetMark {
+  id: string;
+  needsModeration: boolean;
+}
+
+export interface StaffTaskSetListItem {
+  id: string;
+  authorUserId: string;
+  coauthorLabels: string[];
+  taskCount: number;
+  needsModeration: boolean;
+  statusMark: TaskSetStatusMark;
+}
+
 export interface StaffNestedTasks {
   tasksPending: {
     requestId: string;
@@ -94,6 +119,7 @@ export interface StaffNestedTasks {
     status: string;
     type: string;
   } | null;
+  taskSetList?: StaffTaskSetListItem[];
   tasksContent: {
     taskSets: TaskSet[];
     title: string;
@@ -191,6 +217,20 @@ export const useContentStore = defineStore('content', () => {
   const liveContent = ref<PackContent | null>(null);
   const draft = ref<PackContent | null>(null);
   const answersDirty = ref(false);
+  const tasksDirty = ref(false);
+  const taskSetMarks = ref<TaskSetMark[]>([]);
+  const answersModeration = ref<TypeModerationState>({
+    status: 'none',
+    requestId: null,
+    changeAuthorId: null,
+    isAuthor: false,
+  });
+  const tasksModeration = ref<TypeModerationState>({
+    status: 'none',
+    requestId: null,
+    changeAuthorId: null,
+    isAuthor: false,
+  });
   const pendingAnswersRequestId = ref<string | null>(null);
   const pendingTasksRequestId = ref<string | null>(null);
   const isAnswersPendingAuthor = ref(false);
@@ -210,8 +250,39 @@ export const useContentStore = defineStore('content', () => {
     error.value = null;
   }
 
+  function emptyModeration(): TypeModerationState {
+    return {
+      status: 'none',
+      requestId: null,
+      changeAuthorId: null,
+      isAuthor: false,
+    };
+  }
+
+  function normalizeModeration(raw: unknown): TypeModerationState {
+    if (!raw || typeof raw !== 'object') return emptyModeration();
+    const m = raw as Partial<TypeModerationState>;
+    const status =
+      m.status === 'pending' ||
+      m.status === 'rejected' ||
+      m.status === 'approved' ||
+      m.status === 'none'
+        ? m.status
+        : 'none';
+    return {
+      status,
+      requestId: typeof m.requestId === 'string' ? m.requestId : null,
+      changeAuthorId: typeof m.changeAuthorId === 'string' ? m.changeAuthorId : null,
+      isAuthor: Boolean(m.isAuthor),
+    };
+  }
+
   function applyDraftFlags(data: {
     answersDirty?: boolean;
+    tasksDirty?: boolean;
+    taskSetMarks?: TaskSetMark[];
+    answersModeration?: TypeModerationState;
+    tasksModeration?: TypeModerationState;
     pendingAnswersRequestId?: string | null;
     pendingTasksRequestId?: string | null;
     isAnswersPendingAuthor?: boolean;
@@ -220,6 +291,21 @@ export const useContentStore = defineStore('content', () => {
     isPendingAuthor?: boolean;
   }) {
     answersDirty.value = Boolean(data.answersDirty);
+    if (typeof data.tasksDirty === 'boolean') {
+      tasksDirty.value = data.tasksDirty;
+    }
+    if (Array.isArray(data.taskSetMarks)) {
+      taskSetMarks.value = data.taskSetMarks.map((m: TaskSetMark) => ({
+        id: m.id,
+        needsModeration: Boolean(m.needsModeration),
+      }));
+    }
+    if (data.answersModeration !== undefined) {
+      answersModeration.value = normalizeModeration(data.answersModeration);
+    }
+    if (data.tasksModeration !== undefined) {
+      tasksModeration.value = normalizeModeration(data.tasksModeration);
+    }
     pendingAnswersRequestId.value = data.pendingAnswersRequestId ?? null;
     pendingTasksRequestId.value = data.pendingTasksRequestId ?? null;
     isAnswersPendingAuthor.value = Boolean(data.isAnswersPendingAuthor);
@@ -234,6 +320,10 @@ export const useContentStore = defineStore('content', () => {
 
   function clearDraftFlags() {
     answersDirty.value = false;
+    tasksDirty.value = false;
+    taskSetMarks.value = [];
+    answersModeration.value = emptyModeration();
+    tasksModeration.value = emptyModeration();
     pendingAnswersRequestId.value = null;
     pendingTasksRequestId.value = null;
     isAnswersPendingAuthor.value = false;
@@ -359,6 +449,10 @@ export const useContentStore = defineStore('content', () => {
         pack: ContentPackSummary;
         draft: PackContent;
         answersDirty?: boolean;
+        tasksDirty?: boolean;
+        taskSetMarks?: TaskSetMark[];
+        answersModeration?: TypeModerationState;
+        tasksModeration?: TypeModerationState;
         pendingAnswersRequestId?: string | null;
         pendingTasksRequestId?: string | null;
         isAnswersPendingAuthor?: boolean;
@@ -391,6 +485,8 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.post<{
         draft: PackContent;
         answersDirty?: boolean;
+        tasksDirty?: boolean;
+        taskSetMarks?: TaskSetMark[];
       }>(`/api/content/packs/${packId}/draft`, {
         body: {
           title: body.title,
@@ -402,6 +498,15 @@ export const useContentStore = defineStore('content', () => {
       draft.value = data.draft;
       if (typeof data.answersDirty === 'boolean') {
         answersDirty.value = data.answersDirty;
+      }
+      if (typeof data.tasksDirty === 'boolean') {
+        tasksDirty.value = data.tasksDirty;
+      }
+      if (Array.isArray(data.taskSetMarks)) {
+        taskSetMarks.value = data.taskSetMarks.map((m: TaskSetMark) => ({
+          id: m.id,
+          needsModeration: Boolean(m.needsModeration),
+        }));
       }
       return data.draft;
     } catch (e) {
@@ -458,6 +563,8 @@ export const useContentStore = defineStore('content', () => {
       }>(`/api/content/packs/${packId}/submit/tasks`);
       pendingTasksRequestId.value = data.request.id;
       isTasksPendingAuthor.value = true;
+      tasksDirty.value = false;
+      taskSetMarks.value = taskSetMarks.value.map((m) => ({ ...m, needsModeration: false }));
       pendingRequestId.value = data.request.id;
       isPendingAuthor.value = true;
       return data.request;
@@ -688,6 +795,10 @@ export const useContentStore = defineStore('content', () => {
     liveContent,
     draft,
     answersDirty,
+    tasksDirty,
+    taskSetMarks,
+    answersModeration,
+    tasksModeration,
     pendingAnswersRequestId,
     pendingTasksRequestId,
     isAnswersPendingAuthor,

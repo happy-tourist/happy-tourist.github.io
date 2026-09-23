@@ -51,54 +51,44 @@
         {{ $t('content.tasksMissingHint') }}
       </div>
 
-      <div v-for="(ts, si) in nestedTaskSets" :key="ts.id" class="q-mb-md">
-        <div class="text-subtitle1 q-mb-xs">{{ $t('content.taskSetLabel', { n: si + 1 }) }}</div>
-        <q-list bordered separator class="rounded-borders">
-          <q-item v-for="task in ts.tasks" :key="task.id">
-            <q-item-section>
-              <q-item-label>{{ task.question }}</q-item-label>
-              <q-item-label caption>
-                {{ $t('content.difficultyLabel') }}:
-                {{ $t(`content.difficulty.${task.difficulty}`) }}
-              </q-item-label>
-              <q-item-label caption>
-                {{
-                  task.slots
-                    .map((s) => cardContent(s.answerCardId) || $t('content.slotEmpty'))
-                    .join(' · ')
-                }}
-              </q-item-label>
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </div>
-      <div v-if="!nestedTaskSets.length" class="text-muted q-mb-lg">
-        {{ $t('content.emptyTasks') }}
-      </div>
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item
+          v-for="(ts, si) in taskSetList"
+          :key="ts.id"
+          clickable
+          v-ripple
+          :to="{ name: 'content-staff-request-tasks', params: { id: requestId } }"
+        >
+          <q-item-section>
+            <q-item-label>
+              {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+              <q-badge
+                v-if="taskSetMarkLabel(ts.statusMark)"
+                :color="taskSetMarkColor(ts.statusMark)"
+                class="q-ml-sm"
+                :label="taskSetMarkLabel(ts.statusMark)"
+              />
+            </q-item-label>
+            <q-item-label caption>
+              {{ taskSetAttribution(ts) }} ·
+              {{ $t('content.tasksCount', { n: ts.taskCount }) }}
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <q-icon name="chevron_right" />
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!taskSetList.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyTaskSets') }}</q-item-section>
+        </q-item>
+      </q-list>
 
-      <div
-        v-if="nested?.tasksPending && nested.tasksPending.status === 'pending'"
-        class="q-gutter-sm q-mb-lg"
-      >
-        <div class="text-subtitle2">{{ $t('content.approveTasksFirst') }}</div>
+      <div class="q-mb-lg">
         <q-btn
-          color="positive"
-          :label="$t('content.approveTasks')"
-          :loading="content.loading"
-          @click="onApproveTasks"
-        />
-        <q-btn
-          color="warning"
-          :label="$t('content.rejectTasks')"
-          :loading="content.loading"
-          @click="openReject('tasks')"
-        />
-        <q-btn
-          color="grey"
-          outline
-          :label="$t('content.cancelTasksPending')"
-          :loading="content.loading"
-          @click="onCancelTasks"
+          flat
+          color="primary"
+          :label="$t('content.openStaffTasks')"
+          :to="{ name: 'content-staff-request-tasks', params: { id: requestId } }"
         />
       </div>
 
@@ -114,7 +104,7 @@
           color="warning"
           :label="$t('content.rejectAnswers')"
           :loading="content.loading"
-          @click="openReject('answers')"
+          @click="openReject"
         />
         <q-btn
           color="grey"
@@ -226,7 +216,12 @@ import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
+import {
+  contentErrorI18nKey,
+  useContentStore,
+  type StaffTaskSetListItem,
+  type TaskSetStatusMark,
+} from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -241,14 +236,13 @@ const requestId = computed(() => {
 });
 const preview = computed(() => content.staffPreview);
 const nested = computed(() => preview.value?.nested);
-const nestedTaskSets = computed((): TaskSet[] => nested.value?.tasksContent?.taskSets ?? []);
+const taskSetList = computed((): StaffTaskSetListItem[] => nested.value?.taskSetList ?? []);
 const canApproveAnswers = computed(() => Boolean(nested.value?.hasLiveTasks));
 
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const rejectOpen = ref(false);
 const rejectComment = ref('');
-const rejectTarget = ref<'answers' | 'tasks'>('answers');
 
 const errorLabel = computed(() => {
   const key = contentErrorI18nKey(content.error);
@@ -283,6 +277,27 @@ function statusLabel(value: string) {
   return value;
 }
 
+function taskSetMarkLabel(mark: TaskSetStatusMark) {
+  if (mark === 'none') return '';
+  return t(`content.taskSetStatusMarks.${mark}`);
+}
+
+function taskSetMarkColor(mark: TaskSetStatusMark) {
+  if (mark === 'pending') return 'warning';
+  if (mark === 'rejected') return 'negative';
+  if (mark === 'needs_moderation') return 'orange';
+  if (mark === 'approved') return 'positive';
+  return 'grey';
+}
+
+function taskSetAttribution(ts: StaffTaskSetListItem) {
+  const labels = ts.coauthorLabels?.filter(Boolean) ?? [];
+  if (labels.length) {
+    return labels.join(', ');
+  }
+  return t('content.authorUser');
+}
+
 function formatDate(value: string | Date) {
   const d = typeof value === 'string' ? new Date(value) : value;
   if (Number.isNaN(d.getTime())) {
@@ -291,29 +306,9 @@ function formatDate(value: string | Date) {
   return d.toLocaleString('ru-RU');
 }
 
-function cardContent(answerCardId: string | null) {
-  if (!answerCardId || !preview.value) return '';
-  // Prefer answers cards from pending answers content; fall back to empty.
-  const fromAnswers = preview.value.content.answerCards.find((c) => c.id === answerCardId);
-  if (fromAnswers) return fromAnswers.content;
-  return '';
-}
-
-function openReject(target: 'answers' | 'tasks') {
-  rejectTarget.value = target;
+function openReject() {
   rejectComment.value = '';
   rejectOpen.value = true;
-}
-
-async function onApproveTasks() {
-  const tasksId = nested.value?.tasksPending?.requestId;
-  if (!tasksId) return;
-  try {
-    await content.approveRequest(tasksId);
-    await content.loadStaffPreview(requestId.value);
-  } catch {
-    /* error in store */
-  }
 }
 
 async function onApproveAnswers() {
@@ -326,24 +321,10 @@ async function onApproveAnswers() {
 }
 
 async function onReject() {
-  const id =
-    rejectTarget.value === 'tasks' ? nested.value?.tasksPending?.requestId : requestId.value;
-  if (!id) return;
   try {
-    await content.rejectRequest(id, rejectComment.value.trim());
+    await content.rejectRequest(requestId.value, rejectComment.value.trim());
     rejectOpen.value = false;
     rejectComment.value = '';
-    await content.loadStaffPreview(requestId.value);
-  } catch {
-    /* error in store */
-  }
-}
-
-async function onCancelTasks() {
-  const tasksId = nested.value?.tasksPending?.requestId;
-  if (!tasksId) return;
-  try {
-    await content.cancelRequest(tasksId);
     await content.loadStaffPreview(requestId.value);
   } catch {
     /* error in store */
