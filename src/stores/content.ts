@@ -13,6 +13,8 @@ export interface ContentPackSummary {
   description: string;
   blocked: boolean;
   hasLive: boolean;
+  /** Soft-unpublished when hasLive && !inCatalog (SC-PACK-120…). */
+  inCatalog?: boolean;
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -192,6 +194,7 @@ const KNOWN_ERROR_CODES = [
   'empty_comment',
   'invalid_difficulty',
   'pack_not_public',
+  'pack_unpublished',
   'pack_not_found',
   'request_not_found',
   'not_pending',
@@ -403,6 +406,56 @@ export const useContentStore = defineStore('content', () => {
         pack.value = { ...pack.value, inCollection: false };
       }
       return { ok: true, packId };
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff soft-hide from public catalog (SC-PACK-120). Keeps live payload. */
+  async function unpublishPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        inCatalog: boolean;
+      }>(`/api/content/packs/${packId}/unpublish`, { body: {} });
+      const patch = { inCatalog: false as const };
+      catalog.value = catalog.value.map((p) => (p.id === packId ? { ...p, ...patch } : p));
+      collection.value = collection.value.map((p) => (p.id === packId ? { ...p, ...patch } : p));
+      if (pack.value?.id === packId) {
+        pack.value = { ...pack.value, ...patch };
+      }
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff restore catalog visibility without moderation (SC-PACK-123). */
+  async function republishPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        inCatalog: boolean;
+      }>(`/api/content/packs/${packId}/republish`, { body: {} });
+      const patch = { inCatalog: true as const };
+      catalog.value = catalog.value.map((p) => (p.id === packId ? { ...p, ...patch } : p));
+      collection.value = collection.value.map((p) => (p.id === packId ? { ...p, ...patch } : p));
+      if (pack.value?.id === packId) {
+        pack.value = { ...pack.value, ...patch };
+      }
+      return data;
     } catch (e) {
       error.value = mapContentError(e);
       throw e;
@@ -1055,6 +1108,8 @@ export const useContentStore = defineStore('content', () => {
     listCollection,
     addToCollection,
     removeFromCollection,
+    unpublishPack,
+    republishPack,
     loadLivePack,
     createPack,
     loadDraft,

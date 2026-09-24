@@ -49,8 +49,9 @@
         <q-item
           v-for="item in content.collection"
           :key="item.id"
-          clickable
-          v-ripple
+          :clickable="canNavigateRow(item)"
+          :class="{ 'text-grey-6': isSoftUnpublished(item) && !auth.isStaff }"
+          v-ripple="canNavigateRow(item)"
           @click="onRowClick(item)"
         >
           <q-item-section>
@@ -59,7 +60,10 @@
               <q-badge v-if="item.blocked" color="negative" class="q-ml-sm">
                 {{ $t('content.blocked') }}
               </q-badge>
-              <q-badge v-if="!item.hasLive" color="grey" class="q-ml-sm">
+              <q-badge v-else-if="isSoftUnpublished(item)" color="grey" class="q-ml-sm">
+                {{ $t('content.unpublishedByStaff') }}
+              </q-badge>
+              <q-badge v-else-if="!item.hasLive" color="grey" class="q-ml-sm">
                 {{ $t('content.draftOnly') }}
               </q-badge>
             </q-item-label>
@@ -192,7 +196,17 @@ function onCreateClick() {
   void router.push({ name: 'content-pack-new' });
 }
 
-/** Full Edit: unpublished creator, or staff any pack (SC-PACK-106/111/112). */
+/** Soft-unpublished: has live but not in public catalog (SC-PACK-121). */
+function isSoftUnpublished(item: ContentPackSummary): boolean {
+  return Boolean(item.hasLive) && item.inCatalog === false;
+}
+
+function canNavigateRow(item: ContentPackSummary): boolean {
+  if (isSoftUnpublished(item) && !auth.isStaff) return false;
+  return true;
+}
+
+/** Full Edit: unpublished creator, or staff any pack (SC-PACK-106/111/112/124). */
 function canEditPack(item: ContentPackSummary): boolean {
   if (item.blocked) return false;
   if (auth.isStaff) return true;
@@ -202,6 +216,8 @@ function canEditPack(item: ContentPackSummary): boolean {
 }
 
 function onRowClick(item: ContentPackSummary) {
+  // SC-PACK-121/125: non-staff soft-unpublished — no navigate
+  if (!canNavigateRow(item)) return;
   if (item.hasLive) {
     void router.push({ name: 'content-pack', params: { id: item.id } });
     return;

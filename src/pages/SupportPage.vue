@@ -172,14 +172,16 @@ const topicOptions = computed(() =>
   })),
 );
 
-/** Catalog options: title + description (SC-SUP-29). */
+/** Catalog options: title + description; in-catalog only (SC-SUP-29 / D5/D9). */
 const packOptions = computed(() =>
-  content.catalog.map((p) => ({
-    label: p.description ? `${p.title} — ${p.description}` : p.title,
-    value: p.id,
-    title: p.title,
-    description: p.description,
-  })),
+  content.catalog
+    .filter((p) => p.inCatalog !== false && p.hasLive)
+    .map((p) => ({
+      label: p.description ? `${p.title} — ${p.description}` : p.title,
+      value: p.id,
+      title: p.title,
+      description: p.description,
+    })),
 );
 
 const errorLabel = computed(() => {

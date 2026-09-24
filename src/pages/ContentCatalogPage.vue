@@ -58,13 +58,40 @@
               <q-badge v-if="item.blocked" color="negative" class="q-ml-sm">
                 {{ $t('content.blocked') }}
               </q-badge>
+              <q-badge
+                v-else-if="item.hasLive && item.inCatalog === false"
+                color="grey"
+                class="q-ml-sm"
+              >
+                {{ $t('content.unpublishedByStaff') }}
+              </q-badge>
             </q-item-label>
             <q-item-label v-if="item.description" caption>
               {{ item.description }}
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-icon name="chevron_right" />
+            <div class="row items-center no-wrap q-gutter-xs" @click.stop>
+              <q-btn
+                v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                :loading="content.loading"
+                @click.stop="onUnpublish(item.id)"
+              />
+              <q-btn
+                v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
+                flat
+                dense
+                color="primary"
+                :label="$t('content.republish')"
+                :loading="content.loading"
+                @click.stop="onRepublish(item.id)"
+              />
+              <q-icon name="chevron_right" />
+            </div>
           </q-item-section>
         </q-item>
       </template>
@@ -129,6 +156,22 @@ onMounted(() => {
     /* error in store */
   });
 });
+
+async function onUnpublish(packId: string) {
+  try {
+    await content.unpublishPack(packId);
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublish(packId: string) {
+  try {
+    await content.republishPack(packId);
+  } catch {
+    /* error in store */
+  }
+}
 
 function onCreateClick() {
   if (auth.user?.anonymous) {

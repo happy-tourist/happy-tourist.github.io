@@ -7,6 +7,13 @@
           <q-badge v-if="content.pack?.blocked" color="negative" class="q-ml-sm">
             {{ $t('content.blocked') }}
           </q-badge>
+          <q-badge
+            v-else-if="content.pack?.hasLive && content.pack?.inCatalog === false"
+            color="grey"
+            class="q-ml-sm"
+          >
+            {{ $t('content.unpublishedByStaff') }}
+          </q-badge>
         </div>
         <div v-if="content.pack?.description" class="text-subtitle2 text-muted">
           {{ content.pack.description }}
@@ -24,6 +31,23 @@
           @click="onStaffEdit"
         />
         <q-btn
+          v-if="showUnpublish"
+          flat
+          color="warning"
+          :label="$t('content.unpublish')"
+          :loading="content.loading"
+          @click="onUnpublish"
+        />
+        <q-btn
+          v-if="showRepublish"
+          flat
+          color="primary"
+          :label="$t('content.republish')"
+          :loading="content.loading"
+          @click="onRepublish"
+        />
+        <q-btn
+          v-if="showCollect"
           color="primary"
           outline
           :label="inCollection ? $t('content.inCollection') : $t('content.addToCollection')"
@@ -157,15 +181,35 @@ const packId = computed(() => {
 const live = computed(() => content.liveContent);
 const inCollection = computed(() => Boolean(content.pack?.inCollection));
 
-/** SC-PACK-112: staff Edit without collection; hide if blocked. */
+/** SC-PACK-112/124: staff Edit without collection; hide if blocked. */
 const showStaffEdit = computed(() => auth.isStaff && !content.pack?.blocked);
+
+const showUnpublish = computed(
+  () =>
+    auth.isStaff &&
+    Boolean(content.pack?.hasLive) &&
+    content.pack?.inCatalog === true &&
+    !content.pack?.blocked,
+);
+
+const showRepublish = computed(
+  () =>
+    auth.isStaff &&
+    Boolean(content.pack?.hasLive) &&
+    content.pack?.inCatalog === false &&
+    !content.pack?.blocked,
+);
+
+/** Soft-unpublished packs are not collectable from live (already hidden for non-staff). */
+const showCollect = computed(() => content.pack?.inCatalog !== false);
 
 /**
  * SC-PACK-53/106/107: non-staff never get full Edit on live;
- * verified + inCollection may add a task set.
+ * verified + inCollection may add a task set (in-catalog only).
  */
 const showAddTaskSet = computed(() => {
   if (auth.isStaff || content.pack?.blocked) return false;
+  if (content.pack?.inCatalog === false) return false;
   if (!inCollection.value) return false;
   if (auth.user?.anonymous || auth.needsEmailVerification) return false;
   return true;
@@ -226,6 +270,24 @@ async function onStaffEdit() {
     await router.push({ name: 'content-pack-edit', params: { id: packId.value } });
   } catch {
     /* error in store — edit_locked shown via banner */
+  }
+}
+
+async function onUnpublish() {
+  if (!packId.value) return;
+  try {
+    await content.unpublishPack(packId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublish() {
+  if (!packId.value) return;
+  try {
+    await content.republishPack(packId.value);
+  } catch {
+    /* error in store */
   }
 }
 
