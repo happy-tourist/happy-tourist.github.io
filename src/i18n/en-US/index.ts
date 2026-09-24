@@ -157,6 +157,10 @@ export default {
     answerCards: 'Карточки-ответы',
     taskSets: 'Наборы заданий',
     taskSetLabel: 'Набор заданий {n}',
+    /** SC-PACK-135 / D18: author on every task-set row. */
+    taskSetLabelFrom: 'Набор заданий {n} от {name}',
+    /** SC-PACK-136 / D19: generic back (not pack title). */
+    back: 'Вернуться',
     tasks: 'Задания',
     tasksCount: 'заданий: {n}',
     addCard: 'Добавить карточку',

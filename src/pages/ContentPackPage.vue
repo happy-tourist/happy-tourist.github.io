@@ -106,7 +106,12 @@
         >
           <q-item-section>
             <q-item-label>
-              {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+              {{
+                $t('content.taskSetLabelFrom', {
+                  n: si + 1,
+                  name: ts.authorDisplayName || $t('content.authorUser'),
+                })
+              }}
               <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
                 {{ $t('content.unpublishedByStaff') }}
               </q-badge>

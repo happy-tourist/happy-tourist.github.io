@@ -52,6 +52,7 @@ const {
       {
         id: 'ts1',
         authorUserId: 'u1',
+        authorDisplayName: 'Мария',
         coauthorLabels: [],
         inCatalog: true,
         tasks: [
@@ -72,6 +73,7 @@ const {
       {
         id: 'ts2',
         authorUserId: 'u1',
+        authorDisplayName: 'Мария',
         coauthorLabels: [],
         inCatalog: false,
         tasks: [
@@ -436,7 +438,7 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     // Click first task-set row (published ts1) — answer cards list has items too.
     const setRows = wrapper
       .findAll('.q-item-stub')
-      .filter((n) => n.text().includes('content.taskSetLabel'));
+      .filter((n) => n.text().includes('content.taskSetLabelFrom'));
     expect(setRows.length).toBeGreaterThanOrEqual(1);
     await setRows[0]!.trigger('click');
     await flushPromises();

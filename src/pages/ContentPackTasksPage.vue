@@ -3,7 +3,7 @@
     <div class="row items-center justify-between q-mb-md">
       <div>
         <div class="text-h5">
-          {{ $t('content.tasksTitle') }}
+          {{ taskSetHeading }}
           <q-badge v-if="taskSetSoftUnpublished" color="grey" class="q-ml-sm">
             {{ $t('content.unpublishedByStaff') }}
           </q-badge>
@@ -46,9 +46,7 @@
         <q-btn
           flat
           :label="
-            liveViewMode && !staffMode
-              ? content.pack?.title || $t('content.untitled')
-              : $t('content.backToAnswers')
+            liveViewMode && !staffMode ? $t('content.back') : $t('content.backToAnswers')
           "
           :to="backTarget"
         />
@@ -422,6 +420,18 @@ const taskSet = computed(
   () => local.value?.taskSets.find((ts) => ts.id === taskSetId.value) ?? null,
 );
 
+/** SC-PACK-135: «Набор заданий {n} от {name}» when set is known. */
+const taskSetHeading = computed(() => {
+  const sets = local.value?.taskSets ?? [];
+  const idx = sets.findIndex((ts) => ts.id === taskSetId.value);
+  if (idx < 0) return t('content.tasksTitle');
+  const ts = sets[idx]!;
+  return t('content.taskSetLabelFrom', {
+    n: idx + 1,
+    name: ts.authorDisplayName || t('content.authorUser'),
+  });
+});
+
 const locked = computed(() => Boolean(content.pack?.blocked) || !local.value?.answerCards.length);
 
 const readOnly = computed(
@@ -572,8 +582,13 @@ function slotLabel(slot: TaskSlot) {
   if (!slot.answerCardId || !local.value) {
     return t('content.slotEmpty');
   }
+  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
   const card = local.value.answerCards.find((c) => c.id === slot.answerCardId);
-  return card?.content?.trim() || t('content.slotFilled');
+  if (card) {
+    const text = card.content?.trim();
+    if (text) return text;
+  }
+  return t('content.slotFilled');
 }
 
 async function onAddOrUpdateTask() {

@@ -461,8 +461,13 @@ function fillNextFormSlot(cardId: string) {
 
 function slotLabel(slot: TaskSlot) {
   if (!slot.answerCardId) return t('content.slotEmpty');
+  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
   const card = liveCards.value.find((c) => c.id === slot.answerCardId);
-  return card?.content?.trim() || t('content.slotFilled');
+  if (card) {
+    const text = card.content?.trim();
+    if (text) return text;
+  }
+  return t('content.slotFilled');
 }
 
 function messageAuthorLabel(msg: ModerationMessage) {

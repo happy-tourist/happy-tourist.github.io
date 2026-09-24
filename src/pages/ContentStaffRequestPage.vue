@@ -48,7 +48,15 @@
       <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
       <div v-for="(ts, si) in preview.content.taskSets" :key="ts.id" class="q-mb-md">
         <div class="text-subtitle1 q-mb-xs">
-          {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+          {{
+            $t('content.taskSetLabelFrom', {
+              n: si + 1,
+              name: ts.authorDisplayName || $t('content.authorUser'),
+            })
+          }}
+          <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
+            {{ ts.coauthorLabels.join(', ') }}
+          </span>
         </div>
         <q-list bordered separator class="rounded-borders">
           <q-item v-for="task in ts.tasks" :key="task.id">
@@ -242,8 +250,13 @@ function slotLabel(slot: TaskSlot) {
   if (!slot.answerCardId || !preview.value) {
     return t('content.slotEmpty');
   }
+  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
   const card = preview.value.content.answerCards.find((c) => c.id === slot.answerCardId);
-  return card?.content?.trim() || t('content.slotFilled');
+  if (card) {
+    const text = card.content?.trim();
+    if (text) return text;
+  }
+  return t('content.slotFilled');
 }
 
 function formatDate(value: string | Date) {

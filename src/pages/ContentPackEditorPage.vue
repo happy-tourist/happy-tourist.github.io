@@ -157,13 +157,20 @@
         >
           <q-item-section>
             <q-item-label>
-              {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+              {{
+                $t('content.taskSetLabelFrom', {
+                  n: si + 1,
+                  name: ts.authorDisplayName || $t('content.authorUser'),
+                })
+              }}
               <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
                 {{ $t('content.unpublishedByStaff') }}
               </q-badge>
+              <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
+                {{ ts.coauthorLabels.join(', ') }}
+              </span>
             </q-item-label>
             <q-item-label caption>
-              {{ taskSetAttribution(ts) }} ·
               {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
             </q-item-label>
           </q-item-section>
@@ -504,13 +511,6 @@ const canReply = computed(() => {
   if (staffMode.value || !content.isPendingAuthor || !content.pendingRequestId) return false;
   return content.moderationStatus === 'pending' || content.moderationStatus === 'needs_revision';
 });
-
-function taskSetAttribution(ts: TaskSet) {
-  const labels = ts.coauthorLabels?.filter(Boolean) ?? [];
-  if (labels.length) return labels.join(', ');
-  if (ts.authorUserId && ts.authorUserId === uid.value) return t('content.authorYou');
-  return t('content.authorUser');
-}
 
 function messageAuthorLabel(msg: ModerationMessage) {
   if (msg.authorKind === 'staff') return t('content.authorStaff');

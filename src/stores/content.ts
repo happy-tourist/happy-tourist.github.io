@@ -44,6 +44,8 @@ export interface ContentTask {
 export interface TaskSet {
   id: string;
   authorUserId: string;
+  /** D18 / SC-PACK-135: displayName else email local-part. */
+  authorDisplayName?: string;
   coauthorLabels: string[];
   /** Soft-unpublished when false (SC-PACK-131/132). Default true. */
   inCatalog?: boolean;
