@@ -45,9 +45,7 @@
         </q-btn>
         <q-btn
           flat
-          :label="
-            liveViewMode && !staffMode ? $t('content.back') : $t('content.backToAnswers')
-          "
+          :label="liveViewMode && !staffMode ? $t('content.back') : $t('content.backToAnswers')"
           :to="backTarget"
         />
       </div>

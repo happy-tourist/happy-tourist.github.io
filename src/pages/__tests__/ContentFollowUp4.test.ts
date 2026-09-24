@@ -378,6 +378,41 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     expect(unpublishPack).not.toHaveBeenCalled();
   });
 
+  it('SC-PACK-139: unpublish confirm copy warns that open requests will be cancelled', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.unpublishConfirm).toMatch(/открыт.*заявк.*отмен/i);
+
+    authState.isStaff = true;
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    const unpub = wrapper.findAll('button').find((b) => b.text().includes('content.unpublish'));
+    await unpub!.trigger('click');
+    await flushPromises();
+
+    expect(unpublishPack).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('content.unpublishConfirm');
+    expect(wrapper.text()).toContain('content.unpublishConfirmTitle');
+  });
+
+  it('SC-PACK-139: dismissing unpublish confirm leaves pack and does not call API', async () => {
+    authState.isStaff = true;
+    const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
+    await flushPromises();
+
+    const unpub = wrapper.findAll('button').find((b) => b.text().includes('content.unpublish'));
+    await unpub!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('content.unpublishConfirm');
+    expect(unpublishPack).not.toHaveBeenCalled();
+
+    const dismiss = wrapper.findAll('button').find((b) => b.text().includes('content.gateDismiss'));
+    await dismiss!.trigger('click');
+    await flushPromises();
+    expect(unpublishPack).not.toHaveBeenCalled();
+    expect(contentState.pack?.inCatalog).toBe(true);
+  });
+
   it('SC-PACK-129: staff queue has no pack unpublish controls', async () => {
     authState.isStaff = true;
     contentState.staffPreview = {
