@@ -4,7 +4,10 @@
       <div>
         <div class="text-h5">{{ $t('content.addTaskSetTitle') }}</div>
         <div class="text-subtitle2 text-muted">
-          {{ content.pack?.title || $t('content.addTaskSetSubtitle') }}
+          <template v-if="statusLabel">{{ statusLabel }}</template>
+          <template v-else>
+            {{ content.pack?.title || $t('content.addTaskSetSubtitle') }}
+          </template>
         </div>
       </div>
       <div class="q-gutter-sm">
@@ -131,6 +134,21 @@
               {{ $t('content.difficultyLabel') }}:
               {{ $t(`content.difficulty.${task.difficulty}`) }}
             </q-item-label>
+            <!-- SC-PACK-127 / D11: answer slots on every question row -->
+            <div class="row q-gutter-xs q-mt-xs">
+              <q-chip
+                v-for="slot in task.slots"
+                :key="slot.id"
+                dense
+                :outline="!slot.answerCardId"
+                :color="slot.answerCardId ? 'primary' : 'grey'"
+              >
+                {{ slotLabel(slot) }}
+              </q-chip>
+              <span v-if="!task.slots.length" class="text-caption text-muted">
+                {{ $t('content.slotEmpty') }}
+              </span>
+            </div>
           </q-item-section>
           <q-item-section side>
             <div class="q-gutter-xs">
@@ -179,6 +197,42 @@
           @click="onCancel"
         />
       </div>
+
+      <!-- SC-PACK-128 / D12: thread only while open task_set request (pending | needs_revision) -->
+      <template v-if="showModerationThread">
+        <div class="text-h6 q-mt-xl q-mb-sm">{{ $t('content.moderationThread') }}</div>
+        <q-list bordered separator class="rounded-borders q-mb-lg">
+          <q-item v-for="msg in threadMessages" :key="msg.id">
+            <q-item-section>
+              <q-item-label>{{ messageAuthorLabel(msg) }}</q-item-label>
+              <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
+              <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
+            </q-item-section>
+          </q-item>
+          <q-item v-if="!threadMessages.length">
+            <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
+          </q-item>
+        </q-list>
+
+        <q-form v-if="showModerationThread" ref="replyFormRef" class="q-gutter-md" @submit.prevent="onReply">
+          <q-input
+            v-model="replyBody"
+            type="textarea"
+            outlined
+            dense
+            autogrow
+            lazy-rules
+            :label="$t('content.reply')"
+            :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
+          />
+          <q-btn
+            type="submit"
+            color="primary"
+            :label="$t('content.sendReply')"
+            :loading="content.loading"
+          />
+        </q-form>
+      </template>
     </template>
 
     <q-dialog v-model="gateOpen" persistent>
@@ -208,9 +262,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -219,6 +274,7 @@ import {
   useContentStore,
   type ContentTask,
   type Difficulty,
+  type ModerationMessage,
   type TaskSet,
   type TaskSlot,
 } from '@/stores/content';
@@ -241,6 +297,9 @@ const liveCards = ref<{ id: string; content: string; description: string }[]>([]
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingTaskId = ref<string | null>(null);
+const replyBody = ref('');
+const replyFormRef = ref<QForm | null>(null);
+const threadMessages = ref<ModerationMessage[]>([]);
 const taskForm = reactive<{
   question: string;
   difficulty: Difficulty;
@@ -280,6 +339,15 @@ const readOnly = computed(
     state.value?.moderationStatus === 'pending',
 );
 
+const statusLabel = computed(() => {
+  const status = state.value?.moderationStatus;
+  if (status === 'pending') return t('content.taskSetStatusMarks.pending');
+  if (status === 'needs_revision' || status === 'rejected') {
+    return t('content.taskSetStatusMarks.needs_revision');
+  }
+  return '';
+});
+
 const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answerCardId)));
 const canSaveQuestion = computed(() => Boolean(taskForm.question.trim()) && hasFilledSlot.value);
 
@@ -306,6 +374,13 @@ const canCancel = computed(
     (state.value?.moderationStatus === 'pending' ||
       state.value?.moderationStatus === 'needs_revision'),
 );
+
+/** SC-PACK-128: thread + reply only for open own request (not fresh create / foreign). */
+const showModerationThread = computed(() => {
+  if (state.value?.foreignPending || !state.value?.pendingRequestId) return false;
+  const status = state.value?.moderationStatus;
+  return status === 'pending' || status === 'needs_revision';
+});
 
 const submitHint = computed(() => {
   if (state.value?.foreignPending) return t('content.addTaskSetForeignPending');
@@ -384,6 +459,18 @@ function slotLabel(slot: TaskSlot) {
   return card?.content?.trim() || t('content.slotFilled');
 }
 
+function messageAuthorLabel(msg: ModerationMessage) {
+  if (msg.authorKind === 'staff') return t('content.authorStaff');
+  if (msg.authorUserId === String(auth.user?.id ?? '')) return t('content.authorYou');
+  return t('content.authorUser');
+}
+
+function formatDate(value: string | Date) {
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString('ru-RU');
+}
+
 function onAddOrUpdateTask() {
   if (readOnly.value || !canSaveQuestion.value) return;
   const set = ensureLocalSet();
@@ -412,6 +499,37 @@ function removeTask(taskId: string) {
   if (editingTaskId.value === taskId) resetTaskForm();
 }
 
+async function loadThread() {
+  const status = state.value?.moderationStatus;
+  if (
+    !packId.value ||
+    state.value?.foreignPending ||
+    (status !== 'pending' && status !== 'needs_revision')
+  ) {
+    threadMessages.value = [];
+    return;
+  }
+  try {
+    const data = await content.loadModeration(packId.value);
+    threadMessages.value = data.messages ?? [];
+  } catch {
+    threadMessages.value = [];
+  }
+}
+
+async function onReply() {
+  if (!packId.value || !replyBody.value.trim() || !showModerationThread.value) return;
+  try {
+    const data = await content.postModerationMessage(packId.value, replyBody.value.trim());
+    threadMessages.value = data.messages ?? [];
+    replyBody.value = '';
+    await nextTick();
+    replyFormRef.value?.resetValidation();
+  } catch {
+    /* error in store */
+  }
+}
+
 async function onSubmit() {
   if (!packId.value || !local.value || !canSubmit.value) return;
   try {
@@ -421,6 +539,7 @@ async function onSubmit() {
     });
     await content.loadAddTaskSet(packId.value);
     syncFromState();
+    await loadThread();
   } catch {
     /* error in store */
   }
@@ -433,6 +552,7 @@ async function onCancel() {
     await content.cancelRequest(id);
     await content.loadAddTaskSet(packId.value);
     syncFromState();
+    await loadThread();
   } catch {
     /* error in store */
   }
@@ -463,6 +583,7 @@ async function load() {
   try {
     await content.loadAddTaskSet(packId.value);
     syncFromState();
+    await loadThread();
   } catch {
     if (content.error === 'not_in_collection' || content.error === 'pack_not_public') {
       await router.replace({ name: 'content-pack', params: { id: packId.value } });

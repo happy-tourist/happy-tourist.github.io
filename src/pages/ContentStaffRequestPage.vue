@@ -58,6 +58,21 @@
                 {{ $t('content.difficultyLabel') }}:
                 {{ $t(`content.difficulty.${task.difficulty}`) }}
               </q-item-label>
+              <!-- SC-PACK-127 / D11: answer slots on every question row -->
+              <div class="row q-gutter-xs q-mt-xs">
+                <q-chip
+                  v-for="slot in task.slots"
+                  :key="slot.id"
+                  dense
+                  :outline="!slot.answerCardId"
+                  :color="slot.answerCardId ? 'primary' : 'grey'"
+                >
+                  {{ slotLabel(slot) }}
+                </q-chip>
+                <span v-if="!task.slots.length" class="text-caption text-muted">
+                  {{ $t('content.slotEmpty') }}
+                </span>
+              </div>
             </q-item-section>
           </q-item>
         </q-list>
@@ -166,7 +181,7 @@ import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type TaskSlot } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -221,6 +236,14 @@ function statusLabel(status: string) {
     return t('content.statuses.needs_revision');
   if (status === 'approved') return t('content.statuses.approved');
   return status;
+}
+
+function slotLabel(slot: TaskSlot) {
+  if (!slot.answerCardId || !preview.value) {
+    return t('content.slotEmpty');
+  }
+  const card = preview.value.content.answerCards.find((c) => c.id === slot.answerCardId);
+  return card?.content?.trim() || t('content.slotFilled');
 }
 
 function formatDate(value: string | Date) {

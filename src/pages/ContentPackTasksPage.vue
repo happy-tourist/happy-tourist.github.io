@@ -363,7 +363,7 @@ const tasksStatusLabel = computed(() => {
   const status = content.moderationStatus;
   if (status === 'pending') return t('content.taskSetStatusMarks.pending');
   if (status === 'needs_revision' || status === 'rejected') {
-    return t('content.taskSetStatusMarks.rejected');
+    return t('content.taskSetStatusMarks.needs_revision');
   }
   if (content.pack?.hasLive || staffMode.value) {
     return t('content.taskSetStatusMarks.published');

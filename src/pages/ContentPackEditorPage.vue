@@ -801,3 +801,11 @@ onBeforeUnmount(() => {
   stopLockHeartbeat();
 });
 </script>
+
+<!-- SC-PACK-126 / D10: same visible yellow outline as TasksPage cascade gaps -->
+<style scoped>
+.cascade-gap-outline {
+  outline: 2px solid var(--q-warning);
+  outline-offset: -2px;
+}
+</style>
