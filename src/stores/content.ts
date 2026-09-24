@@ -45,6 +45,8 @@ export interface TaskSet {
   id: string;
   authorUserId: string;
   coauthorLabels: string[];
+  /** Soft-unpublished when false (SC-PACK-131/132). Default true. */
+  inCatalog?: boolean;
   tasks: ContentTask[];
 }
 
@@ -195,6 +197,7 @@ const KNOWN_ERROR_CODES = [
   'invalid_difficulty',
   'pack_not_public',
   'pack_unpublished',
+  'last_published_task_set',
   'pack_not_found',
   'request_not_found',
   'not_pending',
@@ -461,6 +464,67 @@ export const useContentStore = defineStore('content', () => {
       throw e;
     } finally {
       loading.value = false;
+    }
+  }
+
+  /** Staff soft-hide a live task set (SC-PACK-131). Rejects last published set. */
+  async function unpublishTaskSet(packId: string, taskSetId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        taskSetId: string;
+        inCatalog: boolean;
+      }>('/api/content/task-set/unpublish', { body: { packId, taskSetId } });
+      patchTaskSetInCatalog(packId, taskSetId, false);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff restore a soft-hidden task set without moderation (SC-PACK-132). */
+  async function republishTaskSet(packId: string, taskSetId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        taskSetId: string;
+        inCatalog: boolean;
+      }>('/api/content/task-set/republish', { body: { packId, taskSetId } });
+      patchTaskSetInCatalog(packId, taskSetId, true);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  function patchTaskSetInCatalog(packId: string, taskSetId: string, inCatalog: boolean) {
+    const patchSet = (sets: TaskSet[] | undefined) => {
+      if (!sets) return sets;
+      return sets.map((ts) => (ts.id === taskSetId ? { ...ts, inCatalog } : ts));
+    };
+    if (liveContent.value && pack.value?.id === packId) {
+      liveContent.value = {
+        ...liveContent.value,
+        taskSets: patchSet(liveContent.value.taskSets) ?? [],
+      };
+    }
+    if (draft.value && pack.value?.id === packId) {
+      draft.value = {
+        ...draft.value,
+        taskSets: patchSet(draft.value.taskSets) ?? [],
+      };
     }
   }
 
@@ -1110,6 +1174,8 @@ export const useContentStore = defineStore('content', () => {
     removeFromCollection,
     unpublishPack,
     republishPack,
+    unpublishTaskSet,
+    republishTaskSet,
     loadLivePack,
     createPack,
     loadDraft,

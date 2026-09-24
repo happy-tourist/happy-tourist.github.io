@@ -36,7 +36,7 @@
           color="warning"
           :label="$t('content.unpublish')"
           :loading="content.loading"
-          @click="onUnpublish"
+          @click="confirmUnpublish"
         />
         <q-btn
           v-if="showRepublish"
@@ -94,40 +94,77 @@
           @click="onAddTaskSet"
         />
       </div>
-      <div v-for="(ts, si) in live.taskSets" :key="ts.id" class="q-mb-md">
-        <div class="text-subtitle1 q-mb-xs">
-          {{ $t('content.taskSetLabel', { n: si + 1 }) }}
-          <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
-            {{ ts.coauthorLabels.join(', ') }}
-          </span>
-        </div>
-        <q-list bordered separator class="rounded-borders">
-          <q-item v-for="task in ts.tasks" :key="task.id">
-            <q-item-section>
-              <q-item-label>{{ task.question }}</q-item-label>
-              <q-item-label caption>
-                {{ $t('content.difficultyLabel') }}:
-                {{ $t(`content.difficulty.${task.difficulty}`) }}
-              </q-item-label>
-              <div class="row q-gutter-xs q-mt-xs">
-                <q-chip
-                  v-for="slot in task.slots"
-                  :key="slot.id"
-                  dense
-                  :outline="!slot.answerCardId"
-                  :color="slot.answerCardId ? 'primary' : 'grey'"
-                >
-                  {{ slotLabel(slot) }}
-                </q-chip>
-                <span v-if="!task.slots.length" class="text-caption text-muted">
-                  {{ $t('content.slotEmpty') }}
-                </span>
-              </div>
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </div>
-      <div v-if="!live.taskSets.length" class="text-muted">{{ $t('content.emptyTasks') }}</div>
+      <!-- SC-PACK-130/132: summary rows + drill-in; soft-unpublished gray -->
+      <q-list bordered separator class="rounded-borders">
+        <q-item
+          v-for="(ts, si) in live.taskSets"
+          :key="ts.id"
+          :clickable="canEnterTaskSet(ts)"
+          :class="{ 'text-grey-6': isSetSoftUnpublished(ts) }"
+          v-ripple="canEnterTaskSet(ts)"
+          @click="onTaskSetClick(ts)"
+        >
+          <q-item-section>
+            <q-item-label>
+              {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+              <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
+                {{ $t('content.unpublishedByStaff') }}
+              </q-badge>
+              <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
+                {{ ts.coauthorLabels.join(', ') }}
+              </span>
+            </q-item-label>
+            <q-item-label caption>
+              {{ $t('content.tasksCount', { n: ts.tasks.length }) }} ·
+              {{ difficultySummary(ts) }}
+            </q-item-label>
+          </q-item-section>
+          <q-item-section side>
+            <div class="q-gutter-xs" @click.stop>
+              <q-btn
+                v-if="auth.isStaff && isSetSoftUnpublished(ts)"
+                flat
+                dense
+                color="primary"
+                :label="$t('content.republish')"
+                :loading="content.loading"
+                @click.stop="onRepublishSet(ts.id)"
+              />
+              <q-btn
+                v-if="auth.isStaff && isSetSoftUnpublished(ts)"
+                flat
+                dense
+                icon="edit"
+                :aria-label="$t('content.edit')"
+                @click.stop="onStaffEditSet(ts.id)"
+              />
+              <q-btn
+                v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                :loading="content.loading"
+                @click.stop="confirmUnpublishSet(ts.id)"
+              />
+              <q-btn
+                v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                disable
+              >
+                <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
+              </q-btn>
+              <q-icon v-if="canEnterTaskSet(ts)" name="chevron_right" />
+            </div>
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!live.taskSets.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyTasks') }}</q-item-section>
+        </q-item>
+      </q-list>
     </template>
 
     <q-dialog v-model="gateOpen">
@@ -153,6 +190,44 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- SC-PACK-129 / D16: confirm pack unpublish -->
+    <q-dialog v-model="unpublishConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishConfirmTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click="doUnpublish"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- SC-PACK-132: confirm task-set unpublish -->
+    <q-dialog v-model="unpublishSetConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishTaskSetConfirmTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishTaskSetConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click="doUnpublishSet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -162,7 +237,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore, type TaskSlot } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -172,6 +247,9 @@ const { t } = useI18n();
 
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
+const unpublishConfirmOpen = ref(false);
+const unpublishSetConfirmOpen = ref(false);
+const pendingUnpublishSetId = ref<string | null>(null);
 
 const packId = computed(() => {
   const params = route.params as Record<string, string | string[] | undefined>;
@@ -215,6 +293,10 @@ const showAddTaskSet = computed(() => {
   return true;
 });
 
+const publishedSetCount = computed(
+  () => live.value?.taskSets.filter((ts) => ts.inCatalog !== false).length ?? 0,
+);
+
 const editRedirect = computed(() =>
   packId.value ? `/content/packs/${packId.value}/edit` : '/content/collection',
 );
@@ -231,12 +313,30 @@ const errorLabel = computed(() => {
   return key ? t(key) : (content.error ?? '');
 });
 
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId || !live.value) {
-    return t('content.slotEmpty');
+function isSetSoftUnpublished(ts: TaskSet): boolean {
+  return ts.inCatalog === false;
+}
+
+function canEnterTaskSet(ts: TaskSet): boolean {
+  if (isSetSoftUnpublished(ts)) return false;
+  return true;
+}
+
+function canUnpublishSet(ts: TaskSet): boolean {
+  if (isSetSoftUnpublished(ts)) return false;
+  return publishedSetCount.value > 1;
+}
+
+function difficultySummary(ts: TaskSet): string {
+  let d1 = 0;
+  let d2 = 0;
+  let d3 = 0;
+  for (const task of ts.tasks) {
+    if (task.difficulty === 1) d1 += 1;
+    else if (task.difficulty === 2) d2 += 1;
+    else if (task.difficulty === 3) d3 += 1;
   }
-  const card = live.value.answerCards.find((c) => c.id === slot.answerCardId);
-  return card?.content?.trim() || t('content.slotFilled');
+  return t('content.taskSetDifficultySummary', { d1, d2, d3 });
 }
 
 function load() {
@@ -273,10 +373,29 @@ async function onStaffEdit() {
   }
 }
 
-async function onUnpublish() {
+async function onStaffEditSet(taskSetId: string) {
+  if (!packId.value) return;
+  try {
+    await content.acquireEditLock(packId.value);
+    await content.loadStaffEdit(packId.value);
+    await router.push({
+      name: 'content-pack-tasks',
+      params: { id: packId.value, taskSetId },
+    });
+  } catch {
+    /* error in store */
+  }
+}
+
+function confirmUnpublish() {
+  unpublishConfirmOpen.value = true;
+}
+
+async function doUnpublish() {
   if (!packId.value) return;
   try {
     await content.unpublishPack(packId.value);
+    unpublishConfirmOpen.value = false;
   } catch {
     /* error in store */
   }
@@ -286,6 +405,40 @@ async function onRepublish() {
   if (!packId.value) return;
   try {
     await content.republishPack(packId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
+function onTaskSetClick(ts: TaskSet) {
+  if (!canEnterTaskSet(ts) || !packId.value) return;
+  void router.push({
+    name: 'content-pack-tasks',
+    params: { id: packId.value, taskSetId: ts.id },
+    query: { view: 'live' },
+  });
+}
+
+function confirmUnpublishSet(taskSetId: string) {
+  pendingUnpublishSetId.value = taskSetId;
+  unpublishSetConfirmOpen.value = true;
+}
+
+async function doUnpublishSet() {
+  if (!packId.value || !pendingUnpublishSetId.value) return;
+  try {
+    await content.unpublishTaskSet(packId.value, pendingUnpublishSetId.value);
+    unpublishSetConfirmOpen.value = false;
+    pendingUnpublishSetId.value = null;
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublishSet(taskSetId: string) {
+  if (!packId.value) return;
+  try {
+    await content.republishTaskSet(packId.value, taskSetId);
   } catch {
     /* error in store */
   }

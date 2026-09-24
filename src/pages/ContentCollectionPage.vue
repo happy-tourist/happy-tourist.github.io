@@ -82,6 +82,25 @@
                 :aria-label="$t('content.edit')"
                 @click.stop="onEdit(item)"
               />
+              <!-- SC-PACK-129: staff unpublish/republish in collection + confirm -->
+              <q-btn
+                v-if="auth.isStaff && item.hasLive && item.inCatalog === true && !item.blocked"
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                :loading="content.loading"
+                @click.stop="confirmUnpublish(item.id)"
+              />
+              <q-btn
+                v-if="auth.isStaff && item.hasLive && item.inCatalog === false && !item.blocked"
+                flat
+                dense
+                color="primary"
+                :label="$t('content.republish')"
+                :loading="content.loading"
+                @click.stop="onRepublish(item.id)"
+              />
               <q-btn
                 flat
                 dense
@@ -138,6 +157,25 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- SC-PACK-129 / D16: confirm before pack unpublish -->
+    <q-dialog v-model="unpublishConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishConfirmTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click="doUnpublish"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -158,6 +196,8 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const removeConfirmOpen = ref(false);
 const pendingRemoveId = ref<string | null>(null);
+const unpublishConfirmOpen = ref(false);
+const pendingUnpublishId = ref<string | null>(null);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
@@ -243,6 +283,31 @@ async function doRemove() {
     await content.removeFromCollection(packId);
     removeConfirmOpen.value = false;
     pendingRemoveId.value = null;
+  } catch {
+    /* error in store */
+  }
+}
+
+function confirmUnpublish(packId: string) {
+  pendingUnpublishId.value = packId;
+  unpublishConfirmOpen.value = true;
+}
+
+async function doUnpublish() {
+  const packId = pendingUnpublishId.value;
+  if (!packId) return;
+  try {
+    await content.unpublishPack(packId);
+    unpublishConfirmOpen.value = false;
+    pendingUnpublishId.value = null;
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublish(packId: string) {
+  try {
+    await content.republishPack(packId);
   } catch {
     /* error in store */
   }

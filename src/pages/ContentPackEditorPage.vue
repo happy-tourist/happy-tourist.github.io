@@ -146,15 +146,21 @@
         <q-item
           v-for="(ts, si) in local.taskSets"
           :key="ts.id"
-          :clickable="canOpenTasks"
+          :clickable="canOpenTasks && canEnterEditorSet(ts)"
           :disable="!canOpenTasks"
-          v-ripple="canOpenTasks"
-          :class="{ 'cascade-gap-outline': content.taskSetHasCascadeGap(ts) }"
-          @click="canOpenTasks && openTaskSet(ts.id)"
+          v-ripple="canOpenTasks && canEnterEditorSet(ts)"
+          :class="{
+            'cascade-gap-outline': content.taskSetHasCascadeGap(ts),
+            'text-grey-6': isSetSoftUnpublished(ts),
+          }"
+          @click="canOpenTasks && canEnterEditorSet(ts) && openTaskSet(ts.id)"
         >
           <q-item-section>
             <q-item-label>
               {{ $t('content.taskSetLabel', { n: si + 1 }) }}
+              <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
+                {{ $t('content.unpublishedByStaff') }}
+              </q-badge>
             </q-item-label>
             <q-item-label caption>
               {{ taskSetAttribution(ts) }} ·
@@ -162,7 +168,44 @@
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-icon name="chevron_right" />
+            <div class="q-gutter-xs" @click.stop>
+              <q-btn
+                v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
+                flat
+                dense
+                color="primary"
+                :label="$t('content.republish')"
+                :loading="content.loading"
+                @click.stop="onRepublishSet(ts.id)"
+              />
+              <q-btn
+                v-if="
+                  staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && canUnpublishSet
+                "
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                :loading="content.loading"
+                @click.stop="confirmUnpublishSet(ts.id)"
+              />
+              <q-btn
+                v-if="
+                  staffMode &&
+                  content.pack?.hasLive &&
+                  !isSetSoftUnpublished(ts) &&
+                  !canUnpublishSet
+                "
+                flat
+                dense
+                color="warning"
+                :label="$t('content.unpublish')"
+                disable
+              >
+                <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
+              </q-btn>
+              <q-icon v-if="canEnterEditorSet(ts)" name="chevron_right" />
+            </div>
           </q-item-section>
         </q-item>
         <q-item v-if="!local.taskSets.length">
@@ -291,6 +334,25 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- SC-PACK-131/132: confirm task-set unpublish -->
+    <q-dialog v-model="unpublishSetConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishTaskSetConfirmTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishTaskSetConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click="doUnpublishSet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -337,6 +399,8 @@ const cardForm = reactive({ content: '', description: '' });
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
 const packDeleteConfirmOpen = ref(false);
+const unpublishSetConfirmOpen = ref(false);
+const pendingUnpublishSetId = ref<string | null>(null);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const threadMessages = ref<ModerationMessage[]>([]);
@@ -635,6 +699,51 @@ function openTaskSet(taskSetId: string) {
     name: 'content-pack-tasks',
     params: { id: packId.value, taskSetId },
   });
+}
+
+function isSetSoftUnpublished(ts: TaskSet): boolean {
+  return ts.inCatalog === false;
+}
+
+function canEnterEditorSet(ts: TaskSet): boolean {
+  // Staff may still open soft-unpublished sets in Edit session (SC-PACK-132).
+  if (staffMode.value) return true;
+  return !isSetSoftUnpublished(ts);
+}
+
+const canUnpublishSet = computed(() => {
+  if (!local.value) return false;
+  return local.value.taskSets.filter((ts) => ts.inCatalog !== false).length > 1;
+});
+
+function confirmUnpublishSet(taskSetId: string) {
+  pendingUnpublishSetId.value = taskSetId;
+  unpublishSetConfirmOpen.value = true;
+}
+
+async function doUnpublishSet() {
+  if (!packId.value || !pendingUnpublishSetId.value || !local.value) return;
+  try {
+    await content.unpublishTaskSet(packId.value, pendingUnpublishSetId.value);
+    const id = pendingUnpublishSetId.value;
+    const ts = local.value.taskSets.find((s) => s.id === id);
+    if (ts) ts.inCatalog = false;
+    unpublishSetConfirmOpen.value = false;
+    pendingUnpublishSetId.value = null;
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublishSet(taskSetId: string) {
+  if (!packId.value || !local.value) return;
+  try {
+    await content.republishTaskSet(packId.value, taskSetId);
+    const ts = local.value.taskSets.find((s) => s.id === taskSetId);
+    if (ts) ts.inCatalog = true;
+  } catch {
+    /* error in store */
+  }
 }
 
 async function loadThread() {

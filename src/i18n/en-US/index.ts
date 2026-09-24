@@ -132,6 +132,14 @@ export default {
     unpublishedByStaff: 'Снято с публикации',
     unpublish: 'Снять с публикации',
     republish: 'Опубликовать снова',
+    unpublishConfirmTitle: 'Снять с публикации?',
+    unpublishConfirm:
+      'Набор исчезнет из публичного каталога. У пользователей в коллекции останется серая строка. Продолжить?',
+    unpublishTaskSetConfirmTitle: 'Снять набор заданий?',
+    unpublishTaskSetConfirm:
+      'Набор заданий будет скрыт для обычных игроков. Staff сможет вернуть его кнопкой «Опубликовать снова». Продолжить?',
+    taskSetDifficultySummary: 'сложность 1: {d1}, 2: {d2}, 3: {d3}',
+    lastPublishedTaskSetHint: 'Нельзя снять единственный опубликованный набор заданий',
     addToCollection: 'В коллекцию',
     inCollection: 'В коллекции',
     removeFromCollection: 'Убрать из коллекции',
@@ -314,6 +322,7 @@ export default {
       invalid_difficulty: 'Сложность должна быть 1, 2 или 3.',
       pack_not_public: 'Набор ещё не опубликован.',
       pack_unpublished: 'Набор снят с публикации.',
+      last_published_task_set: 'Нельзя снять единственный опубликованный набор заданий.',
       pack_not_found: 'Набор не найден.',
       request_not_found: 'Заявка не найдена.',
       not_pending: 'Заявка не в статусе ожидания.',

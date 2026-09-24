@@ -2,7 +2,12 @@
   <q-page class="q-pa-md">
     <div class="row items-center justify-between q-mb-md">
       <div>
-        <div class="text-h5">{{ $t('content.tasksTitle') }}</div>
+        <div class="text-h5">
+          {{ $t('content.tasksTitle') }}
+          <q-badge v-if="taskSetSoftUnpublished" color="grey" class="q-ml-sm">
+            {{ $t('content.unpublishedByStaff') }}
+          </q-badge>
+        </div>
         <div class="text-subtitle2 text-muted">
           <template v-if="tasksStatusLabel">
             {{ tasksStatusLabel }}
@@ -16,10 +21,36 @@
         </div>
       </div>
       <div class="q-gutter-sm">
+        <!-- SC-PACK-131/132: set unpublish/republish inside Tasks -->
+        <q-btn
+          v-if="showSetRepublish"
+          flat
+          color="primary"
+          :label="$t('content.republish')"
+          :loading="content.loading"
+          @click="onRepublishSet"
+        />
+        <q-btn
+          v-if="showSetUnpublish"
+          flat
+          color="warning"
+          :label="$t('content.unpublish')"
+          :loading="content.loading"
+          :disable="!canUnpublishThisSet"
+          @click="confirmUnpublishSet"
+        >
+          <q-tooltip v-if="!canUnpublishThisSet">
+            {{ $t('content.lastPublishedTaskSetHint') }}
+          </q-tooltip>
+        </q-btn>
         <q-btn
           flat
-          :label="$t('content.backToAnswers')"
-          :to="{ name: 'content-pack-edit', params: { id: packId } }"
+          :label="
+            liveViewMode && !staffMode
+              ? content.pack?.title || $t('content.untitled')
+              : $t('content.backToAnswers')
+          "
+          :to="backTarget"
         />
       </div>
     </div>
@@ -34,7 +65,7 @@
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local && taskSet">
-      <q-card flat bordered class="q-mb-md">
+      <q-card v-if="!viewOnly" flat bordered class="q-mb-md">
         <q-card-section>
           <q-form class="q-gutter-md" @submit.prevent="onAddOrUpdateTask">
             <q-input
@@ -154,7 +185,7 @@
               </span>
             </div>
           </q-item-section>
-          <q-item-section side>
+          <q-item-section side v-if="!viewOnly">
             <div class="q-gutter-xs">
               <q-btn
                 flat
@@ -192,7 +223,7 @@
         />
       </div>
       <!-- SC-PACK-116/D6: staff uses instant-save copy; always reserved (SC-PACK-119) -->
-      <div class="text-caption text-muted q-mt-sm">
+      <div v-if="!viewOnly" class="text-caption text-muted q-mt-sm">
         {{ staffMode ? $t('content.staffEditSubtitle') : $t('content.tasksSaveHint') }}
       </div>
     </template>
@@ -247,6 +278,25 @@
             :label="$t('content.deleteTaskSet')"
             :loading="content.loading"
             @click="doDeleteTaskSet"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- SC-PACK-132: confirm task-set unpublish -->
+    <q-dialog v-model="unpublishSetConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.unpublishTaskSetConfirmTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.unpublishTaskSetConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click="doUnpublishSet"
           />
         </q-card-actions>
       </q-card>
@@ -308,11 +358,46 @@ const taskForm = reactive<{
 const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
 const taskSetDeleteConfirmOpen = ref(false);
+const unpublishSetConfirmOpen = ref(false);
+/** SC-PACK-130: live drill-in read-only (not staff Edit session). */
+const liveViewMode = ref(false);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lockHeartbeat: ReturnType<typeof setInterval> | null = null;
 let suppressAutosave = false;
 
 const staffMode = computed(() => Boolean(content.staffEditTarget));
+
+const viewOnly = computed(() => liveViewMode.value && !staffMode.value);
+
+const backTarget = computed(() => {
+  if (liveViewMode.value && !staffMode.value) {
+    return { name: 'content-pack' as const, params: { id: packId.value } };
+  }
+  return { name: 'content-pack-edit' as const, params: { id: packId.value } };
+});
+
+const taskSetSoftUnpublished = computed(() => taskSet.value?.inCatalog === false);
+
+const showSetUnpublish = computed(
+  () =>
+    staffMode.value &&
+    Boolean(content.pack?.hasLive) &&
+    !taskSetSoftUnpublished.value &&
+    !content.pack?.blocked,
+);
+
+const showSetRepublish = computed(
+  () =>
+    staffMode.value &&
+    Boolean(content.pack?.hasLive) &&
+    taskSetSoftUnpublished.value &&
+    !content.pack?.blocked,
+);
+
+const canUnpublishThisSet = computed(() => {
+  if (!local.value) return false;
+  return local.value.taskSets.filter((ts) => ts.inCatalog !== false).length > 1;
+});
 
 const difficultyOptions = computed(() =>
   ([1, 2, 3] as Difficulty[]).map((value) => ({
@@ -340,7 +425,7 @@ const taskSet = computed(
 const locked = computed(() => Boolean(content.pack?.blocked) || !local.value?.answerCards.length);
 
 const readOnly = computed(
-  () => Boolean(content.pack?.blocked) || Boolean(gateOpen.value) || locked.value,
+  () => viewOnly.value || Boolean(content.pack?.blocked) || Boolean(gateOpen.value) || locked.value,
 );
 
 const tasksGateHint = computed(() => {
@@ -554,17 +639,40 @@ async function load() {
   if (!checkGate()) return;
   clearAutosaveTimer();
   stopLockHeartbeat();
+  liveViewMode.value = false;
   try {
     let payload: PackContent;
-    if (content.staffEditTarget || (auth.isStaff && content.pack?.hasLive)) {
+    const forceLiveView = route.query.view === 'live';
+    if (content.staffEditTarget) {
+      payload = content.draft!;
+      startLockHeartbeat();
+    } else if (
+      !forceLiveView &&
+      auth.isStaff &&
+      content.pack?.hasLive &&
+      content.draft &&
+      content.pack.id === packId.value
+    ) {
+      // Staff already in edit payload (navigated editor → tasks).
+      payload = content.draft;
       if (!content.staffEditTarget) {
         await content.acquireEditLock(packId.value);
         await content.loadStaffEdit(packId.value);
+        payload = content.draft!;
       }
-      payload = content.draft!;
       startLockHeartbeat();
-    } else if (content.draft && content.pack?.id === packId.value && !content.pack.hasLive) {
+    } else if (
+      !forceLiveView &&
+      content.draft &&
+      content.pack?.id === packId.value &&
+      !content.pack.hasLive
+    ) {
       payload = content.draft;
+    } else if (forceLiveView || content.pack?.hasLive) {
+      // SC-PACK-130: live drill-in read-only (or soft-unpublished staff Edit via lock).
+      const data = await content.loadLivePack(packId.value);
+      payload = data.content;
+      liveViewMode.value = true;
     } else {
       const data = await content.loadDraft(packId.value);
       payload = data.draft;
@@ -574,14 +682,61 @@ async function load() {
     suppressAutosave = false;
 
     if (!local.value.answerCards.length) {
-      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+      await router.replace(
+        liveViewMode.value
+          ? { name: 'content-pack', params: { id: packId.value } }
+          : { name: 'content-pack-edit', params: { id: packId.value } },
+      );
       return;
     }
 
-    const found = local.value.taskSets.some((ts) => ts.id === taskSetId.value);
+    const found = local.value.taskSets.find((ts) => ts.id === taskSetId.value);
     if (!found) {
-      await router.replace({ name: 'content-pack-edit', params: { id: packId.value } });
+      await router.replace(
+        liveViewMode.value
+          ? { name: 'content-pack', params: { id: packId.value } }
+          : { name: 'content-pack-edit', params: { id: packId.value } },
+      );
+      return;
     }
+
+    // SC-PACK-132: soft-unpublished — non-staff cannot enter.
+    if (found.inCatalog === false && !staffMode.value && !auth.isStaff) {
+      await router.replace({ name: 'content-pack', params: { id: packId.value } });
+      return;
+    }
+    // Soft-unpublished + staff without Edit session: bounce to live (use Edit on row).
+    if (found.inCatalog === false && liveViewMode.value && !staffMode.value) {
+      await router.replace({ name: 'content-pack', params: { id: packId.value } });
+    }
+  } catch {
+    /* error in store */
+  }
+}
+
+function confirmUnpublishSet() {
+  if (!canUnpublishThisSet.value) return;
+  unpublishSetConfirmOpen.value = true;
+}
+
+async function doUnpublishSet() {
+  if (!packId.value || !taskSetId.value || !local.value) return;
+  try {
+    await content.unpublishTaskSet(packId.value, taskSetId.value);
+    const ts = local.value.taskSets.find((s) => s.id === taskSetId.value);
+    if (ts) ts.inCatalog = false;
+    unpublishSetConfirmOpen.value = false;
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRepublishSet() {
+  if (!packId.value || !taskSetId.value || !local.value) return;
+  try {
+    await content.republishTaskSet(packId.value, taskSetId.value);
+    const ts = local.value.taskSets.find((s) => s.id === taskSetId.value);
+    if (ts) ts.inCatalog = true;
   } catch {
     /* error in store */
   }

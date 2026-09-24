@@ -114,7 +114,10 @@ const stubs = {
   'q-banner': true,
   'q-badge': { template: '<span class="q-badge-stub"><slot /></span>' },
   'q-chip': { template: '<span><slot /></span>' },
-  'q-dialog': { template: '<div class="dialog"><slot /></div>' },
+  'q-dialog': {
+    props: ['modelValue'],
+    template: '<div v-if="modelValue" class="dialog"><slot /></div>',
+  },
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },

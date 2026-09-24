@@ -88,17 +88,18 @@
               </q-chip>
             </div>
             <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
-            <div class="row q-gutter-xs q-mb-md">
-              <q-btn
+            <div class="row q-gutter-sm q-mb-md">
+              <q-chip
                 v-for="card in liveCards"
                 :key="card.id"
-                dense
+                clickable
                 outline
-                color="primary"
-                :label="card.content"
-                :disable="readOnly"
+                color="secondary"
+                :disable="readOnly || !card.content.trim()"
                 @click="fillNextFormSlot(card.id)"
-              />
+              >
+                {{ card.content.trim() || $t('content.untitled') }}
+              </q-chip>
             </div>
             <div class="row q-gutter-sm">
               <q-btn
@@ -214,7 +215,12 @@
           </q-item>
         </q-list>
 
-        <q-form v-if="showModerationThread" ref="replyFormRef" class="q-gutter-md" @submit.prevent="onReply">
+        <q-form
+          v-if="showModerationThread"
+          ref="replyFormRef"
+          class="q-gutter-md"
+          @submit.prevent="onReply"
+        >
           <q-input
             v-model="replyBody"
             type="textarea"
