@@ -7,7 +7,9 @@
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+        <!-- SC-PACK-116: hide author my-moderation for staff -->
         <q-btn
+          v-if="!auth.isStaff"
           flat
           icon="hourglass_top"
           :label="$t('content.myModerationNav')"

@@ -7,7 +7,9 @@
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+        <!-- SC-PACK-116: hide author my-moderation for staff -->
         <q-btn
+          v-if="!auth.isStaff"
           flat
           icon="hourglass_top"
           :label="$t('content.myModerationNav')"
@@ -67,7 +69,7 @@
           </q-item-section>
           <q-item-section side>
             <div class="q-gutter-xs" @click.stop>
-              <!-- SC-PACK-106/107: published non-staff → add-task-set only; staff Edit. -->
+              <!-- SC-PACK-118: no row add-task-set; SC-PACK-106: staff Edit only. -->
               <q-btn
                 v-if="canEditPack(item)"
                 flat
@@ -75,14 +77,6 @@
                 icon="edit"
                 :aria-label="$t('content.edit')"
                 @click.stop="onEdit(item)"
-              />
-              <q-btn
-                v-else-if="canAddTaskSet(item)"
-                flat
-                dense
-                icon="playlist_add"
-                :aria-label="$t('content.addTaskSetNav')"
-                @click.stop="onAddTaskSet(item.id)"
               />
               <q-btn
                 flat
@@ -207,13 +201,6 @@ function canEditPack(item: ContentPackSummary): boolean {
   return Boolean(uid) && item.createdBy === uid;
 }
 
-/** SC-PACK-107/108: verified collector on published pack. */
-function canAddTaskSet(item: ContentPackSummary): boolean {
-  if (item.blocked || !item.hasLive || auth.isStaff) return false;
-  if (auth.user?.anonymous || auth.needsEmailVerification) return false;
-  return true;
-}
-
 function onRowClick(item: ContentPackSummary) {
   if (item.hasLive) {
     void router.push({ name: 'content-pack', params: { id: item.id } });
@@ -226,11 +213,6 @@ function onRowClick(item: ContentPackSummary) {
 function onEdit(item: ContentPackSummary) {
   if (!ensureEligible()) return;
   void router.push({ name: 'content-pack-edit', params: { id: item.id } });
-}
-
-function onAddTaskSet(packId: string) {
-  if (!ensureEligible()) return;
-  void router.push({ name: 'content-pack-add-task-set', params: { id: packId } });
 }
 
 function confirmRemove(packId: string) {

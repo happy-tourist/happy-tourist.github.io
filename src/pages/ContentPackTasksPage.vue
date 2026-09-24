@@ -102,6 +102,7 @@
                 :loading="content.saving"
                 :disable="readOnly || !canSaveQuestion"
               >
+                <!-- SC-PACK-119: tooltip instead of jumping caption -->
                 <q-tooltip v-if="!canSaveQuestion && taskForm.question.trim()">
                   {{ $t('content.questionNeedsSlot') }}
                 </q-tooltip>
@@ -113,9 +114,6 @@
                 :disable="readOnly"
                 @click="resetTaskForm"
               />
-            </div>
-            <div v-if="taskForm.question.trim() && !hasFilledSlot" class="text-caption text-muted">
-              {{ $t('content.questionNeedsSlot') }}
             </div>
           </q-form>
         </q-card-section>
@@ -193,8 +191,9 @@
           @click="taskSetDeleteConfirmOpen = true"
         />
       </div>
+      <!-- SC-PACK-116/D6: staff uses instant-save copy; always reserved (SC-PACK-119) -->
       <div class="text-caption text-muted q-mt-sm">
-        {{ $t('content.tasksSaveHint') }}
+        {{ staffMode ? $t('content.staffEditSubtitle') : $t('content.tasksSaveHint') }}
       </div>
     </template>
 
@@ -258,11 +257,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
+  isStaffEditSessionNavigation,
   newLocalId,
   useContentStore,
   type ContentTask,
@@ -272,6 +272,7 @@ import {
 } from '@/stores/content';
 
 const AUTOSAVE_MS = 800;
+const LOCK_HEARTBEAT_MS = 60_000;
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -308,6 +309,7 @@ const deleteConfirmOpen = ref(false);
 const pendingDeleteTaskId = ref<string | null>(null);
 const taskSetDeleteConfirmOpen = ref(false);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let lockHeartbeat: ReturnType<typeof setInterval> | null = null;
 let suppressAutosave = false;
 
 const staffMode = computed(() => Boolean(content.staffEditTarget));
@@ -374,7 +376,8 @@ const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answer
 const canSaveQuestion = computed(() => Boolean(taskForm.question.trim()) && hasFilledSlot.value);
 
 async function persist(body: PackContent, opts?: { quiet?: boolean }) {
-  if (staffMode.value) {
+  // SC-PACK-115: staff session always staff-save, never working-copy.
+  if (content.staffEditTarget || staffMode.value) {
     return content.staffSavePack(packId.value, body, opts);
   }
   return content.saveDraft(packId.value, body, opts);
@@ -399,6 +402,23 @@ function clearAutosaveTimer() {
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
   }
+}
+
+function stopLockHeartbeat() {
+  if (lockHeartbeat) {
+    clearInterval(lockHeartbeat);
+    lockHeartbeat = null;
+  }
+}
+
+function startLockHeartbeat() {
+  stopLockHeartbeat();
+  if (!packId.value || !content.staffEditTarget) return;
+  lockHeartbeat = setInterval(() => {
+    void content.refreshEditLock(packId.value).catch(() => {
+      /* ignore heartbeat errors */
+    });
+  }, LOCK_HEARTBEAT_MS);
 }
 
 function scheduleAutosave() {
@@ -533,6 +553,7 @@ async function load() {
   if (!packId.value || !taskSetId.value) return;
   if (!checkGate()) return;
   clearAutosaveTimer();
+  stopLockHeartbeat();
   try {
     let payload: PackContent;
     if (content.staffEditTarget || (auth.isStaff && content.pack?.hasLive)) {
@@ -541,6 +562,7 @@ async function load() {
         await content.loadStaffEdit(packId.value);
       }
       payload = content.draft!;
+      startLockHeartbeat();
     } else if (content.draft && content.pack?.id === packId.value && !content.pack.hasLive) {
       payload = content.draft;
     } else {
@@ -567,8 +589,19 @@ async function load() {
 
 onMounted(load);
 watch([packId, taskSetId], load);
+
+/** SC-PACK-115: unlock only when leaving the whole Edit session. */
+onBeforeRouteLeave((to) => {
+  if (!content.staffEditTarget || !packId.value) return;
+  if (isStaffEditSessionNavigation(to, packId.value)) return;
+  void content.releaseEditLock(packId.value).catch(() => {
+    /* ignore */
+  });
+});
+
 onBeforeUnmount(() => {
   clearAutosaveTimer();
+  stopLockHeartbeat();
 });
 </script>
 

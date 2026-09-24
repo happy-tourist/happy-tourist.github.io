@@ -102,7 +102,7 @@ describe('collection ACL (SC-PACK-106/107)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-106: published non-staff sees add-task-set, not Edit', async () => {
+  it('SC-PACK-106/118: published non-staff has no row add-task-set or Edit', async () => {
     const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
     await flushPromises();
 
@@ -111,10 +111,34 @@ describe('collection ACL (SC-PACK-106/107)', () => {
     ).toBe(false);
     expect(
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.addTaskSetNav'),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.unpublish'),
     ).toBe(false);
+  });
+
+  it('SC-PACK-66/118: published row click goes to live, not add-task-set or edit', async () => {
+    const localStubs = {
+      ...stubs,
+      'q-item': {
+        template:
+          '<div class="collection-row" v-bind="$attrs" @click="$attrs.onClick"><slot /></div>',
+      },
+    };
+    const wrapper = shallowMount(ContentCollectionPage, { global: { stubs: localStubs } });
+    await flushPromises();
+
+    const row = wrapper.find('.collection-row');
+    expect(row.exists()).toBe(true);
+    await row.trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({ name: 'content-pack', params: { id: 'p1' } });
+    expect(routerPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'content-pack-add-task-set' }),
+    );
+    expect(routerPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'content-pack-edit' }),
+    );
   });
 
   it('SC-PACK-112: staff sees Edit on published pack', async () => {
@@ -128,6 +152,17 @@ describe('collection ACL (SC-PACK-106/107)', () => {
     expect(
       wrapper.findAll('button').some((b) => b.attributes('aria-label') === 'content.addTaskSetNav'),
     ).toBe(false);
+  });
+
+  it('SC-PACK-116: staff does not see my-moderation nav', async () => {
+    authState.isStaff = true;
+    const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
+    ).toBe(false);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
   });
 
   it('unpublished creator sees Edit', async () => {

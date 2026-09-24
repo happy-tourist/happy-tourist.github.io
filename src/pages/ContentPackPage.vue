@@ -23,14 +23,6 @@
           :loading="content.loading"
           @click="onStaffEdit"
         />
-        <!-- SC-PACK-106/107: non-staff add-only, no full Edit. -->
-        <q-btn
-          v-if="showAddTaskSet"
-          color="secondary"
-          icon="playlist_add"
-          :label="$t('content.addTaskSetNav')"
-          @click="onAddTaskSet"
-        />
         <q-btn
           color="primary"
           outline
@@ -65,7 +57,19 @@
         </q-item>
       </q-list>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
+      <!-- SC-PACK-117/D7: add-task-set beside «Задания» section, not header. -->
+      <div class="row items-center justify-between q-mb-sm">
+        <div class="text-h6">{{ $t('content.taskSets') }}</div>
+        <q-btn
+          v-if="showAddTaskSet"
+          flat
+          dense
+          color="secondary"
+          icon="playlist_add"
+          :label="$t('content.addTaskSetNav')"
+          @click="onAddTaskSet"
+        />
+      </div>
       <div v-for="(ts, si) in live.taskSets" :key="ts.id" class="q-mb-md">
         <div class="text-subtitle1 q-mb-xs">
           {{ $t('content.taskSetLabel', { n: si + 1 }) }}

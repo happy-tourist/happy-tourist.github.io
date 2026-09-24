@@ -111,13 +111,15 @@ describe('live pack ACL (SC-PACK-53/106/112)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-53/106: non-staff sees add-task-set, not Edit', async () => {
+  it('SC-PACK-53/106/117: non-staff sees add-task-set by tasks section, not Edit', async () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
     const labels = wrapper.findAll('button').map((b) => b.text());
     expect(labels.some((l) => l.includes('content.edit'))).toBe(false);
     expect(labels.some((l) => l.includes('content.addTaskSetNav'))).toBe(true);
+    // Beside «Задания» heading, not only in page chrome.
+    expect(wrapper.text()).toContain('content.taskSets');
   });
 
   it('SC-PACK-112: staff Edit acquires lock then navigates', async () => {
@@ -127,6 +129,9 @@ describe('live pack ACL (SC-PACK-53/106/112)', () => {
 
     const editBtn = wrapper.findAll('button').find((b) => b.text().includes('content.edit'));
     expect(editBtn).toBeTruthy();
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.addTaskSetNav'))).toBe(
+      false,
+    );
     await editBtn!.trigger('click');
     await flushPromises();
     expect(acquireEditLock).toHaveBeenCalledWith('p1');

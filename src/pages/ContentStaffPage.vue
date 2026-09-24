@@ -111,7 +111,8 @@ function formatDate(value: string | Date) {
 /** Open queue: pending | needs_revision. */
 function queueStatusLabel(status: string) {
   if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'needs_revision' || status === 'rejected') return t('content.statuses.needs_revision');
+  if (status === 'needs_revision' || status === 'rejected')
+    return t('content.statuses.needs_revision');
   return status;
 }
 

@@ -179,7 +179,10 @@
           :loading="content.loading"
           :disable="readOnly || !canSubmit"
           @click="onSubmit"
-        />
+        >
+          <!-- SC-PACK-119: tooltip instead of jumping caption -->
+          <q-tooltip v-if="!canSubmit">{{ submitHint }}</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="canCancelRequest"
           color="grey"
@@ -196,9 +199,6 @@
           :loading="content.loading"
           @click="packDeleteConfirmOpen = true"
         />
-      </div>
-      <div v-if="!staffMode && !canSubmit" class="text-caption text-muted q-mt-sm">
-        {{ submitHint }}
       </div>
 
       <template v-if="!staffMode">
@@ -297,12 +297,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
+  isStaffEditSessionNavigation,
   newLocalId,
   taskIdsReferencingCard,
   useContentStore,
@@ -708,9 +709,26 @@ async function load() {
   if (!checkGate()) return;
   clearAutosaveTimer();
   stopLockHeartbeat();
+  content.error = null;
+
+  // SC-PACK-115: resume staff session when returning cards↔tasks (keep lock/target).
+  if (
+    auth.isStaff &&
+    content.staffEditTarget &&
+    content.pack?.id === packId.value &&
+    content.draft
+  ) {
+    lockHeld.value = true;
+    staffMode.value = true;
+    suppressAutosave = true;
+    local.value = JSON.parse(JSON.stringify(content.draft)) as PackContent;
+    suppressAutosave = false;
+    startLockHeartbeat();
+    return;
+  }
+
   lockHeld.value = false;
   staffMode.value = false;
-  content.error = null;
 
   try {
     // Probe live first when possible via collection/pack flags is unknown — try draft, fall back staff.
@@ -766,13 +784,20 @@ async function load() {
 onMounted(load);
 watch(packId, load);
 
+/** SC-PACK-115: unlock only when leaving the whole Edit session, not cards↔tasks. */
+onBeforeRouteLeave((to) => {
+  if (!packId.value) return;
+  if (isStaffEditSessionNavigation(to, packId.value)) return;
+  // Prefer staffEditTarget so mid-load leave still unlocks (lockHeld may still be false).
+  if (!lockHeld.value && !content.staffEditTarget) return;
+  void content.releaseEditLock(packId.value).catch(() => {
+    /* ignore */
+  });
+  lockHeld.value = false;
+});
+
 onBeforeUnmount(() => {
   clearAutosaveTimer();
   stopLockHeartbeat();
-  if (lockHeld.value && packId.value) {
-    void content.releaseEditLock(packId.value).catch(() => {
-      /* ignore */
-    });
-  }
 });
 </script>

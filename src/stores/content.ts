@@ -131,6 +131,21 @@ export interface EditLockSnapshot {
   expiresAt: string | null;
 }
 
+/**
+ * SC-PACK-115 / D3: staff Edit session spans cards editor ↔ task-set editor
+ * for the same pack — do not release lock on that navigation.
+ */
+export function isStaffEditSessionNavigation(
+  to: { name?: string | symbol | null; params?: Record<string, unknown> },
+  packId: string,
+): boolean {
+  if (!packId) return false;
+  const raw = to.params?.id;
+  const toId = typeof raw === 'string' ? raw : Array.isArray(raw) ? String(raw[0] ?? '') : '';
+  if (toId !== packId) return false;
+  return to.name === 'content-pack-edit' || to.name === 'content-pack-tasks';
+}
+
 export interface AddTaskSetState {
   pack: ContentPackSummary;
   liveCards: AnswerCard[];

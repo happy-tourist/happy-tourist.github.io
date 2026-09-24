@@ -104,7 +104,12 @@
                 :label="editingTaskId ? $t('content.saveTask') : $t('content.addTask')"
                 :loading="content.saving"
                 :disable="readOnly || !canSaveQuestion"
-              />
+              >
+                <!-- SC-PACK-119: tooltip instead of jumping caption -->
+                <q-tooltip v-if="!canSaveQuestion && taskForm.question.trim()">
+                  {{ $t('content.questionNeedsSlot') }}
+                </q-tooltip>
+              </q-btn>
               <q-btn
                 v-if="editingTaskId"
                 flat
@@ -161,7 +166,10 @@
           :loading="content.loading"
           :disable="readOnly || !canSubmit"
           @click="onSubmit"
-        />
+        >
+          <!-- SC-PACK-119: tooltip instead of jumping caption -->
+          <q-tooltip v-if="!canSubmit">{{ submitHint }}</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="canCancel"
           color="grey"
@@ -170,9 +178,6 @@
           :loading="content.loading"
           @click="onCancel"
         />
-      </div>
-      <div v-if="!canSubmit" class="text-caption text-muted q-mt-sm">
-        {{ submitHint }}
       </div>
     </template>
 

@@ -98,7 +98,8 @@ function myModerationLink(item: MyModerationItem) {
 /** pending → на модерации; needs_revision → нужна доработка. */
 function queueStatusLabel(status: string) {
   if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'needs_revision' || status === 'rejected') return t('content.statuses.needs_revision');
+  if (status === 'needs_revision' || status === 'rejected')
+    return t('content.statuses.needs_revision');
   return status;
 }
 

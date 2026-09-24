@@ -2,7 +2,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { client } from '@/boot/colyseus';
-import { useContentStore } from '@/stores/content';
+import { isStaffEditSessionNavigation, useContentStore } from '@/stores/content';
 
 /* eslint-disable @typescript-eslint/unbound-method */
 
@@ -177,5 +177,49 @@ describe('content store simplify ACL (SC-PACK-100…114)', () => {
       .then(() => {
         expect(content.error).toBe('edit_locked');
       });
+  });
+
+  it('SC-PACK-115: cards↔tasks navigation stays in staff Edit session', () => {
+    expect(
+      isStaffEditSessionNavigation(
+        { name: 'content-pack-tasks', params: { id: 'p1', taskSetId: 'ts1' } },
+        'p1',
+      ),
+    ).toBe(true);
+    expect(
+      isStaffEditSessionNavigation({ name: 'content-pack-edit', params: { id: 'p1' } }, 'p1'),
+    ).toBe(true);
+    expect(isStaffEditSessionNavigation({ name: 'content-pack', params: { id: 'p1' } }, 'p1')).toBe(
+      false,
+    );
+    expect(
+      isStaffEditSessionNavigation({ name: 'content-pack-edit', params: { id: 'other' } }, 'p1'),
+    ).toBe(false);
+  });
+
+  it('SC-PACK-115: releaseEditLock clears staffEditTarget; staff-save keeps it', async () => {
+    vi.mocked(client.http.post)
+      .mockResolvedValueOnce({
+        data: {
+          ok: true,
+          content: { title: 'T', description: '', answerCards: [], taskSets: [] },
+          moderationRequestCreated: false,
+          target: 'live',
+        },
+      } as never)
+      .mockResolvedValueOnce({ data: { ok: true } } as never);
+
+    const content = useContentStore();
+    await content.staffSavePack('p1', {
+      title: 'T',
+      description: '',
+      answerCards: [],
+      taskSets: [],
+    });
+    expect(content.staffEditTarget).toBe('live');
+
+    await content.releaseEditLock('p1');
+    expect(client.http.post).toHaveBeenCalledWith('/api/content/packs/p1/edit-unlock');
+    expect(content.staffEditTarget).toBeNull();
   });
 });
