@@ -53,18 +53,58 @@
       </q-card>
     </q-dialog>
 
-    <!-- Peek under task tile — Correct / Wrong (SC-BOARD-08/09); owner-only via openPeek. -->
+    <!-- Shared peek modal — question, slots, pack answers (SC-BOARD-43/44/46). -->
     <q-dialog :model-value="Boolean(game.openPeek)" persistent>
-      <q-card style="min-width: 280px">
+      <q-card class="peek-modal-card" style="min-width: min(420px, 92vw); max-width: 520px">
         <q-card-section>
-          <div class="text-body1 text-center">
-            {{ $t('game.peekModal', { n: game.openPeek?.reward ?? 0 }) }}
+          <div class="text-subtitle2 text-muted text-center q-mb-sm">
+            {{ $t('game.peekDifficulty', { n: game.openPeek?.difficulty ?? 0 }) }}
+          </div>
+          <div class="text-body1 text-center q-mb-md">
+            {{ game.openPeek?.question || $t('game.peekQuestionFallback') }}
+          </div>
+          <div class="peek-slots row q-gutter-sm justify-center q-mb-md">
+            <div
+              v-for="(placement, slotIndex) in peekSlotPlacements"
+              :key="`peek-slot-${slotIndex}`"
+              class="peek-slot"
+              :class="{
+                'peek-slot--filled': Boolean(placement),
+                'peek-slot--interactive': isPeekOwner,
+              }"
+              @click="onPeekSlotClick(slotIndex)"
+            >
+              <span v-if="placement" class="peek-slot__label">{{
+                answerCardLabel(placement)
+              }}</span>
+              <span v-else class="peek-slot__empty">{{ $t('game.peekSlotEmpty') }}</span>
+            </div>
+          </div>
+          <div class="peek-answers row q-gutter-sm justify-center">
+            <q-chip
+              v-for="card in game.answerCards"
+              :key="`peek-ans-${card.id}`"
+              :clickable="isPeekOwner"
+              :outline="!isAnswerPlaced(card.id)"
+              :color="isAnswerPlaced(card.id) ? 'primary' : undefined"
+              :disable="!isPeekOwner || isAnswerPlaced(card.id)"
+              @click="onPeekAnswerClick(card.id)"
+            >
+              {{ card.content || card.id }}
+            </q-chip>
           </div>
         </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat :label="$t('game.peekWrong')" @click="answerPeek(false)" />
-          <q-btn color="primary" :label="$t('game.peekCorrect')" @click="answerPeek(true)" />
+        <q-card-actions v-if="isPeekOwner" align="right">
+          <q-btn
+            color="primary"
+            :label="$t('game.peekSubmit')"
+            :disable="!canSubmitPeek"
+            @click="submitPeek"
+          />
         </q-card-actions>
+        <q-card-section v-else class="text-caption text-center text-muted q-pt-none">
+          {{ $t('game.peekSpectatorHint') }}
+        </q-card-section>
       </q-card>
     </q-dialog>
 
@@ -183,14 +223,17 @@
               'tile--selected': isTileSelected(tile),
               'tile--target': isTileTarget(tile),
               'tile--removed': tile.removed,
+              'tile--flipped': Boolean(tile.difficulty),
             },
           ]"
           :style="tile.style"
           @click="onTileClick(tile)"
-        />
+        >
+          <span v-if="tile.difficulty" class="tile-difficulty">{{ tile.difficulty }}</span>
+        </div>
         <img
           v-for="piece in boardPieces"
-          :key="`piece-${piece.sessionId}-${piece.side}`"
+          :key="`piece-${piece.sessionId}-${piece.pieceId}`"
           class="piece"
           :class="{
             'piece--own': isOwnPiece(piece) && !piece.disappearing && !piece.trapped,
@@ -246,19 +289,19 @@
         <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
         <button
           v-for="rescue in rescueAffordances"
-          :key="`rescue-${rescue.side}`"
+          :key="`rescue-${rescue.pieceId}`"
           type="button"
           class="rescue-affordance"
           :aria-label="$t('game.rescueAffordance')"
           :style="rescueAffordanceStyle(rescue)"
-          @click.stop="onRescueClick(rescue.side)"
+          @click.stop="onRescueClick(rescue.pieceId)"
         >
           <q-icon name="lock_open" size="18px" />
         </button>
         <!-- Push over pushable free neighbors of selected pusher (SC-MOVE-74/75). -->
         <button
           v-for="push in pushAffordances"
-          :key="`push-${push.targetSessionId}-${push.targetSide}`"
+          :key="`push-${push.targetSessionId}-${push.targetPieceId}`"
           type="button"
           class="push-affordance"
           :aria-label="$t('game.pushAffordance')"
@@ -276,7 +319,7 @@
       <div class="game-hud__scroll">
         <div class="game-hud__bar game-hud__bar--seated">
           <template v-for="item in bottomHudItems" :key="item.key">
-            <!-- Four strip slots in HUD: row N,E,W,S / narrow 2×2 (SC-PIECE-09/32; D4).
+            <!-- touristsPerPlayer strip slots by piece id (SC-PIECE-09/52; D3).
                  No compact chip / q-menu (SC-PIECE-29/30 removed). -->
             <div v-if="item.kind === 'strip' && mySeat" class="my-tourist-strip">
               <div
@@ -284,37 +327,37 @@
                 :class="{ 'my-tourist-slots--interactive': isInteractive }"
               >
                 <div
-                  v-for="side in STRIP_SIDES"
-                  :key="`strip-${side}`"
+                  v-for="pieceId in stripPieceIds"
+                  :key="`strip-${pieceId}`"
                   class="my-tourist-slot"
                   :class="{
-                    'my-tourist-slot--finished': isStripSlotFinished(side),
-                    'my-tourist-slot--dimmed': isStripSlotFinished(side) && !canReturn(side),
-                    'my-tourist-slot--trapped': isStripSlotTrapped(side),
+                    'my-tourist-slot--finished': isStripSlotFinished(pieceId),
+                    'my-tourist-slot--dimmed': isStripSlotFinished(pieceId) && !canReturn(pieceId),
+                    'my-tourist-slot--trapped': isStripSlotTrapped(pieceId),
                     'my-tourist-slot--selected':
-                      selectedSide === side && !isStripSlotFinished(side),
-                    'my-tourist-slot--returning': returningSide === side,
+                      selectedPieceId === pieceId && !isStripSlotFinished(pieceId),
+                    'my-tourist-slot--returning': returningPieceId === pieceId,
                   }"
-                  @click="onStripSlotClick(side)"
+                  @click="onStripSlotClick(pieceId)"
                 >
                   <img
                     class="my-tourist-img"
                     :src="touristSrc(mySeat.touristId)"
-                    :alt="`tourist ${side}`"
+                    :alt="`tourist ${pieceId}`"
                   />
                   <img
-                    v-if="chromeGrillePhase(side)"
+                    v-if="chromeGrillePhase(pieceId)"
                     class="my-tourist-chrome-grille"
                     :class="{
-                      'my-tourist-chrome-grille--drop': chromeGrillePhase(side) === 'drop',
-                      'my-tourist-chrome-grille--rise': chromeGrillePhase(side) === 'rise',
+                      'my-tourist-chrome-grille--drop': chromeGrillePhase(pieceId) === 'drop',
+                      'my-tourist-chrome-grille--rise': chromeGrillePhase(pieceId) === 'rise',
                     }"
                     :src="grilleSrc"
                     :style="chromeGrilleStyle"
                     alt=""
                   />
                   <q-icon
-                    v-if="isStripSlotFinished(side)"
+                    v-if="isStripSlotFinished(pieceId)"
                     class="my-tourist-finish-icon"
                     name="flag"
                     size="18px"
@@ -322,11 +365,11 @@
                   />
                   <!-- Green return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
                   <button
-                    v-if="canReturn(side)"
+                    v-if="canReturn(pieceId)"
                     type="button"
                     class="return-affordance"
                     :aria-label="$t('game.returnAffordance')"
-                    @click.stop="onReturnAffordanceClick(side)"
+                    @click.stop="onReturnAffordanceClick(pieceId)"
                   >
                     <q-icon name="undo" size="18px" />
                   </button>
@@ -411,6 +454,18 @@
                   @click.stop="toggleSayPicker"
                 >
                   <q-icon name="chat_bubble_outline" size="18px" />
+                </button>
+
+                <!-- Focus nearest actionable — between say and end-turn (SC-PRESENCE-30/31/32). -->
+                <button
+                  v-if="canShowFocusControl"
+                  type="button"
+                  class="focus-affordance"
+                  data-test-id="focus-actionable"
+                  :aria-label="$t('game.focusActionable')"
+                  @click.stop="onFocusActionableClick"
+                >
+                  <q-icon name="center_focus_strong" size="18px" />
                 </button>
 
                 <!-- End-turn right-center own avatar — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
@@ -503,23 +558,16 @@ import {
   isFinishedPiece,
   turnRemainingSeconds,
 } from '@/stores/game';
-
-/** 10×10 sparse layout: `.` hole, `1` start, `*` task, `7` center (solid 2×2). */
-const LAYOUT = [
-  '...1111...',
-  '...****...',
-  '..******..',
-  '1********1',
-  '1***77***1',
-  '1***77***1',
-  '1********1',
-  '..******..',
-  '...****...',
-  '...1111...',
-] as const;
-
-/** Strip slot order: row N,E,W,S; 2×2 grid N,E / W,S (SC-PIECE-09/32). */
-const STRIP_SIDES = ['N', 'E', 'W', 'S'] as const;
+import {
+  buildBoardTiles as buildTilesFromGrid,
+  parseBoardGeometry,
+  type BoardTile as GeoBoardTile,
+} from '@/lib/boardGeometry';
+import {
+  BOARD_CENTER,
+  pickNearestActionablePieceId,
+  type ActionableCandidate,
+} from '@/lib/focusActionable';
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -542,13 +590,6 @@ const CATAPULT_BROKEN_HOLD_MS = 300;
 /** Broken vanish fade after second hold. */
 const CATAPULT_BROKEN_VANISH_MS = 200;
 
-const CENTER_CELLS = [
-  { row: 4, col: 4 },
-  { row: 4, col: 5 },
-  { row: 5, col: 4 },
-  { row: 5, col: 5 },
-] as const;
-
 const TOURIST_SRC: Record<number, string> = {
   1: tourist1,
   2: tourist2,
@@ -566,17 +607,7 @@ const PRESENCE_INNER_PX = 84;
 /** Whitelist preset ids for picker — display copy via i18n `game.say.*` (ready via sendReady). */
 const SAY_PRESET_IDS: readonly SayPresetId[] = ['hello', 'luck'];
 
-type TileKind = 'start' | 'task' | 'center';
-
-interface BoardTile {
-  kind: TileKind;
-  /** Top-left cell for this tile (center covers 2×2 from here). */
-  row: number;
-  col: number;
-  style: Record<string, string>;
-  /** Removed task cell — visual hole; not landable; piece may stand (SC-BOARD-11/12/15). */
-  removed?: boolean;
-}
+type BoardTile = GeoBoardTile;
 
 interface BudgetFall {
   id: number;
@@ -586,7 +617,7 @@ interface BudgetFall {
 interface BoardPiece {
   sessionId: string;
   touristId: number;
-  side: string;
+  pieceId: string;
   row: number;
   col: number;
   /** Synced trap flag — visible under grille (SC-PIECE-27). */
@@ -639,16 +670,16 @@ interface CatapultQueueItem {
 }
 
 interface RescueAffordance {
-  side: string;
+  pieceId: string;
   row: number;
   col: number;
 }
 
 /** Push affordance over a legal target of the selected pusher (SC-MOVE-74). */
 interface PushAffordance {
-  pusherSide: string;
+  pusherPieceId: string;
   targetSessionId: string;
-  targetSide: string;
+  targetPieceId: string;
   /** Far-side destination for the target. */
   row: number;
   col: number;
@@ -683,12 +714,11 @@ function cellKey(row: number, col: number): string {
 }
 
 function isPlayableCell(row: number, col: number): boolean {
-  const ch = LAYOUT[row]?.[col];
-  return ch === '1' || ch === '*' || ch === '7';
+  return boardGeometry.value.isPlayable(row, col);
 }
 
 function isCenterCell(row: number, col: number): boolean {
-  return CENTER_CELLS.some((c) => c.row === row && c.col === col);
+  return boardGeometry.value.isCenter(row, col);
 }
 
 function chebyshevDistance(a: Cell, b: Cell): number {
@@ -703,11 +733,52 @@ function farSideCell(pusher: Cell, target: Cell): Cell {
   };
 }
 
-/** Nearest of four center cells to `to` (Chebyshev; tie lower row, then col — SC-FINISH-15). */
+function parseCellKey(key: string): Cell | null {
+  const parts = key.split(',');
+  if (parts.length !== 2) {
+    return null;
+  }
+  const row = Number(parts[0]);
+  const col = Number(parts[1]);
+  if (!Number.isInteger(row) || !Number.isInteger(col)) {
+    return null;
+  }
+  return { row, col };
+}
+
+function touristSrc(touristId: number): string {
+  return TOURIST_SRC[touristId] ?? tourist1;
+}
+
+const { t } = useI18n();
+const game = useGameStore();
+const {
+  mySeat,
+  isMyTurn,
+  canSendReady,
+  canSendEndTurn,
+  isPlaying,
+  isSeated,
+  isMySeatFinished,
+  isMySeatTimeExpired,
+  myFinishedStripPieceIds,
+  budgetsInfinite,
+  isPeekOwner,
+} = storeToRefs(game);
+
+/** Synced map grid → geometry (SC-BOARD-01/40); fallback until first sync. */
+const boardGeometry = computed(() => parseBoardGeometry(game.grid));
+const CENTER_CELLS = computed(() => boardGeometry.value.centerCells);
+
+/** Nearest of center cells to `to` (Chebyshev; tie lower row, then col — SC-FINISH-15). */
 function nearestCenterCell(to: Cell): Cell {
-  let best: Cell = { row: CENTER_CELLS[0].row, col: CENTER_CELLS[0].col };
+  const centers = CENTER_CELLS.value;
+  if (centers.length === 0) {
+    return { row: 4, col: 4 };
+  }
+  let best: Cell = { row: centers[0]!.row, col: centers[0]!.col };
   let bestDist = Infinity;
-  for (const c of CENTER_CELLS) {
+  for (const c of centers) {
     const d = chebyshevDistance(c, to);
     if (
       d < bestDist ||
@@ -727,7 +798,7 @@ function nearestCenterCell(to: Cell): Cell {
 function nearestLegalCenterCell(from: Cell, legalKeys: Set<string>): Cell | null {
   let best: Cell | null = null;
   let bestDist = Infinity;
-  for (const c of CENTER_CELLS) {
+  for (const c of CENTER_CELLS.value) {
     if (!legalKeys.has(cellKey(c.row, c.col))) {
       continue;
     }
@@ -745,13 +816,14 @@ function nearestLegalCenterCell(from: Cell, legalKeys: Set<string>): Cell | null
 }
 
 /**
- * Ring around the central 2×2 (incl. diagonal corners) — mirrors server
- * CENTER_RING_CELLS (SC-MOVE-57/58 / SC-FINISH-13).
+ * Ring around finish cells (incl. diagonal) — mirrors server center ring
+ * (SC-MOVE-57/58 / SC-FINISH-13).
  */
-function buildCenterRingCells(): Cell[] {
-  const centerKeys = new Set(CENTER_CELLS.map((c) => cellKey(c.row, c.col)));
+const CENTER_RING_CELLS = computed((): Cell[] => {
+  const centers = CENTER_CELLS.value;
+  const centerKeys = new Set(centers.map((c) => cellKey(c.row, c.col)));
   const ring = new Map<string, Cell>();
-  for (const center of CENTER_CELLS) {
+  for (const center of centers) {
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) {
@@ -768,92 +840,14 @@ function buildCenterRingCells(): Cell[] {
     }
   }
   return [...ring.values()];
-}
-
-const CENTER_RING_CELLS = buildCenterRingCells();
-
-function parseCellKey(key: string): Cell | null {
-  const parts = key.split(',');
-  if (parts.length !== 2) {
-    return null;
-  }
-  const row = Number(parts[0]);
-  const col = Number(parts[1]);
-  if (!Number.isInteger(row) || !Number.isInteger(col)) {
-    return null;
-  }
-  return { row, col };
-}
-
-function buildBoardTiles(): BoardTile[] {
-  const tiles: BoardTile[] = [];
-  let centerPlaced = false;
-
-  for (let row = 0; row < LAYOUT.length; row++) {
-    const line = LAYOUT[row]!;
-    for (let col = 0; col < line.length; col++) {
-      const ch = line[col]!;
-      if (ch === '.') {
-        continue;
-      }
-      if (ch === '7') {
-        if (centerPlaced) {
-          continue;
-        }
-        centerPlaced = true;
-        tiles.push({
-          kind: 'center',
-          row,
-          col,
-          style: {
-            gridColumn: `${col + 1} / span 2`,
-            gridRow: `${row + 1} / span 2`,
-          },
-        });
-        continue;
-      }
-      tiles.push({
-        kind: ch === '1' ? 'start' : 'task',
-        row,
-        col,
-        style: {
-          gridColumn: String(col + 1),
-          gridRow: String(row + 1),
-        },
-      });
-    }
-  }
-
-  return tiles;
-}
-
-function touristSrc(touristId: number): string {
-  return TOURIST_SRC[touristId] ?? tourist1;
-}
-
-const LAYOUT_TILES = buildBoardTiles();
-
-const { t } = useI18n();
-const game = useGameStore();
-const {
-  mySeat,
-  isMyTurn,
-  canSendReady,
-  canSendEndTurn,
-  isPlaying,
-  isSeated,
-  isMySeatFinished,
-  isMySeatTimeExpired,
-  myFinishedStripSides,
-  budgetsInfinite,
-} = storeToRefs(game);
+});
 const route = useRoute('game');
 const router = useRouter();
 
 /** Local selection — only meaningful on own turn (D5). */
-const selectedSide = ref<string | null>(null);
+const selectedPieceId = ref<string | null>(null);
 /** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
-const returningSide = ref<string | null>(null);
+const returningPieceId = ref<string | null>(null);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /**
@@ -897,7 +891,7 @@ const grilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
  */
 const pendingGrilleDropKeys = ref(new Set<string>());
 /** Strip-slot grille phases keyed by side (SC-PIECE-31) — same timing as board. */
-const chromeGrilleBySide = ref<Partial<Record<string, GrillePhase>>>({});
+const chromeGrilleByPieceId = ref<Partial<Record<string, GrillePhase>>>({});
 const chromeGrilleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const chromeGrilleStyle = { '--grille-anim-ms': `${GRILLE_ANIM_MS}ms` };
 /** Catapult overlays — only the active queue item (SC-BOARD-23…26). */
@@ -925,7 +919,7 @@ const catapultDelayTimers = new Set<ReturnType<typeof setTimeout>>();
 /** Temporary rescuer slide toward trapped cell (D5 — server coords unchanged). */
 const rescueAnimOverride = ref<{
   sessionId: string;
-  side: string;
+  pieceId: string;
   row: number;
   col: number;
 } | null>(null);
@@ -959,29 +953,48 @@ const removedTaskKeySet = computed(() => new Set(game.removedTaskKeys));
 /** Board tiles with removed `*` as transparent holes (still in DOM for targets). */
 const boardTiles = computed((): BoardTile[] => {
   const removed = removedTaskKeySet.value;
-  return LAYOUT_TILES.map((tile) => {
+  const flippedByKey = new Map(game.flippedCells.map((c) => [c.key, c.difficulty] as const));
+  return buildTilesFromGrid(game.grid).map((tile) => {
     if (tile.kind !== 'task') {
       return tile;
     }
     const key = cellKey(tile.row, tile.col);
-    return removed.has(key) ? { ...tile, removed: true } : tile;
+    if (removed.has(key)) {
+      return { ...tile, removed: true };
+    }
+    const difficulty = flippedByKey.get(key);
+    return difficulty ? { ...tile, difficulty } : tile;
   });
 });
 
-function pieceKey(sessionId: string, side: string): string {
-  return `${sessionId}:${side}`;
+function pieceKey(sessionId: string, pieceId: string): string {
+  return `${sessionId}:${pieceId}`;
 }
 
 function isPresentTaskCell(row: number, col: number): boolean {
-  return LAYOUT[row]?.[col] === '*' && !removedTaskKeySet.value.has(cellKey(row, col));
+  return boardGeometry.value.isTask(row, col) && !removedTaskKeySet.value.has(cellKey(row, col));
 }
 
-/** Landing targets: playable LAYOUT cell that is not a removed-task hole (SC-BOARD-15). */
+/** Landing targets: playable grid cell that is not a removed-task hole (SC-BOARD-15). */
 function isLandableCell(row: number, col: number): boolean {
   if (!isPlayableCell(row, col)) {
     return false;
   }
   return !removedTaskKeySet.value.has(cellKey(row, col));
+}
+
+/** Strip slots = own pieces ordered by piece id (SC-PIECE-09/52). */
+const stripPieceIds = computed((): string[] => {
+  if (!mySeat.value) {
+    return [];
+  }
+  return mySeat.value.pieces.map((p) => p.pieceId);
+});
+
+const flippedCellKeySet = computed(() => new Set(game.flippedCells.map((c) => c.key)));
+
+function isFlippedTaskCell(row: number, col: number): boolean {
+  return flippedCellKeySet.value.has(cellKey(row, col));
 }
 
 /** Steps always numeric; peeks ∞ only in solo (SC-PRESENCE-16). */
@@ -1024,12 +1037,12 @@ function pushBudgetFall(target: 'steps' | 'peeks', delta: number) {
   );
 }
 
-function isStripSlotFinished(side: string): boolean {
-  return myFinishedStripSides.value.includes(side);
+function isStripSlotFinished(pieceId: string): boolean {
+  return myFinishedStripPieceIds.value.includes(pieceId);
 }
 
-function isStripSlotTrapped(side: string): boolean {
-  const piece = mySeat.value?.pieces.find((p) => p.side === side);
+function isStripSlotTrapped(pieceId: string): boolean {
+  const piece = mySeat.value?.pieces.find((p) => p.pieceId === pieceId);
   return Boolean(piece && piece.trapped && !piece.finished);
 }
 
@@ -1057,7 +1070,7 @@ const boardPieces = computed((): BoardPiece[] => {
       if (!piece.finished) {
         continue;
       }
-      const key = pieceKey(seat.sessionId, piece.side);
+      const key = pieceKey(seat.sessionId, piece.pieceId);
       // Keep visible while catapult owns presentation even if finish synced late.
       if (!fading.has(key) && !deferredFinish.has(key) && !pinned.has(key) && !visual.has(key)) {
         continue;
@@ -1065,7 +1078,7 @@ const boardPieces = computed((): BoardPiece[] => {
       out.push({
         sessionId: seat.sessionId,
         touristId: seat.touristId,
-        side: piece.side,
+        pieceId: piece.pieceId,
         row: piece.row,
         col: piece.col,
         // Fade only after deferred catapult vanish releases finish travel.
@@ -1174,7 +1187,7 @@ function buildOccupancy(exclude?: Cell): Set<string> {
 
 /** Legal one-step destinations for the selected own unfinished free piece (D5 / SC-MOVE-12/46). */
 const legalTargets = computed((): Cell[] => {
-  if (!isInteractive.value || !selectedSide.value || !mySeat.value || returningSide.value) {
+  if (!isInteractive.value || !selectedPieceId.value || !mySeat.value || returningPieceId.value) {
     return [];
   }
   // Steps always finite (incl. solo): 0 steps → keep selection for peek eye, no move hints.
@@ -1182,7 +1195,7 @@ const legalTargets = computed((): Cell[] => {
     return [];
   }
   const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
+    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
   );
   if (!piece) {
     return [];
@@ -1216,14 +1229,14 @@ const legalTargetKeys = computed(
 
 /** Legal center-ring cells for return-from-finish (SC-MOVE-57/58 / SC-FINISH-13). */
 const legalReturnTargets = computed((): Cell[] => {
-  if (!isInteractive.value || !returningSide.value || !mySeat.value) {
+  if (!isInteractive.value || !returningPieceId.value || !mySeat.value) {
     return [];
   }
   if (game.steps <= 0 || mySeat.value.finishPlace !== 0) {
     return [];
   }
   const occupied = buildOccupancy();
-  return CENTER_RING_CELLS.filter(
+  return CENTER_RING_CELLS.value.filter(
     (c) => isLandableCell(c.row, c.col) && !occupied.has(cellKey(c.row, c.col)),
   );
 });
@@ -1233,11 +1246,11 @@ const legalReturnTargetKeys = computed(
 );
 
 const selectedCell = computed((): Cell | null => {
-  if (!selectedSide.value || !mySeat.value) {
+  if (!selectedPieceId.value || !mySeat.value) {
     return null;
   }
   const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
+    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
   );
   return piece ? { row: piece.row, col: piece.col } : null;
 });
@@ -1249,22 +1262,78 @@ const selectedCell = computed((): Cell | null => {
 const canShowPeekAffordance = computed(() => {
   if (
     !isInteractive.value ||
-    !selectedSide.value ||
+    !selectedPieceId.value ||
     !mySeat.value ||
     game.openPeek ||
-    returningSide.value
+    returningPieceId.value
   ) {
     return false;
   }
-  // Multi peek while peeks remain; solo peeks∞ — no one-peek/turn gate (SC-BOARD-14).
-  if (!budgetsInfinite.value && game.peeks <= 0) {
+  const piece = mySeat.value.pieces.find(
+    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
+  );
+  if (!piece || !isPresentTaskCell(piece.row, piece.col)) {
     return false;
   }
-  const piece = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
-  );
-  return Boolean(piece && isPresentTaskCell(piece.row, piece.col));
+  // Flipped peek free at peeks=0; fresh needs peeks or solo ∞ (SC-BOARD-10/45).
+  if (isFlippedTaskCell(piece.row, piece.col)) {
+    return true;
+  }
+  return budgetsInfinite.value || game.peeks > 0;
 });
+
+const peekSlotPlacements = computed((): string[] => game.openPeek?.placements ?? []);
+
+const canSubmitPeek = computed(() => {
+  if (!isPeekOwner.value || !game.openPeek) {
+    return false;
+  }
+  return (
+    game.openPeek.placements.length > 0 && game.openPeek.placements.every((id) => id.length > 0)
+  );
+});
+
+function answerCardLabel(answerCardId: string): string {
+  const card = game.answerCards.find((c) => c.id === answerCardId);
+  return card?.content || answerCardId;
+}
+
+function isAnswerPlaced(answerCardId: string): boolean {
+  return peekSlotPlacements.value.includes(answerCardId);
+}
+
+function firstEmptyPeekSlot(): number {
+  return peekSlotPlacements.value.findIndex((id) => !id);
+}
+
+function onPeekAnswerClick(answerCardId: string) {
+  if (!isPeekOwner.value || isAnswerPlaced(answerCardId)) {
+    return;
+  }
+  const slotIndex = firstEmptyPeekSlot();
+  if (slotIndex < 0) {
+    return;
+  }
+  game.sendPeekPlace(slotIndex, answerCardId);
+}
+
+function onPeekSlotClick(slotIndex: number) {
+  if (!isPeekOwner.value) {
+    return;
+  }
+  const current = peekSlotPlacements.value[slotIndex];
+  if (!current) {
+    return;
+  }
+  game.sendPeekPlace(slotIndex, '');
+}
+
+function submitPeek() {
+  if (!canSubmitPeek.value) {
+    return;
+  }
+  game.sendPeekSubmit();
+}
 
 const peekAffordanceStyle = computed((): Record<string, string> => {
   const cell = selectedCell.value;
@@ -1283,7 +1352,7 @@ function hasAdjacentFreeRescuer(trapped: GamePiece): boolean {
   }
   const target: Cell = { row: trapped.row, col: trapped.col };
   for (const piece of mySeat.value.pieces) {
-    if (piece.side === trapped.side || piece.finished || piece.trapped) {
+    if (piece.pieceId === trapped.pieceId || piece.finished || piece.trapped) {
       continue;
     }
     if (chebyshevDistance({ row: piece.row, col: piece.col }, target) === 1) {
@@ -1299,7 +1368,7 @@ function findAdjacentFreeRescuer(trapped: GamePiece): GamePiece | null {
   }
   const target: Cell = { row: trapped.row, col: trapped.col };
   for (const piece of mySeat.value.pieces) {
-    if (piece.side === trapped.side || piece.finished || piece.trapped) {
+    if (piece.pieceId === trapped.pieceId || piece.finished || piece.trapped) {
       continue;
     }
     if (chebyshevDistance({ row: piece.row, col: piece.col }, target) === 1) {
@@ -1311,7 +1380,7 @@ function findAdjacentFreeRescuer(trapped: GamePiece): GamePiece | null {
 
 /** Rescue affordances over own trapped pieces with adj free + steps (SC-MOVE-54 UX). */
 const rescueAffordances = computed((): RescueAffordance[] => {
-  if (!isInteractive.value || !mySeat.value || game.steps <= 0 || returningSide.value) {
+  if (!isInteractive.value || !mySeat.value || game.steps <= 0 || returningPieceId.value) {
     return [];
   }
   const out: RescueAffordance[] = [];
@@ -1322,7 +1391,7 @@ const rescueAffordances = computed((): RescueAffordance[] => {
     if (!hasAdjacentFreeRescuer(piece)) {
       continue;
     }
-    out.push({ side: piece.side, row: piece.row, col: piece.col });
+    out.push({ pieceId: piece.pieceId, row: piece.row, col: piece.col });
   }
   return out;
 });
@@ -1342,14 +1411,14 @@ const pushAffordances = computed((): PushAffordance[] => {
   if (
     !isInteractive.value ||
     !mySeat.value ||
-    !selectedSide.value ||
+    !selectedPieceId.value ||
     game.steps <= 0 ||
-    returningSide.value
+    returningPieceId.value
   ) {
     return [];
   }
   const pusher = mySeat.value.pieces.find(
-    (p) => p.side === selectedSide.value && !isFinishedPiece(p) && !p.trapped,
+    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
   );
   if (!pusher) {
     return [];
@@ -1377,9 +1446,9 @@ const pushAffordances = computed((): PushAffordance[] => {
       continue;
     }
     out.push({
-      pusherSide: pusher.side,
+      pusherPieceId: pusher.pieceId,
       targetSessionId: target.sessionId,
-      targetSide: target.side,
+      targetPieceId: target.pieceId,
       row: dest.row,
       col: dest.col,
       targetRow: target.row,
@@ -1401,19 +1470,179 @@ function listLegalReturnCellsHint(): Cell[] {
     return [];
   }
   const occupied = buildOccupancy();
-  return CENTER_RING_CELLS.filter(
+  return CENTER_RING_CELLS.value.filter(
     (c) => isLandableCell(c.row, c.col) && !occupied.has(cellKey(c.row, c.col)),
   );
 }
 
-function canReturn(side: string): boolean {
+function canReturn(pieceId: string): boolean {
   if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
     return false;
   }
-  if (mySeat.value.finishPlace !== 0 || !isStripSlotFinished(side)) {
+  if (mySeat.value.finishPlace !== 0 || !isStripSlotFinished(pieceId)) {
     return false;
   }
   return listLegalReturnCellsHint().length > 0;
+}
+
+/** Legal one-step destinations for a specific free unfinished piece (hint only). */
+function legalMoveCellsForPiece(piece: GamePiece): Cell[] {
+  if (game.steps <= 0 || piece.finished || piece.trapped) {
+    return [];
+  }
+  const from: Cell = { row: piece.row, col: piece.col };
+  const occupied = buildOccupancy(from);
+  const targets: Cell[] = [];
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) {
+        continue;
+      }
+      const row = from.row + dr;
+      const col = from.col + dc;
+      if (!isLandableCell(row, col)) {
+        continue;
+      }
+      if (occupied.has(cellKey(row, col))) {
+        continue;
+      }
+      targets.push({ row, col });
+    }
+  }
+  return targets;
+}
+
+function pieceCanPeek(piece: GamePiece): boolean {
+  if (piece.finished || piece.trapped || game.openPeek) {
+    return false;
+  }
+  if (!isPresentTaskCell(piece.row, piece.col)) {
+    return false;
+  }
+  if (isFlippedTaskCell(piece.row, piece.col)) {
+    return true;
+  }
+  return budgetsInfinite.value || game.peeks > 0;
+}
+
+function pieceCanRescue(piece: GamePiece): boolean {
+  if (game.steps <= 0 || piece.finished || piece.trapped || !mySeat.value) {
+    return false;
+  }
+  for (const other of mySeat.value.pieces) {
+    if (!other.trapped || other.finished || other.pieceId === piece.pieceId) {
+      continue;
+    }
+    if (
+      chebyshevDistance({ row: piece.row, col: piece.col }, { row: other.row, col: other.col }) ===
+      1
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function pieceCanPush(piece: GamePiece): boolean {
+  if (game.steps <= 0 || piece.finished || piece.trapped) {
+    return false;
+  }
+  const pusherCell: Cell = { row: piece.row, col: piece.col };
+  for (const target of game.unfinishedBoardPieces) {
+    if (target.trapped) {
+      continue;
+    }
+    if (target.row === piece.row && target.col === piece.col) {
+      continue;
+    }
+    const targetCell: Cell = { row: target.row, col: target.col };
+    if (chebyshevDistance(pusherCell, targetCell) !== 1) {
+      continue;
+    }
+    const dest = farSideCell(pusherCell, targetCell);
+    if (!isLandableCell(dest.row, dest.col)) {
+      continue;
+    }
+    const occupied = buildOccupancy(targetCell);
+    if (occupied.has(cellKey(dest.row, dest.col))) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Own unfinished free piece that can move / peek / rescue / push, or finished
+ * that can return (SC-PRESENCE-30/31/32).
+ */
+function isActionableOwnPiece(piece: GamePiece, index: number): ActionableCandidate | null {
+  if (piece.finished) {
+    if (canReturn(piece.pieceId)) {
+      return { pieceId: piece.pieceId, row: piece.row, col: piece.col, index };
+    }
+    return null;
+  }
+  if (piece.trapped) {
+    return null;
+  }
+  if (
+    legalMoveCellsForPiece(piece).length > 0 ||
+    pieceCanPeek(piece) ||
+    pieceCanRescue(piece) ||
+    pieceCanPush(piece)
+  ) {
+    return { pieceId: piece.pieceId, row: piece.row, col: piece.col, index };
+  }
+  return null;
+}
+
+const actionableCandidates = computed((): ActionableCandidate[] => {
+  if (!isInteractive.value || !mySeat.value) {
+    return [];
+  }
+  const out: ActionableCandidate[] = [];
+  mySeat.value.pieces.forEach((piece, index) => {
+    const candidate = isActionableOwnPiece(piece, index);
+    if (candidate) {
+      out.push(candidate);
+    }
+  });
+  return out;
+});
+
+/** Circular focus between say and end-turn when ≥1 actionable (SC-PRESENCE-30/32). */
+const canShowFocusControl = computed(
+  () => isInteractive.value && actionableCandidates.value.length > 0,
+);
+
+function focusOriginCell(): { row: number; col: number } {
+  if (selectedPieceId.value && mySeat.value) {
+    const sel = mySeat.value.pieces.find((p) => p.pieceId === selectedPieceId.value);
+    if (sel && !sel.finished) {
+      return { row: sel.row, col: sel.col };
+    }
+  }
+  return BOARD_CENTER;
+}
+
+function onFocusActionableClick() {
+  if (!canShowFocusControl.value || !mySeat.value) {
+    return;
+  }
+  const pieceId = pickNearestActionablePieceId(actionableCandidates.value, focusOriginCell());
+  if (!pieceId) {
+    return;
+  }
+  const piece = mySeat.value.pieces.find((p) => p.pieceId === pieceId);
+  if (!piece) {
+    return;
+  }
+  if (piece.finished) {
+    onReturnAffordanceClick(pieceId);
+    return;
+  }
+  selectOwnPiece(pieceId);
 }
 
 function grilleStyle(grille: GrilleOverlay): Record<string, string> {
@@ -1432,13 +1661,13 @@ function catapultStyle(catapult: CatapultOverlay): Record<string, string> {
   };
 }
 
-function chromeGrillePhase(side: string): GrillePhase | undefined {
-  return chromeGrilleBySide.value[side];
+function chromeGrillePhase(pieceId: string): GrillePhase | undefined {
+  return chromeGrilleByPieceId.value[pieceId];
 }
 
 function isTileSelected(tile: BoardTile): boolean {
   const sel = selectedCell.value;
-  if (!sel || !isInteractive.value || returningSide.value) {
+  if (!sel || !isInteractive.value || returningPieceId.value) {
     return false;
   }
   if (tile.kind === 'center') {
@@ -1452,7 +1681,7 @@ function isTileTarget(tile: BoardTile): boolean {
     return false;
   }
   // Return-mode: same red outline as ordinary move targets (SC-FINISH-13 / SC-MOVE-12).
-  if (returningSide.value) {
+  if (returningPieceId.value) {
     if (legalReturnTargetKeys.value.size === 0) {
       return false;
     }
@@ -1469,7 +1698,7 @@ function isTileTarget(tile: BoardTile): boolean {
     if (selectedCell.value && isCenterCell(selectedCell.value.row, selectedCell.value.col)) {
       return false;
     }
-    return CENTER_CELLS.some((c) => legalTargetKeys.value.has(cellKey(c.row, c.col)));
+    return CENTER_CELLS.value.some((c) => legalTargetKeys.value.has(cellKey(c.row, c.col)));
   }
   return legalTargetKeys.value.has(cellKey(tile.row, tile.col));
 }
@@ -1479,11 +1708,11 @@ function isOwnPiece(piece: BoardPiece): boolean {
 }
 
 function suppressPieceTransition(piece: BoardPiece): boolean {
-  return suppressPieceTransitionKeys.value.has(pieceKey(piece.sessionId, piece.side));
+  return suppressPieceTransitionKeys.value.has(pieceKey(piece.sessionId, piece.pieceId));
 }
 
 function pieceStyle(piece: BoardPiece): Record<string, string> {
-  const key = pieceKey(piece.sessionId, piece.side);
+  const key = pieceKey(piece.sessionId, piece.pieceId);
   const returnFrom = returnAnimFromByKey.value.get(key);
   if (returnFrom) {
     return {
@@ -1513,7 +1742,7 @@ function pieceStyle(piece: BoardPiece): Record<string, string> {
     };
   }
   const override = rescueAnimOverride.value;
-  if (override && override.sessionId === piece.sessionId && override.side === piece.side) {
+  if (override && override.sessionId === piece.sessionId && override.pieceId === piece.pieceId) {
     return {
       '--prow': String(override.row),
       '--pcol': String(override.col),
@@ -1525,17 +1754,17 @@ function pieceStyle(piece: BoardPiece): Record<string, string> {
   };
 }
 
-function selectOwnSide(side: string) {
+function selectOwnPiece(pieceId: string) {
   if (!isInteractive.value || !mySeat.value) {
     return;
   }
-  const piece = mySeat.value.pieces.find((p) => p.side === side);
+  const piece = mySeat.value.pieces.find((p) => p.pieceId === pieceId);
   // Finished / trapped: no move or peek selection (SC-MOVE-52/53 UX).
   if (!piece || isFinishedPiece(piece) || piece.trapped) {
     return;
   }
-  returningSide.value = null;
-  selectedSide.value = side;
+  returningPieceId.value = null;
+  selectedPieceId.value = pieceId;
 }
 
 /** Lock board chrome for travel (default) or approach+back (rescue/push = 2×). */
@@ -1552,7 +1781,7 @@ function beginMoveAnimation(durationMs: number = MOVE_ANIM_MS) {
   }, durationMs + 50);
 }
 
-function submitMove(side: string, row: number, col: number) {
+function submitMove(pieceId: string, row: number, col: number) {
   if (!isInteractive.value) {
     return;
   }
@@ -1560,9 +1789,9 @@ function submitMove(side: string, row: number, col: number) {
   // D11 A / SC-FINISH-18: seed lastKnown before send so own center finish keeps travel `from`.
   // Do not seed finishAnimFrom here — silent server reject would pin the piece via pieceStyle.
   if (isCenterCell(row, col) && mySeat.value) {
-    const piece = mySeat.value.pieces.find((p) => p.side === side && !isFinishedPiece(p));
+    const piece = mySeat.value.pieces.find((p) => p.pieceId === pieceId && !isFinishedPiece(p));
     if (piece && !isCenterCell(piece.row, piece.col)) {
-      const key = pieceKey(mySeat.value.sessionId, side);
+      const key = pieceKey(mySeat.value.sessionId, pieceId);
       const from: Cell = { row: piece.row, col: piece.col };
       const nextKnown = new Map(lastKnownBoardCellByKey.value);
       nextKnown.set(key, from);
@@ -1570,13 +1799,13 @@ function submitMove(side: string, row: number, col: number) {
     }
   }
   // Animate / lock input only when the store actually sent (room + isMyTurn).
-  if (!game.sendMove(side, row, col)) {
+  if (!game.sendMove(pieceId, row, col)) {
     releaseBoardPipelineLock();
     return;
   }
   // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
   if (isCenterCell(row, col)) {
-    selectedSide.value = null;
+    selectedPieceId.value = null;
   }
   beginMoveAnimation();
 }
@@ -1585,47 +1814,47 @@ function onPieceClick(piece: BoardPiece) {
   if (!isInteractive.value || !isOwnPiece(piece) || piece.disappearing) {
     return;
   }
-  selectOwnSide(piece.side);
+  selectOwnPiece(piece.pieceId);
 }
 
 /** Strip slot: select unfinished non-trapped; finished body alone does not start return (SC-FINISH-16). */
-function onStripSlotClick(side: string) {
+function onStripSlotClick(pieceId: string) {
   if (!isInteractive.value) {
     return;
   }
-  if (isStripSlotFinished(side) || isStripSlotTrapped(side)) {
+  if (isStripSlotFinished(pieceId) || isStripSlotTrapped(pieceId)) {
     return;
   }
-  selectOwnSide(side);
+  selectOwnPiece(pieceId);
 }
 
 /** Return affordance → enter return-mode without confirm (SC-FINISH-13 / SC-MOVE-57). */
-function onReturnAffordanceClick(side: string) {
-  if (!canReturn(side)) {
+function onReturnAffordanceClick(pieceId: string) {
+  if (!canReturn(pieceId)) {
     return;
   }
-  selectedSide.value = null;
-  returningSide.value = side;
+  selectedPieceId.value = null;
+  returningPieceId.value = pieceId;
 }
 
-function submitReturn(side: string, row: number, col: number) {
-  if (!isInteractive.value || !returningSide.value) {
+function submitReturn(pieceId: string, row: number, col: number) {
+  if (!isInteractive.value || !returningPieceId.value) {
     return;
   }
   beginBoardPipelineLock();
-  if (!game.sendReturnFromFinish(side, row, col)) {
+  if (!game.sendReturnFromFinish(pieceId, row, col)) {
     releaseBoardPipelineLock();
     return;
   }
-  returningSide.value = null;
+  returningPieceId.value = null;
   beginMoveAnimation();
 }
 
-function onRescueClick(side: string) {
+function onRescueClick(pieceId: string) {
   if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
     return;
   }
-  const trapped = mySeat.value.pieces.find((p) => p.side === side && p.trapped && !p.finished);
+  const trapped = mySeat.value.pieces.find((p) => p.pieceId === pieceId && p.trapped && !p.finished);
   if (!trapped) {
     return;
   }
@@ -1634,24 +1863,24 @@ function onRescueClick(side: string) {
     return;
   }
   beginBoardPipelineLock();
-  if (!game.sendRescue(side)) {
+  if (!game.sendRescue(pieceId)) {
     releaseBoardPipelineLock();
     return;
   }
-  returningSide.value = null;
+  returningPieceId.value = null;
   // Brief approach-and-back (D5); server does not move the rescuer.
   beginMoveAnimation(MOVE_ANIM_MS * 2);
   const seatId = mySeat.value.sessionId;
   rescueAnimOverride.value = {
     sessionId: seatId,
-    side: rescuer.side,
+    pieceId: rescuer.pieceId,
     row: trapped.row,
     col: trapped.col,
   };
   window.setTimeout(() => {
     rescueAnimOverride.value = {
       sessionId: seatId,
-      side: rescuer.side,
+      pieceId: rescuer.pieceId,
       row: rescuer.row,
       col: rescuer.col,
     };
@@ -1666,39 +1895,41 @@ function onPushClick(push: PushAffordance) {
     return;
   }
   const pusher = mySeat.value.pieces.find(
-    (p) => p.side === push.pusherSide && !isFinishedPiece(p) && !p.trapped,
+    (p) => p.pieceId === push.pusherPieceId && !isFinishedPiece(p) && !p.trapped,
   );
   if (!pusher) {
     return;
   }
   beginBoardPipelineLock();
-  if (!game.sendPush(push.pusherSide, push.targetSessionId, push.targetSide, push.row, push.col)) {
+  if (
+    !game.sendPush(push.pusherPieceId, push.targetSessionId, push.targetPieceId, push.row, push.col)
+  ) {
     releaseBoardPipelineLock();
     return;
   }
   // D10 / SC-MOVE-76: seed target lastKnown before sync so push→center keeps travel `from`.
   if (isCenterCell(push.row, push.col) && !isCenterCell(push.targetRow, push.targetCol)) {
-    const key = pieceKey(push.targetSessionId, push.targetSide);
+    const key = pieceKey(push.targetSessionId, push.targetPieceId);
     const from: Cell = { row: push.targetRow, col: push.targetCol };
     const nextKnown = new Map(lastKnownBoardCellByKey.value);
     nextKnown.set(key, from);
     lastKnownBoardCellByKey.value = nextKnown;
   }
-  returningSide.value = null;
+  returningPieceId.value = null;
   // Keep selection on the pusher (SC-MOVE-75); approach/back via rescueAnimOverride.
-  selectedSide.value = push.pusherSide;
+  selectedPieceId.value = push.pusherPieceId;
   beginMoveAnimation(MOVE_ANIM_MS * 2);
   const seatId = mySeat.value.sessionId;
   rescueAnimOverride.value = {
     sessionId: seatId,
-    side: pusher.side,
+    pieceId: pusher.pieceId,
     row: push.targetRow,
     col: push.targetCol,
   };
   window.setTimeout(() => {
     rescueAnimOverride.value = {
       sessionId: seatId,
-      side: pusher.side,
+      pieceId: pusher.pieceId,
       row: pusher.row,
       col: pusher.col,
     };
@@ -1719,17 +1950,17 @@ function onTileClick(tile: BoardTile) {
     return;
   }
 
-  if (returningSide.value) {
+  if (returningPieceId.value) {
     if (tile.kind === 'center') {
       return;
     }
     if (legalReturnTargetKeys.value.has(cellKey(tile.row, tile.col))) {
-      submitReturn(returningSide.value, tile.row, tile.col);
+      submitReturn(returningPieceId.value, tile.row, tile.col);
     }
     return;
   }
 
-  if (!selectedSide.value) {
+  if (!selectedPieceId.value) {
     return;
   }
 
@@ -1741,13 +1972,13 @@ function onTileClick(tile: BoardTile) {
     }
     const cell = nearestLegalCenterCell(from, legalTargetKeys.value);
     if (cell) {
-      submitMove(selectedSide.value, cell.row, cell.col);
+      submitMove(selectedPieceId.value, cell.row, cell.col);
     }
     return;
   }
 
   if (legalTargetKeys.value.has(cellKey(tile.row, tile.col))) {
-    submitMove(selectedSide.value, tile.row, tile.col);
+    submitMove(selectedPieceId.value, tile.row, tile.col);
   }
 }
 
@@ -1894,14 +2125,10 @@ function onEndTurnClick() {
 }
 
 function onPeekClick() {
-  if (!canShowPeekAffordance.value || !selectedSide.value) {
+  if (!canShowPeekAffordance.value || !selectedPieceId.value) {
     return;
   }
-  game.sendPeek(selectedSide.value);
-}
-
-function answerPeek(correct: boolean) {
-  game.sendPeekAnswer(correct);
+  game.sendPeek(selectedPieceId.value);
 }
 
 function closeSayPicker() {
@@ -1943,8 +2170,8 @@ async function ensureTouristRoom() {
 // Clear local selection when turn ends / not playing / spectator (SC-MOVE-11…13 / SC-BOARD-05).
 watch([isMyTurn, isPlaying], ([mine, playing]) => {
   if (!mine || !playing) {
-    selectedSide.value = null;
-    returningSide.value = null;
+    selectedPieceId.value = null;
+    returningPieceId.value = null;
     releaseBoardPipelineLock();
   }
 });
@@ -1967,14 +2194,14 @@ watch(
 // Lock move/peek selection if the selected piece becomes trapped (SC-MOVE-52/53 UX).
 watch(
   () => {
-    if (!selectedSide.value || !mySeat.value) {
+    if (!selectedPieceId.value || !mySeat.value) {
       return false;
     }
-    return Boolean(mySeat.value.pieces.find((p) => p.side === selectedSide.value)?.trapped);
+    return Boolean(mySeat.value.pieces.find((p) => p.pieceId === selectedPieceId.value)?.trapped);
   },
   (trapped) => {
     if (trapped) {
-      selectedSide.value = null;
+      selectedPieceId.value = null;
     }
   },
 );
@@ -1984,7 +2211,7 @@ watch(
   () => game.steps,
   (steps) => {
     if (steps <= 0) {
-      returningSide.value = null;
+      returningPieceId.value = null;
     }
   },
 );
@@ -2116,12 +2343,12 @@ watch(
     revealing: game.revealingCatapultKeys.slice(),
     broken: game.brokenCatapultKeys.slice(),
     pieces: game.unfinishedBoardPieces.map((p) => ({
-      key: pieceKey(p.sessionId, p.side),
+      key: pieceKey(p.sessionId, p.pieceId),
       row: p.row,
       col: p.col,
     })),
     finished: game.seats.flatMap((s) =>
-      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.side)),
+      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.pieceId)),
     ),
   }),
   (next, prev) => {
@@ -2151,12 +2378,12 @@ function refreshCatapultPresentationBusy() {
     catapultPlaying || catapultQueue.length > 0 || catapultOverlays.value.length > 0;
 }
 
-function parsePieceKey(key: string): { sessionId: string; side: string } | null {
+function parsePieceKey(key: string): { sessionId: string; pieceId: string } | null {
   const colon = key.indexOf(':');
   if (colon <= 0) {
     return null;
   }
-  return { sessionId: key.slice(0, colon), side: key.slice(colon + 1) };
+  return { sessionId: key.slice(0, colon), pieceId: key.slice(colon + 1) };
 }
 
 function syncCellForPieceKey(key: string): Cell | null {
@@ -2165,7 +2392,7 @@ function syncCellForPieceKey(key: string): Cell | null {
     return null;
   }
   const seat = game.seats.find((s) => s.sessionId === parsed.sessionId);
-  const piece = seat?.pieces.find((p) => p.side === parsed.side);
+  const piece = seat?.pieces.find((p) => p.pieceId === parsed.pieceId);
   if (!piece) {
     return null;
   }
@@ -2179,7 +2406,7 @@ function isPieceFinishedInSync(key: string): boolean {
     return false;
   }
   const seat = game.seats.find((s) => s.sessionId === parsed.sessionId);
-  const piece = seat?.pieces.find((p) => p.side === parsed.side);
+  const piece = seat?.pieces.find((p) => p.pieceId === parsed.pieceId);
   return Boolean(piece?.finished);
 }
 
@@ -2727,7 +2954,7 @@ watch(
     }
     return mySeat.value.pieces
       .filter((p) => p.trapped && !p.finished)
-      .map((p) => p.side)
+      .map((p) => p.pieceId)
       .sort()
       .join(',');
   },
@@ -2736,7 +2963,7 @@ watch(
     const prevSet = new Set(prevStr ? prevStr.split(',') : []);
     const isInitial = prevStr === undefined;
     const nextMap: Partial<Record<string, GrillePhase>> = {
-      ...chromeGrilleBySide.value,
+      ...chromeGrilleByPieceId.value,
     };
 
     for (const side of nextSet) {
@@ -2753,9 +2980,9 @@ watch(
           side,
           setTimeout(() => {
             chromeGrilleTimers.delete(side);
-            if (chromeGrilleBySide.value[side] === 'drop') {
-              chromeGrilleBySide.value = {
-                ...chromeGrilleBySide.value,
+            if (chromeGrilleByPieceId.value[side] === 'drop') {
+              chromeGrilleByPieceId.value = {
+                ...chromeGrilleByPieceId.value,
                 [side]: 'hold',
               };
             }
@@ -2777,14 +3004,14 @@ watch(
         side,
         setTimeout(() => {
           chromeGrilleTimers.delete(side);
-          const rest = { ...chromeGrilleBySide.value };
+          const rest = { ...chromeGrilleByPieceId.value };
           delete rest[side];
-          chromeGrilleBySide.value = rest;
+          chromeGrilleByPieceId.value = rest;
         }, GRILLE_ANIM_MS),
       );
     }
 
-    chromeGrilleBySide.value = nextMap;
+    chromeGrilleByPieceId.value = nextMap;
   },
   { immediate: true },
 );
@@ -2840,7 +3067,7 @@ function hasOwnUnfinishedOnLiveTask(): boolean {
  */
 watch(isMySeatTimeExpired, (expired, prev) => {
   if (expired) {
-    selectedSide.value = null;
+    selectedPieceId.value = null;
   }
   if (prev === false && expired) {
     endModalKind.value = game.steps <= 0 && !hasOwnUnfinishedOnLiveTask() ? 'steps' : 'timer';
@@ -2856,7 +3083,7 @@ watch(isMySeatTimeExpired, (expired, prev) => {
 watch(
   () =>
     game.unfinishedBoardPieces.map((p) => ({
-      key: pieceKey(p.sessionId, p.side),
+      key: pieceKey(p.sessionId, p.pieceId),
       row: p.row,
       col: p.col,
     })),
@@ -2900,7 +3127,7 @@ watch(
 watch(
   () =>
     game.seats.flatMap((s) =>
-      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.side)),
+      s.pieces.filter((p) => p.finished).map((p) => pieceKey(s.sessionId, p.pieceId)),
     ),
   (finishedKeys, prevKeys) => {
     if (prevKeys === undefined) {
@@ -2988,7 +3215,7 @@ watch(
       const sessionId = key.slice(0, colon);
       const side = key.slice(colon + 1);
       const seat = game.seats.find((s) => s.sessionId === sessionId);
-      const piece = seat?.pieces.find((p) => p.side === side && !p.finished);
+      const piece = seat?.pieces.find((p) => p.pieceId === side && !p.finished);
       if (!piece) {
         continue;
       }
@@ -3008,10 +3235,10 @@ watch(
     }
 
     // Drop selection if the selected piece just finished (SC-MOVE-24).
-    if (selectedSide.value && mySeat.value) {
-      const sel = mySeat.value.pieces.find((p) => p.side === selectedSide.value);
+    if (selectedPieceId.value && mySeat.value) {
+      const sel = mySeat.value.pieces.find((p) => p.pieceId === selectedPieceId.value);
       if (sel && isFinishedPiece(sel)) {
-        selectedSide.value = null;
+        selectedPieceId.value = null;
       }
     }
   },
@@ -3505,6 +3732,35 @@ body.body--dark .say-bubble {
   background: #1e88e5;
 }
 
+/* Focus between say (top-right) and end-turn (right-center) — SC-PRESENCE-30. */
+.focus-affordance {
+  position: absolute;
+  top: 22%;
+  right: -8px;
+  transform: translateY(-50%);
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(33, 150, 243, 0.92);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+.focus-affordance:hover {
+  background: #1e88e5;
+}
+
 /* End-turn right-center on own avatar — mirror of say top; no dock label (SC-PRESENCE-17/25). */
 .end-turn-affordance {
   position: absolute;
@@ -3611,6 +3867,60 @@ body.body--dark .say-picker {
 
 .tile-task {
   background: #8d6e63;
+  position: relative;
+}
+
+.tile-difficulty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: clamp(14px, 40%, 28px);
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.peek-slots {
+  min-height: 48px;
+}
+
+.peek-slot {
+  min-width: 72px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 2px dashed rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.body--dark .peek-slot {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.peek-slot--filled {
+  border-style: solid;
+  border-color: var(--q-primary);
+}
+
+.peek-slot--interactive {
+  cursor: pointer;
+}
+
+.peek-slot__empty {
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.peek-slot__label {
+  font-size: 13px;
+  text-align: center;
 }
 
 /* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */

@@ -83,8 +83,18 @@ export default {
     createTitle: 'Создать игру',
     createConfirm: 'Создать',
     createCancel: 'Отмена',
-    maxSeats: 'Число мест',
-    maxSeatsOption: '{n}',
+    map: 'Карта',
+    mapRequired: 'Выберите карту',
+    mapCapacity: '{players}×{tourists}',
+    pack: 'Набор карточек',
+    packRequired: 'Выберите набор',
+    taskSets: 'Наборы заданий',
+    taskSetRequired: 'Выберите хотя бы один набор заданий',
+    taskSetFromAuthor: '{pack} · набор заданий от {name}',
+    selectAllTaskSets: 'Выбрать все',
+    emptyMaps: 'Нет опубликованных карт',
+    emptyPacks: 'Нет опубликованных наборов',
+    emptyTaskSets: 'Нет опубликованных наборов заданий',
     grilleDensity: 'Плотность решёток',
     grilleDensityFew: 'мало',
     grilleDensityMedium: 'средне',
@@ -94,6 +104,8 @@ export default {
     catapultDensityMedium: 'средне',
     catapultDensityMany: 'много',
     capacity: '{seats}/{maxSeats}',
+    mapCapacityCaption: '{players}×{tourists}',
+    packSetsCaption: '{pack} · {authors}',
   },
   header: {
     lobby: 'Лобби',
@@ -576,10 +588,15 @@ export default {
     budgetInfinity: '∞',
     /** Multiplayer end-turn icon on own avatar (SC-PRESENCE-17/18/25) — aria only. */
     endTurn: 'Завершить ход',
-    /** Peek modal — reward amount + Correct/Wrong (SC-BOARD-08/09). */
+    /** Focus nearest actionable tourist on own avatar (SC-PRESENCE-30/31) — aria only. */
+    focusActionable: 'Выбрать ближайшего туриста',
+    /** Peek modal — shared Q&A with slots + pack answers (SC-BOARD-43/44/46). */
     peekModal: 'Под плиткой награда: {n}. Ответьте правильно, чтобы получить шаги.',
-    peekCorrect: 'Правильно',
-    peekWrong: 'Неправильно',
+    peekDifficulty: 'Сложность: {n}',
+    peekQuestionFallback: 'Вопрос',
+    peekSlotEmpty: 'Слот',
+    peekSubmit: 'Ответить',
+    peekSpectatorHint: 'Игрок отвечает на вопрос…',
     peekAffordance: 'Посмотреть под плиткой',
     /** Solo peeks∞ / finite steps modal (SC-PRESENCE-19). */
     soloUnlimitedModal: 'Вы один в игре. Просмотры безлимитны, шаги по-прежнему ограничены.',

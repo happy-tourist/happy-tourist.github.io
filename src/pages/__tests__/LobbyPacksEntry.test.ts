@@ -55,7 +55,9 @@ const stubs = {
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-option-group': true,
+  'q-select': true,
   'q-space': true,
+  MapGridPreview: true,
 };
 
 describe('lobby packs entry / header chrome (SC-PACK-41 / SC-BRAND-15)', () => {

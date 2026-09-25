@@ -5,6 +5,8 @@ node_modules
 # .env files
 .env*
 
+.idea
+
 # Quasar core related directories
 .quasar
 /dist

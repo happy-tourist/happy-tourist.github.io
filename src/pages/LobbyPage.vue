@@ -11,6 +11,7 @@
         <q-btn
           color="primary"
           icon="add"
+          data-test-id="lobby-create-open"
           :label="$t('lobby.create')"
           :loading="creating"
           @click="openCreateModal"
@@ -20,6 +21,18 @@
 
     <q-banner v-if="game.error" class="bg-negative text-white q-mb-md" dense rounded>
       {{ game.error }}
+    </q-banner>
+    <q-banner v-if="maps.error" class="bg-negative text-white q-mb-md" dense rounded>
+      {{ mapsErrorLabel }}
+      <template #action>
+        <q-btn flat dense label="OK" @click="maps.error = null" />
+      </template>
+    </q-banner>
+    <q-banner v-if="content.error" class="bg-negative text-white q-mb-md" dense rounded>
+      {{ contentErrorLabel }}
+      <template #action>
+        <q-btn flat dense label="OK" @click="content.error = null" />
+      </template>
     </q-banner>
 
     <q-list bordered separator class="rounded-borders">
@@ -44,13 +57,29 @@
           :clickable="!joining"
           :disable="joining"
           v-ripple="!joining"
+          :data-test-id="`lobby-room-${room.roomId}`"
           @click="onJoin(room.roomId)"
         >
+          <q-item-section v-if="room.metadata?.mapGrid" avatar>
+            <MapGridPreview
+              :grid="String(room.metadata.mapGrid)"
+              :size="56"
+              :aria-label="$t('maps.previewAria')"
+              data-test-id="lobby-room-map-preview"
+            />
+          </q-item-section>
           <q-item-section>
             <q-item-label>{{
               room.metadata?.title || `Комната ${room.roomId.slice(0, 6)}`
             }}</q-item-label>
-            <q-item-label caption>
+            <q-item-label
+              v-if="roomMapCapacity(room)"
+              caption
+              data-test-id="lobby-room-map-capacity"
+            >
+              {{ roomMapCapacity(room) }}
+            </q-item-label>
+            <q-item-label caption data-test-id="lobby-room-seats">
               {{
                 $t('lobby.capacity', {
                   seats: room.metadata?.seats ?? 0,
@@ -58,6 +87,13 @@
                 })
               }}
               <span v-if="room.metadata?.status"> · {{ room.metadata.status }}</span>
+            </q-item-label>
+            <q-item-label
+              v-if="roomPackSetsCaption(room)"
+              caption
+              data-test-id="lobby-room-pack-sets"
+            >
+              {{ roomPackSetsCaption(room) }}
             </q-item-label>
           </q-item-section>
           <q-item-section side>
@@ -68,19 +104,147 @@
     </q-list>
 
     <q-dialog v-model="createModalOpen" persistent>
-      <q-card style="min-width: 280px">
+      <q-card style="min-width: 320px; max-width: 480px; width: 92vw">
         <q-card-section>
           <div class="text-h6">{{ $t('lobby.createTitle') }}</div>
         </q-card-section>
 
+        <q-card-section v-if="maps.error || content.error" class="q-pt-none">
+          <q-banner
+            v-if="maps.error"
+            dense
+            rounded
+            class="bg-negative text-white q-mb-sm"
+            data-test-id="lobby-create-maps-error"
+          >
+            {{ mapsErrorLabel }}
+          </q-banner>
+          <q-banner
+            v-if="content.error"
+            dense
+            rounded
+            class="bg-negative text-white"
+            data-test-id="lobby-create-content-error"
+          >
+            {{ contentErrorLabel }}
+          </q-banner>
+        </q-card-section>
+
         <q-card-section class="q-pt-none">
-          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.maxSeats') }}</div>
+          <q-select
+            v-model="createMapId"
+            data-test-id="lobby-create-map"
+            :options="mapOptions"
+            emit-value
+            map-options
+            outlined
+            dense
+            :loading="pickersLoading"
+            :label="$t('lobby.map')"
+            :disable="creating"
+          >
+            <template #option="scope">
+              <q-item v-bind="scope.itemProps" :data-test-id="`lobby-map-opt-${scope.opt.value}`">
+                <q-item-section avatar>
+                  <MapGridPreview :grid="scope.opt.grid" :size="40" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label>{{ scope.opt.label }}</q-item-label>
+                  <q-item-label caption>
+                    {{
+                      $t('lobby.mapCapacity', {
+                        players: scope.opt.players,
+                        tourists: scope.opt.touristsPerPlayer,
+                      })
+                    }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </template>
+            <template #selected-item="scope">
+              <span>{{ scope.opt?.label ?? '' }}</span>
+            </template>
+            <template #no-option>
+              <q-item>
+                <q-item-section class="text-muted">{{ $t('lobby.emptyMaps') }}</q-item-section>
+              </q-item>
+            </template>
+          </q-select>
+          <div
+            v-if="selectedMap"
+            class="text-caption text-muted q-mt-xs"
+            data-test-id="lobby-create-map-capacity"
+          >
+            {{
+              $t('lobby.mapCapacity', {
+                players: selectedMap.players,
+                tourists: selectedMap.touristsPerPlayer,
+              })
+            }}
+          </div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-select
+            v-model="createPackId"
+            data-test-id="lobby-create-pack"
+            :options="packOptions"
+            emit-value
+            map-options
+            outlined
+            dense
+            :loading="pickersLoading || packDetailLoading"
+            :label="$t('lobby.pack')"
+            :disable="creating"
+            @update:model-value="onPackSelected"
+          >
+            <template #option="scope">
+              <q-item v-bind="scope.itemProps">
+                <q-item-section>
+                  <q-item-label>{{ scope.opt.title }}</q-item-label>
+                  <q-item-label v-if="scope.opt.description" caption>
+                    {{ scope.opt.description }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </template>
+            <template #selected-item="scope">
+              <span>{{ scope.opt?.title ?? scope.opt?.label ?? '' }}</span>
+            </template>
+            <template #no-option>
+              <q-item>
+                <q-item-section class="text-muted">{{ $t('lobby.emptyPacks') }}</q-item-section>
+              </q-item>
+            </template>
+          </q-select>
+        </q-card-section>
+
+        <q-card-section v-if="createPackId" class="q-pt-none">
+          <div class="row items-center q-mb-sm">
+            <div class="text-subtitle2 col">{{ $t('lobby.taskSets') }}</div>
+            <q-btn
+              v-if="publishedTaskSets.length"
+              flat
+              dense
+              color="primary"
+              data-test-id="lobby-create-select-all-sets"
+              :label="$t('lobby.selectAllTaskSets')"
+              :disable="creating"
+              @click="selectAllTaskSets"
+            />
+          </div>
+          <div v-if="packDetailLoading" class="text-muted text-caption">…</div>
+          <div v-else-if="!publishedTaskSets.length" class="text-muted text-caption">
+            {{ $t('lobby.emptyTaskSets') }}
+          </div>
           <q-option-group
-            v-model="createMaxSeats"
-            type="radio"
+            v-else
+            v-model="createTaskSetIds"
+            type="checkbox"
             color="primary"
-            :options="maxSeatsOptions"
-            inline
+            data-test-id="lobby-create-task-sets"
+            :options="taskSetOptions"
+            :disable="creating"
           />
         </q-card-section>
 
@@ -92,6 +256,7 @@
             color="primary"
             :options="grilleDensityOptions"
             inline
+            :disable="creating"
           />
         </q-card-section>
 
@@ -103,6 +268,7 @@
             color="primary"
             :options="catapultDensityOptions"
             inline
+            :disable="creating"
           />
         </q-card-section>
 
@@ -115,8 +281,10 @@
           />
           <q-btn
             color="primary"
+            data-test-id="lobby-create-confirm"
             :label="$t('lobby.createConfirm')"
             :loading="creating"
+            :disable="!canConfirmCreate"
             @click="onConfirmCreate"
           />
         </q-card-actions>
@@ -129,34 +297,112 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import type { RoomAvailable } from '@colyseus/sdk';
 
+import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useContentStore, contentErrorI18nKey, type TaskSet } from '@/stores/content';
 import {
   useGameStore,
   type CreateGameCatapultDensity,
   type CreateGameGrilleDensity,
-  type CreateGameMaxSeats,
+  type GameRoomMeta,
 } from '@/stores/game';
+import { mapsErrorI18nKey, useMapsStore } from '@/stores/maps';
 
 const auth = useAuthStore();
 const game = useGameStore();
+const content = useContentStore();
+const maps = useMapsStore();
 const router = useRouter();
 const { t } = useI18n();
+
+const mapsErrorLabel = computed(() => {
+  const key = mapsErrorI18nKey(maps.error);
+  return key ? t(key) : (maps.error ?? '');
+});
+
+const contentErrorLabel = computed(() => {
+  const key = contentErrorI18nKey(content.error);
+  return key ? t(key) : (content.error ?? '');
+});
 
 const creating = ref(false);
 const joining = ref(false);
 const createModalOpen = ref(false);
-const createMaxSeats = ref<CreateGameMaxSeats>(2);
+const pickersLoading = ref(false);
+const packDetailLoading = ref(false);
+
+const createMapId = ref<string | null>(null);
+const createPackId = ref<string | null>(null);
+const createTaskSetIds = ref<string[]>([]);
 /** Default medium (22%) — SC-LOBBY-15. */
 const createGrilleDensity = ref<CreateGameGrilleDensity>('medium');
 /** Default medium (22%) — SC-LOBBY-18. */
 const createCatapultDensity = ref<CreateGameCatapultDensity>('medium');
 
-const maxSeatsOptions = computed(() =>
-  ([2, 3, 4] as const).map((n) => ({
-    label: t('lobby.maxSeatsOption', { n }),
-    value: n,
+const inCatalogMaps = computed(() =>
+  (maps.list ?? []).filter((m) => m.hasLive && m.inCatalog === true),
+);
+
+const selectedMap = computed(
+  () => inCatalogMaps.value.find((m) => m.id === createMapId.value) ?? null,
+);
+
+const mapOptions = computed(() =>
+  inCatalogMaps.value.map((m) => ({
+    label: m.authorDisplayName || t('content.authorUser'),
+    value: m.id,
+    grid: m.grid,
+    players: m.players,
+    touristsPerPlayer: m.touristsPerPlayer,
   })),
+);
+
+const packOptions = computed(() =>
+  (content.catalog ?? [])
+    .filter((p) => p.inCatalog !== false && p.hasLive)
+    .map((p) => ({
+      label: p.title || t('content.untitled'),
+      value: p.id,
+      title: p.title || t('content.untitled'),
+      description: p.description ?? '',
+    })),
+);
+
+const selectedPackTitle = computed(() => {
+  const opt = packOptions.value.find((p) => p.value === createPackId.value);
+  return opt?.title ?? '';
+});
+
+function isPublishedTaskSet(ts: TaskSet): boolean {
+  return ts.inCatalog !== false && ts.neverLive !== true;
+}
+
+const publishedTaskSets = computed(() => {
+  const sets = content.liveContent?.taskSets ?? [];
+  if (!createPackId.value || content.pack?.id !== createPackId.value) {
+    return [] as TaskSet[];
+  }
+  return sets.filter(isPublishedTaskSet);
+});
+
+const taskSetOptions = computed(() =>
+  publishedTaskSets.value.map((ts) => ({
+    label: t('lobby.taskSetFromAuthor', {
+      pack: selectedPackTitle.value,
+      name: ts.authorDisplayName || t('content.authorUser'),
+    }),
+    value: ts.id,
+    /** Exposed for tests / aria — pack theme + author (SC-LOBBY-24). */
+    packTitle: selectedPackTitle.value,
+    authorDisplayName: ts.authorDisplayName || '',
+  })),
+);
+
+const canConfirmCreate = computed(
+  () =>
+    Boolean(createMapId.value) && Boolean(createPackId.value) && createTaskSetIds.value.length > 0,
 );
 
 const grilleDensityOptions = computed(() => [
@@ -179,11 +425,26 @@ onUnmounted(() => {
   void game.unsubscribeLobby();
 });
 
-function openCreateModal() {
-  createMaxSeats.value = 2;
+function resetCreateForm() {
+  createMapId.value = null;
+  createPackId.value = null;
+  createTaskSetIds.value = [];
   createGrilleDensity.value = 'medium';
   createCatapultDensity.value = 'medium';
+}
+
+async function openCreateModal() {
+  resetCreateForm();
+  maps.error = null;
+  content.error = null;
   createModalOpen.value = true;
+  pickersLoading.value = true;
+  try {
+    // Store actions set maps.error / content.error; await both even if one fails.
+    await Promise.allSettled([maps.listMaps(), content.listCatalog()]);
+  } finally {
+    pickersLoading.value = false;
+  }
 }
 
 function closeCreateModal() {
@@ -193,11 +454,61 @@ function closeCreateModal() {
   createModalOpen.value = false;
 }
 
+async function onPackSelected(packId: string | null) {
+  createTaskSetIds.value = [];
+  if (!packId) {
+    return;
+  }
+  packDetailLoading.value = true;
+  try {
+    await content.loadLivePack(packId);
+  } catch {
+    // error in store
+  } finally {
+    packDetailLoading.value = false;
+  }
+}
+
+function selectAllTaskSets() {
+  createTaskSetIds.value = publishedTaskSets.value.map((ts) => ts.id);
+}
+
+function roomMapCapacity(room: RoomAvailable<GameRoomMeta>): string | null {
+  const players = room.metadata?.players;
+  const tourists = room.metadata?.touristsPerPlayer;
+  if (typeof players !== 'number' || typeof tourists !== 'number') {
+    return null;
+  }
+  return t('lobby.mapCapacityCaption', { players, tourists });
+}
+
+function roomPackSetsCaption(room: RoomAvailable<GameRoomMeta>): string | null {
+  const packTitle = room.metadata?.packTitle;
+  const labels = room.metadata?.taskSetLabels;
+  if (!packTitle || !Array.isArray(labels) || !labels.length) {
+    return null;
+  }
+  const authors = labels
+    .map((l) => (typeof l?.authorDisplayName === 'string' ? l.authorDisplayName.trim() : ''))
+    .filter(Boolean)
+    .join(', ');
+  if (!authors) {
+    return packTitle;
+  }
+  return t('lobby.packSetsCaption', { pack: packTitle, authors });
+}
+
 async function onConfirmCreate() {
+  // SC-LOBBY-21 / SC-LOBBY-27: require map + ≥1 published task set before create.
+  if (!canConfirmCreate.value || !createMapId.value || !createPackId.value) {
+    return;
+  }
   creating.value = true;
   try {
     const room = await game.createGame({
-      maxSeats: createMaxSeats.value,
+      mapId: createMapId.value,
+      packId: createPackId.value,
+      taskSetIds: [...createTaskSetIds.value],
       grilleDensity: createGrilleDensity.value,
       catapultDensity: createCatapultDensity.value,
     });

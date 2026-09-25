@@ -12,6 +12,11 @@ export const LOBBY_ROOM = 'lobby';
 /** localStorage key for tourist reconnection (D3) — never used for lobby. */
 const TOURIST_RECONNECT_KEY = 'ht-tourist-reconnect';
 
+export interface GameRoomTaskSetLabel {
+  taskSetId: string;
+  authorDisplayName: string;
+}
+
 export interface GameRoomMeta {
   title?: string;
   status?: 'waiting' | 'playing' | 'finished';
@@ -19,11 +24,18 @@ export interface GameRoomMeta {
   seats?: number;
   /** Max seated players from room metadata (not maxClients). */
   maxSeats?: number;
+  /** Compact 10×10 map grid string for lobby mini-preview (SC-LOBBY-25). */
+  mapGrid?: string;
+  /** Map capacity players (SC-LOBBY-25). */
+  players?: number;
+  /** Map tourists per player (SC-LOBBY-25). */
+  touristsPerPlayer?: number;
+  /** Selected pack title/theme (SC-LOBBY-26). */
+  packTitle?: string;
+  /** Selected task-set author labels (SC-LOBBY-26). */
+  taskSetLabels?: GameRoomTaskSetLabel[];
   [key: string]: unknown;
 }
-
-/** Allowed maxSeats values for tourist room create (D4). */
-export type CreateGameMaxSeats = 2 | 3 | 4;
 
 /** Create option grille density presets (D1 / SC-LOBBY-13…15). */
 export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
@@ -31,17 +43,21 @@ export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
 /** Create option catapult density presets (D6 / SC-LOBBY-16…18). */
 export type CreateGameCatapultDensity = 'few' | 'medium' | 'many';
 
+/** Create options — map + pack/sets; maxSeats comes from map.players on server (D2). */
 export interface CreateGameOptions {
-  maxSeats?: CreateGameMaxSeats;
+  mapId: string;
+  packId: string;
+  taskSetIds: string[];
   /** few/medium/many → 12/22/35% of task cells; default medium on server. */
   grilleDensity?: CreateGameGrilleDensity;
   /** few/medium/many → 12/22/35% of task cells; default medium on server. Independent of grilleDensity. */
   catapultDensity?: CreateGameCatapultDensity;
 }
 
-/** Mirrored piece from synced Seat.pieces (keyed by side N|E|S|W on server). */
+/** Mirrored piece from synced Seat.pieces (keyed by seat-local piece id `"0"`…). */
 export interface GamePiece {
-  side: string;
+  /** Seat-local piece id — map key on server; no N/E/S/W side (D3). */
+  pieceId: string;
   row: number;
   col: number;
   /** Synced finish flag — finished pieces leave board occupancy (game/finish). */
@@ -74,11 +90,25 @@ export interface GameSeat {
 export interface UnfinishedBoardPiece {
   sessionId: string;
   touristId: number;
-  side: string;
+  pieceId: string;
   row: number;
   col: number;
   /** Synced trap flag — piece held by a revealed grille (SC-PIECE-24/27). */
   trapped: boolean;
+}
+
+/** Pack answer chip mirrored from synced answerCards (shared peek modal). */
+export interface AnswerCardView {
+  id: string;
+  content: string;
+  description: string;
+}
+
+/** Flipped (bound) task cell — public difficulty digit (SC-BOARD-42). */
+export interface FlippedCellView {
+  key: string;
+  taskId: string;
+  difficulty: 1 | 2 | 3;
 }
 
 /** Seat has a finish place (all four pieces finished). */
@@ -136,12 +166,22 @@ export interface SeatBudgets {
   peekedThisTurn?: boolean;
 }
 
-/** Open peek modal payload from room `peekOpen` (owner-only). */
+/**
+ * Shared peek session (schema + peekOpen broadcast) — every client sees the modal.
+ * Peeker alone may place/submit; others are read-only (SC-BOARD-43/44/46).
+ */
 export interface OpenPeek {
-  side: string;
+  sessionId: string;
+  pieceId: string;
   row: number;
   col: number;
+  taskId: string;
+  question: string;
+  difficulty: 1 | 2 | 3;
+  /** Alias of difficulty (legacy reward wording). */
   reward: 1 | 2 | 3;
+  /** Slot placements: answerCardId or `""` empty. */
+  placements: string[];
 }
 
 /** Live say bubble lifetime (ms) — mirrors server SAY_TTL_MS. */
@@ -155,7 +195,6 @@ const SAY_PRESETS: ReadonlySet<string> = new Set(['hello', 'luck', 'ready']);
 type GameStatus = 'idle' | 'connecting' | 'waiting' | 'playing' | 'finished';
 
 type PieceSync = {
-  side: string;
   row: number;
   col: number;
   finished?: boolean;
@@ -170,8 +209,19 @@ type SeatSync = {
   finishPlace?: number;
   timeExpired?: boolean;
   pieces?: {
-    forEach: (cb: (piece: PieceSync, side: string) => void) => void;
+    forEach: (cb: (piece: PieceSync, pieceId: string) => void) => void;
   };
+};
+
+type FlippedCellSync = {
+  taskId?: string;
+  difficulty?: number;
+};
+
+type AnswerCardSync = {
+  id?: string;
+  content?: string;
+  description?: string;
 };
 
 type TouristRoomState = {
@@ -186,6 +236,11 @@ type TouristRoomState = {
   turnUntil?: number;
   /** Active turn budget seconds (60 multi / 300 solo); 0 when none. */
   turnBudgetSeconds?: number;
+  /** Map snapshot grid (100 chars) — authoritative board layout. */
+  grid?: string;
+  /** Pieces per seat from map snapshot. */
+  touristsPerPlayer?: number;
+  packTitle?: string;
   /** Synced removed task cell keys `"r,c"` (holes: not landable; stand OK). */
   removedTaskKeys?: {
     forEach: (cb: (key: string) => void) => void;
@@ -212,6 +267,25 @@ type TouristRoomState = {
    */
   brokenCatapultKeys?: {
     forEach: (cb: (key: string) => void) => void;
+    length?: number;
+  };
+  flippedCells?: {
+    forEach: (cb: (cell: FlippedCellSync, key: string) => void) => void;
+  };
+  answerCards?: {
+    forEach: (cb: (card: AnswerCardSync) => void) => void;
+    length?: number;
+  };
+  peekActive?: boolean;
+  peekSessionId?: string;
+  peekPieceId?: string;
+  peekRow?: number;
+  peekCol?: number;
+  peekTaskId?: string;
+  peekQuestion?: string;
+  peekDifficulty?: number;
+  peekPlacements?: {
+    forEach: (cb: (id: string) => void) => void;
     length?: number;
   };
   seats?: {
@@ -347,6 +421,16 @@ export const useGameStore = defineStore('game', {
      * Mirrored from MyRoomState.brokenCatapultKeys.
      */
     brokenCatapultKeys: string[];
+    /** Map snapshot grid (100 chars) from room create — authoritative layout. */
+    grid: string;
+    /** Pieces per seat from map snapshot (SC-PIECE-51/52). */
+    touristsPerPlayer: number;
+    /** Pack title from create snapshot (peek chrome). */
+    packTitle: string;
+    /** Flipped (bound) task cells — public difficulty digits (SC-BOARD-42). */
+    flippedCells: FlippedCellView[];
+    /** Pack answer cards for shared peek modal chips. */
+    answerCards: AnswerCardView[];
     /** Own private steps budget from `budgets` (always finite; 0 for spectators / unset). */
     steps: number;
     /** Own private peeks budget from `budgets` (0 for spectators / unset). */
@@ -362,8 +446,8 @@ export const useGameStore = defineStore('game', {
      */
     peekedThisTurn: boolean;
     /**
-     * Open peek modal for this client (`peekOpen`); null when none.
-     * Cleared on answer / room reset (page shows modal in block 3).
+     * Shared peek session for every client (`peekActive` / `peekOpen`).
+     * Cleared on peekClose / room reset (SC-BOARD-43/44/46).
      */
     openPeek: OpenPeek | null;
     /**
@@ -400,6 +484,11 @@ export const useGameStore = defineStore('game', {
     holdingGrilleKeys: [],
     revealingCatapultKeys: [],
     brokenCatapultKeys: [],
+    grid: '',
+    touristsPerPlayer: 4,
+    packTitle: '',
+    flippedCells: [],
+    answerCards: [],
     steps: 0,
     peeks: 0,
     budgetsInfinite: false,
@@ -458,7 +547,7 @@ export const useGameStore = defineStore('game', {
           out.push({
             sessionId: seat.sessionId,
             touristId: seat.touristId,
-            side: piece.side,
+            pieceId: piece.pieceId,
             row: piece.row,
             col: piece.col,
             trapped: piece.trapped,
@@ -488,16 +577,19 @@ export const useGameStore = defineStore('game', {
       (nowMs: number): number =>
         turnRemainingSeconds(state.turnUntil, state.turnBudgetSeconds, nowMs),
     /**
-     * Own strip sides whose pieces are finished (SC-FINISH-09/10 / SC-PIECE-09).
+     * Own strip piece ids whose pieces are finished (SC-FINISH-09/10 / SC-PIECE-09).
      * Empty when not seated.
      */
-    myFinishedStripSides: (state): string[] => {
+    myFinishedStripPieceIds: (state): string[] => {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       if (!seat) {
         return [];
       }
-      return seat.pieces.filter((p) => p.finished).map((p) => p.side);
+      return seat.pieces.filter((p) => p.finished).map((p) => p.pieceId);
     },
+    /** True when this client is the peeker of the open shared session. */
+    isPeekOwner: (state): boolean =>
+      Boolean(state.openPeek && state.sessionId && state.openPeek.sessionId === state.sessionId),
     /**
      * Multiplayer end-turn is available: own turn, not solo peeks∞, not finished/expired.
      * Solo peeks∞ hides end-turn (SC-MOVE-41 / SC-PRESENCE-18).
@@ -590,7 +682,7 @@ export const useGameStore = defineStore('game', {
       }
     },
 
-    async createGame(options: CreateGameOptions = {}) {
+    async createGame(options: CreateGameOptions) {
       return this._enterRoom(() => client.create(TOURIST_ROOM, options));
     },
 
@@ -651,18 +743,20 @@ export const useGameStore = defineStore('game', {
      * Server rejects if not seated / not current turn / not playing / no steps / illegal.
      * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
-    sendMove(side: string, row: number, col: number): boolean {
+    sendMove(pieceId: string, row: number, col: number): boolean {
       if (
         !this.room ||
         this.phase !== 'playing' ||
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        this.steps <= 0
+        this.steps <= 0 ||
+        typeof pieceId !== 'string' ||
+        pieceId.length === 0
       ) {
         return false;
       }
-      this.room.send('move', { side, row, col });
+      this.room.send('move', { pieceId, row, col });
       return true;
     },
 
@@ -671,7 +765,7 @@ export const useGameStore = defineStore('game', {
      * Server rejects if not own turn / no adj rescuer / no steps / not trapped.
      * @returns true if the message was sent.
      */
-    sendRescue(side: string): boolean {
+    sendRescue(pieceId: string): boolean {
       if (
         !this.room ||
         this.phase !== 'playing' ||
@@ -679,12 +773,12 @@ export const useGameStore = defineStore('game', {
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
         this.steps <= 0 ||
-        typeof side !== 'string' ||
-        side.length === 0
+        typeof pieceId !== 'string' ||
+        pieceId.length === 0
       ) {
         return false;
       }
-      this.room.send('rescue', { side });
+      this.room.send('rescue', { pieceId });
       return true;
     },
 
@@ -694,9 +788,9 @@ export const useGameStore = defineStore('game', {
      * @returns true if the message was sent.
      */
     sendPush(
-      pusherSide: string,
+      pusherPieceId: string,
       targetSessionId: string,
-      targetSide: string,
+      targetPieceId: string,
       row: number,
       col: number,
     ): boolean {
@@ -707,12 +801,12 @@ export const useGameStore = defineStore('game', {
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
         this.steps <= 0 ||
-        typeof pusherSide !== 'string' ||
-        pusherSide.length === 0 ||
+        typeof pusherPieceId !== 'string' ||
+        pusherPieceId.length === 0 ||
         typeof targetSessionId !== 'string' ||
         targetSessionId.length === 0 ||
-        typeof targetSide !== 'string' ||
-        targetSide.length === 0 ||
+        typeof targetPieceId !== 'string' ||
+        targetPieceId.length === 0 ||
         typeof row !== 'number' ||
         typeof col !== 'number' ||
         !Number.isInteger(row) ||
@@ -721,9 +815,9 @@ export const useGameStore = defineStore('game', {
         return false;
       }
       this.room.send('push', {
-        pusherSide,
+        pusherPieceId,
         targetSessionId,
-        targetSide,
+        targetPieceId,
         row,
         col,
       });
@@ -735,7 +829,7 @@ export const useGameStore = defineStore('game', {
      * Server rejects illegal ring / occupancy / hole / finishPlace ≠ 0.
      * @returns true if the message was sent.
      */
-    sendReturnFromFinish(side: string, row: number, col: number): boolean {
+    sendReturnFromFinish(pieceId: string, row: number, col: number): boolean {
       if (
         !this.room ||
         this.phase !== 'playing' ||
@@ -743,48 +837,69 @@ export const useGameStore = defineStore('game', {
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
         this.steps <= 0 ||
-        typeof side !== 'string' ||
-        side.length === 0
+        typeof pieceId !== 'string' ||
+        pieceId.length === 0
       ) {
         return false;
       }
-      this.room.send('returnFromFinish', { side, row, col });
+      this.room.send('returnFromFinish', { pieceId, row, col });
       return true;
     },
 
     /**
      * Open a peek on own unfinished piece standing on a present task cell.
-     * Finite peeks: require peeks > 0; solo peeks∞ skips that gate.
-     * Server replies with private `peekOpen` (reward) or rejects silently.
+     * Fresh/unbound spends a peek on the server; flipped is free even at peeks=0.
+     * Client does not gate on peeks — server decides (SC-BOARD-10/45).
      * @returns true if the message was sent.
      */
-    sendPeek(side: string): boolean {
+    sendPeek(pieceId: string): boolean {
       if (
         !this.room ||
         this.phase !== 'playing' ||
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.peeks <= 0) ||
-        typeof side !== 'string' ||
-        side.length === 0
+        typeof pieceId !== 'string' ||
+        pieceId.length === 0
       ) {
         return false;
       }
-      this.room.send('peek', { side });
+      this.room.send('peek', { pieceId });
       return true;
     },
 
     /**
-     * Resolve an open peek («Правильно» / «Неправильно»). Clears local openPeek on send.
+     * Place (or clear) an answer chip into a peek slot — peeker only (SC-BOARD-46).
      * @returns true if the message was sent.
      */
-    sendPeekAnswer(correct: boolean): boolean {
-      if (!this.room || typeof correct !== 'boolean') {
+    sendPeekPlace(slotIndex: number, answerCardId: string | null): boolean {
+      if (
+        !this.room ||
+        !this.openPeek ||
+        !this.isPeekOwner ||
+        typeof slotIndex !== 'number' ||
+        !Number.isInteger(slotIndex) ||
+        slotIndex < 0
+      ) {
         return false;
       }
-      this.room.send('peekAnswer', { correct });
-      this.openPeek = null;
+      this.room.send('peekPlace', {
+        slotIndex,
+        answerCardId: answerCardId ?? '',
+      });
+      return true;
+    },
+
+    /**
+     * Submit ordered slot placements for the open peek — peeker only (SC-BOARD-43/44).
+     * Server validates order; clears session via peekClose. Do not clear openPeek locally.
+     * @returns true if the message was sent.
+     */
+    sendPeekSubmit(): boolean {
+      if (!this.room || !this.openPeek || !this.isPeekOwner) {
+        return false;
+      }
+      this.room.send('peekSubmit', {});
       return true;
     },
 
@@ -859,6 +974,11 @@ export const useGameStore = defineStore('game', {
       this.holdingGrilleKeys = [];
       this.revealingCatapultKeys = [];
       this.brokenCatapultKeys = [];
+      this.grid = '';
+      this.touristsPerPlayer = 4;
+      this.packTitle = '';
+      this.flippedCells = [];
+      this.answerCards = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
@@ -1018,15 +1138,16 @@ export const useGameStore = defineStore('game', {
       const next: GameSeat[] = [];
       s.seats?.forEach((seat, sessionId) => {
         const pieces: GamePiece[] = [];
-        seat.pieces?.forEach((piece, sideKey) => {
+        seat.pieces?.forEach((piece, pieceIdKey) => {
           pieces.push({
-            side: String(piece.side || sideKey),
+            pieceId: String(pieceIdKey),
             row: Number(piece.row),
             col: Number(piece.col),
             finished: Boolean(piece.finished),
             trapped: Boolean(piece.trapped),
           });
         });
+        pieces.sort((a, b) => Number(a.pieceId) - Number(b.pieceId));
         next.push({
           sessionId,
           touristId: Number(seat.touristId),
@@ -1059,6 +1180,67 @@ export const useGameStore = defineStore('game', {
         brokenCatapult.push(String(key));
       });
 
+      const flipped: FlippedCellView[] = [];
+      s.flippedCells?.forEach((cell, key) => {
+        const difficulty = Number(cell.difficulty);
+        if (difficulty !== 1 && difficulty !== 2 && difficulty !== 3) {
+          return;
+        }
+        flipped.push({
+          key: String(key),
+          taskId: typeof cell.taskId === 'string' ? cell.taskId : '',
+          difficulty,
+        });
+      });
+
+      const answers: AnswerCardView[] = [];
+      s.answerCards?.forEach((card) => {
+        if (typeof card.id !== 'string' || card.id.length === 0) {
+          return;
+        }
+        answers.push({
+          id: card.id,
+          content: typeof card.content === 'string' ? card.content : '',
+          description: typeof card.description === 'string' ? card.description : '',
+        });
+      });
+
+      const grid = typeof s.grid === 'string' ? s.grid : '';
+      const touristsRaw = Number(s.touristsPerPlayer ?? 4);
+      const touristsPerPlayer = touristsRaw >= 1 && touristsRaw <= 4 ? Math.floor(touristsRaw) : 4;
+      const packTitle = typeof s.packTitle === 'string' ? s.packTitle : '';
+
+      // Shared peek session from schema (everyone sees modal + placements).
+      let openPeek: OpenPeek | null = this.openPeek;
+      if (s.peekActive) {
+        const difficulty = Number(s.peekDifficulty ?? 0);
+        const reward = difficulty === 1 || difficulty === 2 || difficulty === 3 ? difficulty : null;
+        const placements: string[] = [];
+        s.peekPlacements?.forEach((id) => {
+          placements.push(typeof id === 'string' ? id : '');
+        });
+        if (
+          reward &&
+          typeof s.peekSessionId === 'string' &&
+          s.peekSessionId.length > 0 &&
+          typeof s.peekPieceId === 'string'
+        ) {
+          openPeek = {
+            sessionId: s.peekSessionId,
+            pieceId: s.peekPieceId,
+            row: Math.floor(Number(s.peekRow ?? 0)),
+            col: Math.floor(Number(s.peekCol ?? 0)),
+            taskId: typeof s.peekTaskId === 'string' ? s.peekTaskId : '',
+            question: typeof s.peekQuestion === 'string' ? s.peekQuestion : '',
+            difficulty: reward,
+            reward,
+            placements,
+          };
+        }
+      } else if (!s.peekActive) {
+        openPeek = null;
+      }
+
       // D13: atomic seats + catapult reveal so board watchers never see
       // "pieces already at fling dest" with empty revealingCatapultKeys mid-tick.
       this.$patch({
@@ -1067,17 +1249,13 @@ export const useGameStore = defineStore('game', {
         holdingGrilleKeys: holding,
         revealingCatapultKeys: revealingCatapult,
         brokenCatapultKeys: brokenCatapult,
+        grid,
+        touristsPerPlayer,
+        packTitle,
+        flippedCells: flipped,
+        answerCards: answers,
+        openPeek,
       });
-
-      // Drop stale peek modal if turn moved away (timeout force-wrong / end-turn).
-      if (
-        this.openPeek &&
-        (!this.sessionId ||
-          !this.currentTurnSessionId ||
-          this.sessionId !== this.currentTurnSessionId)
-      ) {
-        this.openPeek = null;
-      }
 
       // Status from phase (countdown stays waiting for lobby-style label).
       this.status = this.phase === 'playing' ? 'playing' : 'waiting';
@@ -1097,6 +1275,11 @@ export const useGameStore = defineStore('game', {
       this.holdingGrilleKeys = [];
       this.revealingCatapultKeys = [];
       this.brokenCatapultKeys = [];
+      this.grid = '';
+      this.touristsPerPlayer = 4;
+      this.packTitle = '';
+      this.flippedCells = [];
+      this.answerCards = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
@@ -1126,6 +1309,14 @@ export const useGameStore = defineStore('game', {
 
       room.onMessage('peekOpen', (message: unknown) => {
         this._onPeekOpenMessage(message);
+      });
+
+      room.onMessage('peekPlace', (message: unknown) => {
+        this._onPeekPlaceMessage(message);
+      });
+
+      room.onMessage('peekClose', (message: unknown) => {
+        this._onPeekCloseMessage(message);
       });
 
       room.onMessage('allJailWarning', () => {
@@ -1165,25 +1356,68 @@ export const useGameStore = defineStore('game', {
         return;
       }
       const raw = message as Record<string, unknown>;
-      const side = raw.side;
+      const pieceId = raw.pieceId;
+      const sessionId = raw.sessionId;
       const row = Number(raw.row);
       const col = Number(raw.col);
-      const reward = Number(raw.reward);
+      const difficulty = Number(raw.difficulty ?? raw.reward);
+      const question = typeof raw.question === 'string' ? raw.question : '';
+      const taskId = typeof raw.taskId === 'string' ? raw.taskId : '';
+      const placementsRaw = raw.placements;
+      const placements: string[] = [];
+      if (Array.isArray(placementsRaw)) {
+        for (const id of placementsRaw) {
+          placements.push(typeof id === 'string' ? id : '');
+        }
+      }
       if (
-        typeof side !== 'string' ||
-        side.length === 0 ||
+        typeof pieceId !== 'string' ||
+        pieceId.length === 0 ||
+        typeof sessionId !== 'string' ||
+        sessionId.length === 0 ||
         !Number.isFinite(row) ||
         !Number.isFinite(col) ||
-        (reward !== 1 && reward !== 2 && reward !== 3)
+        (difficulty !== 1 && difficulty !== 2 && difficulty !== 3)
       ) {
         return;
       }
       this.openPeek = {
-        side,
+        sessionId,
+        pieceId,
         row: Math.floor(row),
         col: Math.floor(col),
-        reward: reward,
+        taskId,
+        question,
+        difficulty,
+        reward: difficulty,
+        placements,
       };
+    },
+
+    _onPeekPlaceMessage(message: unknown) {
+      if (!message || typeof message !== 'object' || !this.openPeek) {
+        return;
+      }
+      const raw = message as Record<string, unknown>;
+      const slotIndex = raw.slotIndex;
+      if (typeof slotIndex !== 'number' || !Number.isInteger(slotIndex) || slotIndex < 0) {
+        return;
+      }
+      let answerCardId = '';
+      if (typeof raw.answerCardId === 'string') {
+        answerCardId = raw.answerCardId;
+      }
+      const next = [...this.openPeek.placements];
+      while (next.length <= slotIndex) {
+        next.push('');
+      }
+      next[slotIndex] = answerCardId;
+      this.openPeek = { ...this.openPeek, placements: next };
+    },
+
+    _onPeekCloseMessage(_message?: unknown) {
+      void _message;
+      this.openPeek = null;
     },
 
     _onSayMessage(message: unknown) {
@@ -1235,6 +1469,11 @@ export const useGameStore = defineStore('game', {
       this.holdingGrilleKeys = [];
       this.revealingCatapultKeys = [];
       this.brokenCatapultKeys = [];
+      this.grid = '';
+      this.touristsPerPlayer = 4;
+      this.packTitle = '';
+      this.flippedCells = [];
+      this.answerCards = [];
       this.steps = 0;
       this.peeks = 0;
       this.budgetsInfinite = false;
