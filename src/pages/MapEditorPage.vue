@@ -15,7 +15,7 @@
         </div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('maps.backToList')" :to="{ name: 'content-maps' }" />
+        <!-- SC-MAP-44: «К картам» replaced by App breadcrumbs -->
         <q-btn
           v-if="canDelete"
           flat
@@ -48,76 +48,102 @@
           />
         </div>
         <div class="col">
-          <div class="text-subtitle2 q-mb-sm">{{ $t('maps.palette') }}</div>
-          <div class="row q-gutter-sm q-mb-md">
-            <q-btn
-              v-for="tool in paintTools"
-              :key="tool"
-              :outline="selectedTool !== tool"
-              :color="toolColor(tool)"
-              :disable="viewOnly || gateOpen"
-              :label="$t(`maps.tools.${tool}`)"
-              @click="selectedTool = tool"
-            />
-          </div>
-
-          <div class="row q-col-gutter-md q-mb-md" style="max-width: 360px">
-            <div class="col-6">
-              <q-select
-                v-model="local.players"
-                :options="seatOptions"
-                emit-value
-                map-options
-                outlined
-                dense
-                :disable="viewOnly || gateOpen"
-                :label="$t('maps.players')"
-                @update:model-value="onSeatsChange"
-              />
+          <!-- SC-MAP-46/47: View shows author + seats; no paint tools / edit chrome -->
+          <template v-if="viewOnly">
+            <div class="q-mb-md" data-test-id="map-view-meta">
+              <div class="text-body1">
+                {{ maps.map?.authorDisplayName || $t('content.authorUser') }}
+              </div>
+              <div class="text-subtitle2 text-muted">
+                {{
+                  $t('maps.seatConfig', {
+                    players: local.players,
+                    tourists: local.touristsPerPlayer,
+                  })
+                }}
+              </div>
             </div>
-            <div class="col-6">
-              <q-select
-                v-model="local.touristsPerPlayer"
-                :options="seatOptions"
-                emit-value
-                map-options
-                outlined
-                dense
-                :disable="viewOnly || gateOpen"
-                :label="$t('maps.tourists')"
-                @update:model-value="onSeatsChange"
-              />
-            </div>
-          </div>
-
-          <div class="text-caption text-muted q-mb-md">
-            {{
-              $t('maps.startsHint', {
-                starts: startCount,
-                min: minStarts,
-              })
-            }}
-            <span v-if="maps.saving" class="q-ml-sm">{{ $t('maps.autosaving') }}</span>
-          </div>
-
-          <div v-if="!staffMode && !viewOnly" class="q-gutter-sm">
             <q-btn
+              v-if="canEnterEditFromView"
               color="primary"
-              :label="$t('maps.submitModeration')"
+              :label="$t('content.edit')"
+              data-test-id="map-view-edit"
               :loading="maps.loading"
-              :disable="!canSubmit"
-              @click="onSubmit"
+              @click="onEnterEditFromView"
             />
-            <q-btn
-              v-if="canCancelRequest"
-              color="grey"
-              outline
-              :label="$t('content.cancelPending')"
-              :loading="maps.loading"
-              @click="onCancelRequest"
-            />
-            <div v-if="!canSubmit" class="text-caption text-muted">{{ submitHint }}</div>
-          </div>
+          </template>
+          <template v-else>
+            <div class="text-subtitle2 q-mb-sm">{{ $t('maps.palette') }}</div>
+            <div class="row q-gutter-sm q-mb-md" data-test-id="map-paint-tools">
+              <q-btn
+                v-for="tool in paintTools"
+                :key="tool"
+                :outline="selectedTool !== tool"
+                :color="toolColor(tool)"
+                :disable="gateOpen"
+                :label="$t(`maps.tools.${tool}`)"
+                @click="selectedTool = tool"
+              />
+            </div>
+
+            <div class="row q-col-gutter-md q-mb-md" style="max-width: 360px">
+              <div class="col-6">
+                <q-select
+                  v-model="local.players"
+                  :options="seatOptions"
+                  emit-value
+                  map-options
+                  outlined
+                  dense
+                  :disable="gateOpen"
+                  :label="$t('maps.players')"
+                  @update:model-value="onSeatsChange"
+                />
+              </div>
+              <div class="col-6">
+                <q-select
+                  v-model="local.touristsPerPlayer"
+                  :options="seatOptions"
+                  emit-value
+                  map-options
+                  outlined
+                  dense
+                  :disable="gateOpen"
+                  :label="$t('maps.tourists')"
+                  @update:model-value="onSeatsChange"
+                />
+              </div>
+            </div>
+
+            <div class="text-caption text-muted q-mb-md">
+              {{
+                $t('maps.startsHint', {
+                  starts: startCount,
+                  min: minStarts,
+                })
+              }}
+              <span v-if="maps.saving" class="q-ml-sm">{{ $t('maps.autosaving') }}</span>
+            </div>
+
+            <div v-if="!staffMode" class="q-gutter-sm">
+              <q-btn
+                color="primary"
+                :label="$t('maps.submitModeration')"
+                :loading="maps.loading"
+                :disable="!canSubmit"
+                @click="onSubmit"
+              />
+              <q-btn
+                v-if="canCancelRequest"
+                color="grey"
+                outline
+                :label="$t('content.cancelPending')"
+                :loading="maps.loading"
+                @click="onCancelRequest"
+              />
+              <div v-if="!canSubmit" class="text-caption text-muted">{{ submitHint }}</div>
+            </div>
+          </template>
         </div>
       </div>
 
@@ -339,6 +365,20 @@ const canDelete = computed(() => {
   return Boolean(uid.value) && maps.map.createdBy === uid.value;
 });
 
+/** SC-MAP-48: Edit from View for creator or staff (when author request not blocking). */
+const canEnterEditFromView = computed(() => {
+  if (!viewOnly.value || !maps.map?.hasLive) return false;
+  if (auth.isStaff) {
+    const open =
+      maps.map.authorRequestOpen ||
+      maps.moderationStatus === 'pending' ||
+      maps.moderationStatus === 'needs_revision';
+    return !open;
+  }
+  if (auth.user?.anonymous) return false;
+  return Boolean(uid.value) && maps.map.createdBy === uid.value;
+});
+
 function toolColor(tool: MapPaintTool) {
   if (tool === 'start') return 'positive';
   if (tool === 'finish') return 'warning';
@@ -513,6 +553,54 @@ async function enterStaffEdit() {
   startLockHeartbeat();
 }
 
+async function enterAuthorEdit() {
+  if (!mapId.value) return;
+  if (!checkGate()) return;
+  await maps.loadDraft(mapId.value);
+  await maps.acquireEditLock(mapId.value);
+  lockHeld.value = true;
+  startLockHeartbeat();
+  staffMode.value = false;
+  viewOnly.value = false;
+  local.value = maps.draft ? { ...maps.draft } : null;
+  await loadThread();
+}
+
+async function onEnterEditFromView() {
+  if (!canEnterEditFromView.value) return;
+  try {
+    if (auth.isStaff) {
+      await enterStaffEdit();
+      if (route.query.staff !== '1') {
+        await router.replace({
+          name: 'content-map-edit',
+          params: { id: mapId.value },
+          query: { staff: '1' },
+        });
+      }
+      return;
+    }
+    await enterAuthorEdit();
+    if (route.query.edit !== '1') {
+      await router.replace({
+        name: 'content-map-edit',
+        params: { id: mapId.value },
+        query: { edit: '1' },
+      });
+    }
+  } catch {
+    /* error in store (edit_locked / author_request_open) */
+  }
+}
+
+async function enterViewOnly() {
+  await maps.loadLiveMap(mapId.value);
+  staffMode.value = false;
+  viewOnly.value = true;
+  lockHeld.value = false;
+  local.value = maps.liveContent ? { ...maps.liveContent } : null;
+}
+
 async function boot() {
   if (!mapId.value) {
     await router.replace({ name: 'content-maps' });
@@ -533,33 +621,36 @@ async function boot() {
     }
   }
 
-  // Prefer working copy for creator (never-published or post-publish re-edit SC-MAP-35).
+  if (wantAuthorEdit) {
+    try {
+      await enterAuthorEdit();
+      return;
+    } catch {
+      await router.replace({ name: 'content-maps' });
+      return;
+    }
+  }
+
+  // Default open: never-published → Edit; published → View (SC-MAP-46/49).
   try {
     await maps.loadDraft(mapId.value);
-    const isCreator = Boolean(uid.value) && maps.map?.createdBy === uid.value;
-    const needsLock = Boolean(maps.map?.hasLive) || wantAuthorEdit;
-    if (isCreator && needsLock) {
-      await maps.acquireEditLock(mapId.value);
-      lockHeld.value = true;
-      startLockHeartbeat();
+    if (!maps.map?.hasLive) {
+      staffMode.value = false;
+      viewOnly.value = false;
+      local.value = maps.draft ? { ...maps.draft } : null;
+      if (!checkGate()) {
+        /* gate dialog */
+      }
+      await loadThread();
+      return;
     }
-    staffMode.value = false;
-    viewOnly.value = false;
-    local.value = maps.draft ? { ...maps.draft } : null;
-    if (!checkGate()) {
-      /* gate dialog */
-    }
-    await loadThread();
-    return;
+    // Published map with working draft available — still open View first (D17).
   } catch {
     /* fall through to live view-only */
   }
 
   try {
-    await maps.loadLiveMap(mapId.value);
-    staffMode.value = false;
-    viewOnly.value = true;
-    local.value = maps.liveContent ? { ...maps.liveContent } : null;
+    await enterViewOnly();
   } catch {
     await router.replace({ name: 'content-maps' });
   }

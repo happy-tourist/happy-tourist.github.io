@@ -204,6 +204,10 @@ describe('author Edit ACL (SC-PACK-156…160)', () => {
   it('SC-PACK-156: creator sees Edit and acquires lock', async () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
+    // SC-PACK-181: no separate «К наборам» when App breadcrumbs cover the path
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.catalogNav'))).toBe(
+      false,
+    );
     const edit = wrapper.find('[data-test-id="pack-author-edit"]');
     expect(edit.exists()).toBe(true);
     await edit.trigger('click');
@@ -228,6 +232,127 @@ describe('author Edit ACL (SC-PACK-156…160)', () => {
     await flushPromises();
     expect(wrapper.find('[data-test-id="pack-author-edit"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="pack-task-set-author-edit"]').exists()).toBe(true);
+  });
+});
+
+describe('live task-set moderation marks (SC-PACK-171…174)', () => {
+  beforeEach(() => {
+    authState.user = { id: 'contrib', anonymous: false };
+    authState.needsEmailVerification = false;
+    authState.isStaff = false;
+    contentState.error = null;
+    contentState.pack = {
+      id: 'p1',
+      title: 'Live',
+      description: '',
+      blocked: false,
+      hasLive: true,
+      inCatalog: true,
+      createdBy: 'owner',
+      inCollection: false,
+      isFavorite: false,
+    };
+    contentState.liveContent = {
+      title: 'Live',
+      description: '',
+      answerCards: [{ id: 'c1', content: 'A', description: '' }],
+      taskSets: [
+        {
+          id: 'ts1',
+          authorUserId: 'contrib',
+          authorDisplayName: 'Contrib',
+          coauthorLabels: [],
+          moderationStatus: 'pending',
+          tasks: [],
+        },
+      ],
+    };
+    contentState.pendingPackAuthorId = null;
+    contentState.pendingTaskSetAuthorId = null;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('SC-PACK-171: set author sees pending on live set row', async () => {
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    const badge = wrapper.find('[data-test-id="pack-task-set-status-ts1"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toContain('content.taskSetStatusMarks.pending');
+  });
+
+  it('SC-PACK-172: set author sees needs_revision on live set row', async () => {
+    contentState.liveContent = {
+      ...contentState.liveContent,
+      taskSets: [
+        {
+          ...contentState.liveContent.taskSets[0]!,
+          moderationStatus: 'needs_revision',
+        },
+      ],
+    };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
+      'content.taskSetStatusMarks.needs_revision',
+    );
+  });
+
+  it('SC-PACK-173: pack creator does not see foreign set moderation marks', async () => {
+    authState.user = { id: 'owner', anonymous: false };
+    contentState.pack = { ...contentState.pack, createdBy: 'owner' };
+    // Server omits foreign marks for pack creator (null).
+    contentState.liveContent = {
+      ...contentState.liveContent,
+      taskSets: [
+        {
+          ...contentState.liveContent.taskSets[0]!,
+          authorUserId: 'contrib',
+          moderationStatus: null,
+        },
+      ],
+    };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').exists()).toBe(false);
+  });
+
+  it('SC-PACK-174: staff sees set moderation marks', async () => {
+    authState.user = { id: 'staff1', anonymous: false };
+    authState.isStaff = true;
+    contentState.liveContent = {
+      ...contentState.liveContent,
+      taskSets: [
+        {
+          ...contentState.liveContent.taskSets[0]!,
+          moderationStatus: 'pending',
+        },
+      ],
+    };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
+      'content.taskSetStatusMarks.pending',
+    );
+  });
+
+  it('SC-PACK-179: cancelled task_set shows draft mark for set author', async () => {
+    contentState.liveContent = {
+      ...contentState.liveContent,
+      taskSets: [
+        {
+          ...contentState.liveContent.taskSets[0]!,
+          moderationStatus: 'draft',
+        },
+      ],
+    };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
+      'content.taskSetStatusMarks.needs_moderation',
+    );
   });
 });
 

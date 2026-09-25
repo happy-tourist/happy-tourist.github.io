@@ -15,13 +15,7 @@
           :label="$t('content.myModerationNav')"
           :to="{ name: 'content-my-moderation' }"
         />
-        <q-btn
-          v-if="auth.isStaff"
-          flat
-          icon="rate_review"
-          :label="$t('content.staffNav')"
-          :to="{ name: 'content-staff' }"
-        />
+        <!-- SC-PACK-184: staff Модерация is in App header -->
         <q-btn color="primary" icon="add" :label="$t('content.create')" @click="onCreateClick" />
       </div>
     </div>

@@ -6,14 +6,7 @@
         <div class="text-subtitle2 text-muted">{{ $t('maps.subtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <!-- SC-MAP-40: no non-staff my-moderation nav; staff keep queue -->
-        <q-btn
-          v-if="auth.isStaff"
-          flat
-          icon="rate_review"
-          :label="$t('content.staffNav')"
-          :to="{ name: 'content-staff' }"
-        />
+        <!-- SC-MAP-43: staff «Модерация» is in App header, not list chrome -->
         <q-btn color="primary" icon="add" :label="$t('maps.create')" @click="onCreateClick" />
       </div>
     </div>
@@ -269,9 +262,7 @@ function statusBadge(item: MapSummary): string {
   if (status === 'unpublished' || (item.hasLive && item.inCatalog === false)) {
     return t('maps.unpublishedByStaff');
   }
-  if (status === 'in_catalog' || (item.hasLive && item.inCatalog !== false)) {
-    return t('maps.statusInCatalog');
-  }
+  // SC-MAP-45: published / in_catalog rows have no status badge
   return '';
 }
 
@@ -281,7 +272,7 @@ function statusBadgeColor(item: MapSummary): string {
   if (status === 'needs_revision') return 'warning';
   if (status === 'draft' || !item.hasLive) return 'grey';
   if (status === 'unpublished' || item.inCatalog === false) return 'grey';
-  return 'positive';
+  return 'grey';
 }
 
 function hasOpenAuthorRequest(item: MapSummary): boolean {

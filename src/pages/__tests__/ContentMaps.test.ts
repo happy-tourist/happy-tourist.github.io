@@ -54,10 +54,14 @@ const {
   loadModeration,
   submitMap,
   saveDraft,
+  acquireEditLock,
+  releaseEditLock,
+  loadStaffEdit,
   listStaffPending,
   listMyModeration,
   routerPush,
   routerReplace,
+  routeState,
   draftRevision,
 } = vi.hoisted(() => {
   const empty = '.'.repeat(100);
@@ -93,6 +97,13 @@ const {
     staffPending: [] as StaffPendingItem[],
     myModeration: [] as MyModerationItem[],
   };
+  const routeState = {
+    params: { id: 'm-draft' } as Record<string, string>,
+    query: {} as Record<string, string>,
+    path: '/content/maps/m-draft/edit',
+    fullPath: '/content/maps/m-draft/edit',
+    name: 'content-map-edit' as string,
+  };
   return {
     mapsState,
     authState,
@@ -104,10 +115,14 @@ const {
     loadModeration: vi.fn(),
     submitMap: vi.fn(),
     saveDraft: vi.fn().mockResolvedValue(draftRevision),
+    acquireEditLock: vi.fn().mockResolvedValue(undefined),
+    releaseEditLock: vi.fn().mockResolvedValue(undefined),
+    loadStaffEdit: vi.fn().mockResolvedValue(undefined),
     listStaffPending: vi.fn().mockResolvedValue(undefined),
     listMyModeration: vi.fn().mockResolvedValue(undefined),
     routerPush: vi.fn(),
     routerReplace: vi.fn(),
+    routeState,
     draftRevision,
   };
 });
@@ -118,13 +133,7 @@ vi.mock('vue-router', async (importOriginal) => {
   return {
     ...actual,
     useRouter: () => ({ push: routerPush, replace: routerReplace }),
-    useRoute: () => ({
-      params: { id: 'm-draft' },
-      query: {},
-      path: '/content/maps/m-draft/edit',
-      fullPath: '/content/maps/m-draft/edit',
-      name: 'content-map-edit',
-    }),
+    useRoute: () => routeState,
     onBeforeRouteLeave: vi.fn(),
   };
 });
@@ -161,10 +170,10 @@ vi.mock('@/stores/maps', async (importOriginal) => {
     cancelRequest: vi.fn(),
     unpublishMap: vi.fn(),
     republishMap: vi.fn(),
-    acquireEditLock: vi.fn(),
-    refreshEditLock: vi.fn(),
-    releaseEditLock: vi.fn(),
-    loadStaffEdit: vi.fn(),
+    acquireEditLock,
+    refreshEditLock: vi.fn().mockResolvedValue(undefined),
+    releaseEditLock,
+    loadStaffEdit,
     staffSaveMap: vi.fn(),
   };
   return {
@@ -285,10 +294,16 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     loadLiveMap.mockReset();
     loadModeration.mockReset();
     submitMap.mockClear();
+    acquireEditLock.mockClear().mockResolvedValue(undefined);
+    loadStaffEdit.mockClear().mockResolvedValue(undefined);
     listStaffPending.mockClear().mockResolvedValue(undefined);
     listMyModeration.mockClear().mockResolvedValue(undefined);
     routerPush.mockClear();
     routerReplace.mockClear();
+    routeState.params = { id: 'm-draft' };
+    routeState.query = {};
+    routeState.path = '/content/maps/m-draft/edit';
+    routeState.fullPath = '/content/maps/m-draft/edit';
   });
 
   afterEach(() => {
@@ -385,7 +400,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.text()).toContain('maps.requestType');
   });
 
-  it('SC-MAP-17: after approve, author editor is view-only without submit', async () => {
+  it('SC-MAP-17: after approve, author open without edit query is view-only without submit', async () => {
     loadDraft.mockRejectedValueOnce(new Error('map_published'));
     loadLiveMap.mockImplementation(() => {
       mapsState.map = { ...approvedMap, createdBy: 'u1' };
@@ -397,6 +412,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
 
     expect(wrapper.text()).toContain('maps.viewOnlySubtitle');
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(false);
     expect(wrapper.findAll('button').some((b) => b.text().includes('maps.submitModeration'))).toBe(
       false,
     );
@@ -446,7 +462,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     });
   });
 
-  it('SC-MAP-25/40: staff does not see author my-moderation nav on Maps', async () => {
+  it('SC-MAP-40/43: staff does not see author my-moderation; no embedded Модерация on Maps list', async () => {
     authState.isStaff = true;
     wrapper = getMapsListWrapper();
     await flushPromises();
@@ -454,7 +470,9 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
     ).toBe(false);
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(
+      false,
+    );
   });
 
   it('SC-MAP-40: non-staff hides my-moderation nav; filters available', async () => {
@@ -587,5 +605,227 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(submit).toBeTruthy();
     expect(submit!.attributes('disabled')).toBeDefined();
     expect(wrapper.text()).toContain('maps.submitHintStarts');
+  });
+
+  it('SC-MAP-41: after cancel, author sees draft badge and drafts filter', async () => {
+    mapsState.list = [
+      {
+        ...approvedMap,
+        id: 'm-cancel',
+        createdBy: 'u1',
+        hasLive: true,
+        inCatalog: true,
+        moderationStatus: 'draft',
+        authorRequestOpen: false,
+      },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="maps-status-m-cancel"]').text()).toContain(
+      'maps.draftOnly',
+    );
+
+    await wrapper.find('[data-test-id="maps-filter-drafts"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-cancel"]').exists()).toBe(true);
+  });
+
+  it('SC-MAP-42: others keep live snapshot after cancel; author sees draft', async () => {
+    mapsState.list = [
+      {
+        ...approvedMap,
+        id: 'm-shared',
+        createdBy: 'u1',
+        moderationStatus: 'draft',
+      },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-status-m-shared"]').text()).toContain(
+      'maps.draftOnly',
+    );
+    wrapper.unmount();
+
+    authState.user = { id: 'other', anonymous: false };
+    mapsState.list = [
+      {
+        ...approvedMap,
+        id: 'm-shared',
+        createdBy: 'u1',
+        moderationStatus: 'in_catalog',
+      },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-status-m-shared"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('maps.statusInCatalog');
+    expect(wrapper.text()).not.toContain('maps.draftOnly');
+  });
+});
+
+describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
+  let wrapper: ReturnType<typeof shallowMount> | null = null;
+
+  const getMapsListWrapper = () =>
+    shallowMount(MapsListPage, {
+      global: { stubs },
+    });
+
+  const getEditorWrapper = () =>
+    shallowMount(MapEditorPage, {
+      global: { stubs },
+    });
+
+  beforeEach(() => {
+    mapsState.error = null;
+    mapsState.loading = false;
+    mapsState.saving = false;
+    mapsState.list = [];
+    mapsState.map = null;
+    mapsState.draft = null;
+    mapsState.liveContent = null;
+    mapsState.pendingRequestId = null;
+    mapsState.isPendingAuthor = false;
+    mapsState.moderationStatus = null;
+    authState.user = { id: 'u1', anonymous: false };
+    authState.isStaff = false;
+    authState.needsEmailVerification = false;
+    loadDraft.mockReset();
+    loadLiveMap.mockReset();
+    acquireEditLock.mockClear().mockResolvedValue(undefined);
+    loadStaffEdit.mockClear().mockResolvedValue(undefined);
+    routerPush.mockClear();
+    routerReplace.mockClear();
+    routeState.params = { id: 'm-approved' };
+    routeState.query = {};
+    routeState.path = '/content/maps/m-approved/edit';
+    routeState.fullPath = '/content/maps/m-approved/edit';
+  });
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+    vi.clearAllMocks();
+  });
+
+  it('SC-MAP-45: published map has no in_catalog badge', async () => {
+    mapsState.list = [{ ...approvedMap, moderationStatus: 'in_catalog' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-approved"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-status-m-approved"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('maps.statusInCatalog');
+  });
+
+  it('SC-MAP-46/47: published map row opens View without paint tools; shows author and seats', async () => {
+    mapsState.list = [{ ...approvedMap }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="maps-row-m-approved"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-map-edit',
+      params: { id: 'm-approved' },
+    });
+    wrapper.unmount();
+
+    loadDraft.mockRejectedValueOnce(new Error('map_published'));
+    loadLiveMap.mockImplementation(() => {
+      mapsState.map = { ...approvedMap };
+      mapsState.liveContent = { ...draftRevision, players: 2, touristsPerPlayer: 3 };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.liveContent });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('maps.viewOnlySubtitle');
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="map-view-meta"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="map-view-meta"]').text()).toContain('Alice');
+    expect(wrapper.find('[data-test-id="map-view-meta"]').text()).toContain('maps.seatConfig');
+    expect(wrapper.find('.map-preview-stub').attributes('data-interactive')).toBe('false');
+  });
+
+  it('SC-MAP-48: Edit from list or View enters locked edit with paint tools', async () => {
+    mapsState.list = [{ ...approvedMap, createdBy: 'u1' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="maps-author-edit"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-map-edit',
+      params: { id: 'm-approved' },
+      query: { edit: '1' },
+    });
+    wrapper.unmount();
+
+    routeState.query = { edit: '1' };
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(acquireEditLock).toHaveBeenCalledWith('m-approved');
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('maps.viewOnlySubtitle');
+    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.submitModeration'))).toBe(
+      true,
+    );
+    wrapper.unmount();
+
+    // From View → Edit button
+    routeState.query = {};
+    acquireEditLock.mockClear().mockResolvedValue(undefined);
+    loadDraft.mockReset();
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    loadLiveMap.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.liveContent = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.liveContent });
+    });
+    // Published with draft available still opens View first
+    wrapper = getEditorWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="map-view-edit"]').exists()).toBe(true);
+    await wrapper.find('[data-test-id="map-view-edit"]').trigger('click');
+    await flushPromises();
+    expect(acquireEditLock).toHaveBeenCalledWith('m-approved');
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+  });
+
+  it('SC-MAP-49: never-published map row opens Edit (not View-first)', async () => {
+    mapsState.list = [{ ...draftMap, moderationStatus: 'draft' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="maps-row-m-draft"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-map-edit',
+      params: { id: 'm-draft' },
+    });
+    wrapper.unmount();
+
+    routeState.params = { id: 'm-draft' };
+    routeState.query = {};
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap };
+      mapsState.draft = { ...draftRevision, players: 1, touristsPerPlayer: 1 };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('maps.viewOnlySubtitle');
+    expect(wrapper.find('[data-test-id="map-view-meta"]').exists()).toBe(false);
+    expect(acquireEditLock).not.toHaveBeenCalled();
   });
 });

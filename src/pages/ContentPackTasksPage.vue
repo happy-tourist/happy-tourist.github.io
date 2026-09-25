@@ -43,9 +43,11 @@
             {{ $t('content.lastPublishedTaskSetHint') }}
           </q-tooltip>
         </q-btn>
+        <!-- SC-PACK-182: live «Вернуться» replaced by App breadcrumbs; editor keeps back to answers -->
         <q-btn
+          v-if="!(liveViewMode && !staffMode)"
           flat
-          :label="liveViewMode && !staffMode ? $t('content.back') : $t('content.backToAnswers')"
+          :label="$t('content.backToAnswers')"
           :to="backTarget"
         />
       </div>

@@ -58,7 +58,7 @@ const stubs = {
   'q-space': true,
 };
 
-describe('lobby packs entry (SC-PACK-41)', () => {
+describe('lobby packs entry / header chrome (SC-PACK-41 / SC-BRAND-15)', () => {
   let wrapper: ReturnType<typeof shallowMount> | null = null;
 
   const getWrapper = () => shallowMount(LobbyPage, { global: { stubs } });
@@ -69,17 +69,21 @@ describe('lobby packs entry (SC-PACK-41)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-41: Наборы opens unified packs list (content-catalog), not collection', async () => {
+  it('SC-BRAND-15: Lobby has no duplicate Packs/Maps/Support section toolbar', async () => {
     wrapper = getWrapper();
     await flushPromises();
-    const packsLink = wrapper
-      .findAll('a')
-      .find(
-        (a) => a.text().includes('content.nav') || a.attributes('data-to')?.includes('content'),
-      );
-    expect(packsLink).toBeTruthy();
-    const to = packsLink!.attributes('data-to') ?? '';
-    expect(to).toContain('content-catalog');
-    expect(to).not.toContain('content-collection');
+    const links = wrapper.findAll('a');
+    const sectionLabels = ['content.nav', 'maps.nav', 'support.nav'];
+    for (const label of sectionLabels) {
+      expect(links.some((a) => a.text().includes(label))).toBe(false);
+    }
+  });
+
+  it('SC-PACK-41: create-game affordance remains; packs entry is via App header (not collection)', async () => {
+    wrapper = getWrapper();
+    await flushPromises();
+    // Lobby still hosts create game; unified packs list route is content-catalog (header).
+    expect(wrapper.text()).toContain('lobby.create');
+    expect(wrapper.html()).not.toContain('content-collection');
   });
 });

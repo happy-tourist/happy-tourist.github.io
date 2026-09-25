@@ -51,6 +51,9 @@ export interface ContentTask {
   slots: TaskSlot[];
 }
 
+/** Per-set mark on live/editor payload for set author + staff (SC-PACK-171…174). */
+export type TaskSetModerationStatus = 'pending' | 'needs_revision' | 'draft' | 'live' | null;
+
 export interface TaskSet {
   id: string;
   authorUserId: string;
@@ -59,6 +62,11 @@ export interface TaskSet {
   coauthorLabels: string[];
   /** Soft-unpublished when false (SC-PACK-131/132). Default true. */
   inCatalog?: boolean;
+  /**
+   * Caller-facing set status (SC-PACK-171…174 / D10).
+   * Visible to that set's author and staff; null for others (incl. pack creator).
+   */
+  moderationStatus?: TaskSetModerationStatus;
   tasks: ContentTask[];
 }
 
@@ -1251,16 +1259,30 @@ export const useContentStore = defineStore('content', () => {
     return needsRevisionRequest(requestId, comment);
   }
 
-  /** Author or staff cancel open request (SC-PACK-105). */
+  /** Author or staff cancel open request (SC-PACK-105 / SC-PACK-175…179: keep working → draft). */
   async function cancelRequest(requestId: string) {
     loading.value = true;
     error.value = null;
     try {
       const { data } = await client.http.post(`/api/content/requests/${requestId}/cancel`);
+      const wasAuthorPending = pendingRequestId.value === requestId && isPendingAuthor.value;
       if (pendingRequestId.value === requestId) {
         pendingRequestId.value = null;
         isPendingAuthor.value = false;
-        moderationStatus.value = null;
+        // D11: Cancel keeps working; author-facing status becomes draft.
+        moderationStatus.value = 'draft';
+      }
+      // Only the change author sees draft on the unified list (not staff viewing the pack).
+      if (wasAuthorPending) {
+        const pid = pack.value?.id;
+        if (pid) {
+          catalog.value = catalog.value.map((p) =>
+            p.id === pid ? { ...p, moderationStatus: 'draft' } : p,
+          );
+          if (pack.value) {
+            pack.value = { ...pack.value, moderationStatus: 'draft' };
+          }
+        }
       }
       return data;
     } catch (e) {
@@ -1306,7 +1328,9 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.post('/api/content/pack/delete', {
         body: { packId },
       });
+      // SC-PACK-177: hard-delete removes entity — not shown as draft on unified list.
       collection.value = collection.value.filter((p) => p.id !== packId);
+      catalog.value = catalog.value.filter((p) => p.id !== packId);
       draft.value = null;
       pack.value = null;
       clearWorkingFlags();

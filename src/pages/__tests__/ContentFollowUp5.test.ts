@@ -311,16 +311,14 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     expect(editor.text()).toContain('соавтор');
   });
 
-  it('SC-PACK-136: live drill-in back is not pack title', async () => {
+  it('SC-PACK-136/182: live drill-in has no «Вернуться»; crumbs cover path', async () => {
     contentState.draft = structuredClone(contentState.liveContent);
     const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
     await flushPromises();
 
     const buttons = wrapper.findAll('button');
-    // Live drill-in (query view=live) uses content.back («Вернуться»), not pack title.
-    const backBtn = buttons.find((b) => b.text() === 'content.back');
-    expect(backBtn).toBeTruthy();
-    expect(backBtn!.text()).not.toContain('Большой пак');
+    // SC-PACK-182: live view no longer shows content.back («Вернуться»).
+    expect(buttons.some((b) => b.text() === 'content.back')).toBe(false);
     expect(wrapper.text()).not.toMatch(/Большой пак(?!.*content)/);
     // Heading uses author label, not pack title as back
     expect(wrapper.text()).toContain('content.taskSetLabelFrom');

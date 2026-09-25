@@ -171,23 +171,46 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-166: staff sees staff queue, not my-moderation', async () => {
+  it('SC-PACK-166/184: staff does not see my-moderation; no embedded staff Модерация on list', async () => {
     authState.isStaff = true;
     wrapper = getWrapper();
     await flushPromises();
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
     ).toBe(false);
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(
+      false,
+    );
   });
 
-  it('SC-PACK-148: in-catalog packs shown with status on all filter', async () => {
+  it('SC-PACK-148/185: in-catalog packs shown without in_catalog status badge', async () => {
     wrapper = getWrapper();
     await flushPromises();
     expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test-id="packs-status-pub1"]').text()).toContain(
-      'content.statusInCatalog',
-    );
+    expect(wrapper.find('[data-test-id="packs-status-pub1"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.statusInCatalog');
+  });
+
+  it('SC-PACK-186: never-published pack row opens Edit', async () => {
+    wrapper = getWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="packs-row-draft1"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack-edit',
+      params: { id: 'draft1' },
+    });
+  });
+
+  it('SC-PACK-186: published pack row opens live browse (not Edit)', async () => {
+    wrapper = getWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="packs-row-pub1"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack',
+      params: { id: 'pub1' },
+    });
   });
 
   it('SC-PACK-149/150: draft and pending statuses on list', async () => {
@@ -251,5 +274,113 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     await wrapper.find('[data-test-id="packs-star-pub1"]').trigger('click');
     await flushPromises();
     expect(unstarPack).toHaveBeenCalledWith('pub1');
+  });
+});
+
+describe('cancel → draft list UX (SC-PACK-175…178)', () => {
+  let wrapper: ReturnType<typeof shallowMount> | null = null;
+
+  const getWrapper = () =>
+    shallowMount(ContentCatalogPage, {
+      global: { stubs },
+    });
+
+  beforeEach(() => {
+    contentState.error = null;
+    authState.isStaff = false;
+    authState.user = { id: 'u1', anonymous: false };
+    authState.needsEmailVerification = false;
+    listCatalog.mockClear();
+    routerPush.mockClear();
+  });
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+  });
+
+  it('SC-PACK-175/176: after cancel, author sees draft badge and drafts filter', async () => {
+    // Post-publish cancel: hasLive + draft for author (server list status).
+    contentState.catalog = [
+      {
+        id: 'e1',
+        title: 'Edited pack',
+        description: '',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'u1',
+        moderationStatus: 'draft',
+        isMine: true,
+        isContributor: false,
+        isFavorite: false,
+      },
+    ];
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-status-e1"]').text()).toContain(
+      'content.statusDraft',
+    );
+
+    await wrapper.find('[data-test-id="packs-filter-drafts"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-row-e1"]').exists()).toBe(true);
+  });
+
+  it('SC-PACK-178: others keep live snapshot; author sees draft', async () => {
+    contentState.catalog = [
+      {
+        id: 'e1',
+        title: 'Shared pack',
+        description: '',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'u1',
+        moderationStatus: 'draft',
+        isMine: true,
+        isContributor: false,
+        isFavorite: false,
+      },
+    ];
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-status-e1"]').text()).toContain(
+      'content.statusDraft',
+    );
+    wrapper.unmount();
+
+    // Non-author list payload: same pack as in_catalog (live snapshot).
+    authState.user = { id: 'other', anonymous: false };
+    contentState.catalog = [
+      {
+        id: 'e1',
+        title: 'Shared pack',
+        description: '',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'u1',
+        moderationStatus: 'in_catalog',
+        isMine: false,
+        isContributor: false,
+        isFavorite: false,
+      },
+    ];
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-status-e1"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.statusInCatalog');
+    expect(wrapper.text()).not.toContain('content.statusDraft');
+  });
+
+  it('SC-PACK-177: hard-deleted pack is absent from list (not draft)', async () => {
+    contentState.catalog = sampleCatalog().filter((p) => p.id !== 'draft1');
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-row-draft1"]').exists()).toBe(false);
+    await wrapper.find('[data-test-id="packs-filter-drafts"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-row-draft1"]').exists()).toBe(false);
   });
 });

@@ -154,7 +154,7 @@ describe('collection ACL (SC-PACK-106/107)', () => {
     ).toBe(false);
   });
 
-  it('SC-PACK-116: staff does not see my-moderation nav', async () => {
+  it('SC-PACK-116/184: staff does not see my-moderation; no embedded Модерация on collection chrome', async () => {
     authState.isStaff = true;
     const wrapper = shallowMount(ContentCollectionPage, { global: { stubs } });
     await flushPromises();
@@ -162,7 +162,9 @@ describe('collection ACL (SC-PACK-106/107)', () => {
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
     ).toBe(false);
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(
+      false,
+    );
   });
 
   it('unpublished creator sees Edit', async () => {

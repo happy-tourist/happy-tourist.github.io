@@ -534,14 +534,33 @@ export const useMapsStore = defineStore('maps', () => {
     }
   }
 
-  /** Author or staff cancel open map request (shared `/api/content/requests/:id/cancel`). */
+  /** Author or staff cancel open map request (SC-MAP-41/42: keep working → draft). */
   async function cancelRequest(requestId: string) {
     loading.value = true;
     error.value = null;
     try {
       const { data } = await client.http.post(`/api/content/requests/${requestId}/cancel`);
+      const wasAuthorPending = pendingRequestId.value === requestId && isPendingAuthor.value;
       if (pendingRequestId.value === requestId) {
-        clearWorkingFlags();
+        pendingRequestId.value = null;
+        isPendingAuthor.value = false;
+        // D11 / SC-MAP-41: Cancel keeps working; author-facing status becomes draft.
+        moderationStatus.value = 'draft';
+      }
+      if (wasAuthorPending) {
+        const mid = map.value?.id;
+        if (mid) {
+          list.value = list.value.map((m) =>
+            m.id === mid ? { ...m, moderationStatus: 'draft', authorRequestOpen: false } : m,
+          );
+          if (map.value) {
+            map.value = {
+              ...map.value,
+              moderationStatus: 'draft',
+              authorRequestOpen: false,
+            };
+          }
+        }
       }
       return data;
     } catch (e) {

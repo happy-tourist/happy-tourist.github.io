@@ -20,7 +20,7 @@
         </div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
+        <!-- SC-PACK-181: «К наборам» replaced by App breadcrumbs -->
         <q-btn
           v-if="showFavorite"
           flat
@@ -137,6 +137,14 @@
               }}
               <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
                 {{ $t('content.unpublishedByStaff') }}
+              </q-badge>
+              <q-badge
+                v-else-if="setModerationBadge(ts)"
+                :color="setModerationBadgeColor(ts)"
+                class="q-ml-sm"
+                :data-test-id="`pack-task-set-status-${ts.id}`"
+              >
+                {{ setModerationBadge(ts) }}
               </q-badge>
               <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
                 {{ ts.coauthorLabels.join(', ') }}
@@ -381,6 +389,23 @@ const errorLabel = computed(() => {
 
 function isSetSoftUnpublished(ts: TaskSet): boolean {
   return ts.inCatalog === false;
+}
+
+/** SC-PACK-171…174 / D10: pending | needs_revision | draft for set author + staff only. */
+function setModerationBadge(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return t('content.taskSetStatusMarks.pending');
+  if (status === 'needs_revision') return t('content.taskSetStatusMarks.needs_revision');
+  if (status === 'draft') return t('content.taskSetStatusMarks.needs_moderation');
+  return '';
+}
+
+function setModerationBadgeColor(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return 'orange';
+  if (status === 'needs_revision') return 'warning';
+  if (status === 'draft') return 'grey';
+  return 'grey';
 }
 
 function canEnterTaskSet(ts: TaskSet): boolean {

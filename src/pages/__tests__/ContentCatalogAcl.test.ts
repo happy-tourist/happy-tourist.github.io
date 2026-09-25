@@ -92,13 +92,15 @@ describe('catalog ACL (SC-PACK-166)', () => {
     expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-166: staff does not see my-moderation; sees staff queue', async () => {
+  it('SC-PACK-166/184: staff does not see my-moderation; no embedded staff Модерация on list', async () => {
     authState.isStaff = true;
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
     ).toBe(false);
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(
+      false,
+    );
   });
 });

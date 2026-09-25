@@ -95,6 +95,14 @@ export default {
     catapultDensityMany: 'много',
     capacity: '{seats}/{maxSeats}',
   },
+  header: {
+    lobby: 'Лобби',
+    packs: 'Наборы',
+    maps: 'Карты',
+    support: 'Поддержка',
+    moderation: 'Модерация',
+    menu: 'Меню разделов',
+  },
   content: {
     nav: 'Наборы',
     catalogTitle: 'Наборы',

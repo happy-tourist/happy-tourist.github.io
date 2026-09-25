@@ -1,24 +1,9 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="row items-center justify-between q-mb-md">
-      <div>
-        <div class="text-h5">Лобби</div>
-        <div class="text-subtitle2 text-muted">Привет, {{ auth.displayName }}</div>
-      </div>
-
-      <div class="q-gutter-sm">
-        <q-btn flat icon="style" :label="$t('content.nav')" :to="{ name: 'content-catalog' }" />
-        <q-btn flat icon="map" :label="$t('maps.nav')" :to="{ name: 'content-maps' }" />
-        <q-btn flat icon="help_outline" :label="$t('support.nav')" :to="{ name: 'support' }" />
-        <q-btn
-          v-if="!auth.user?.anonymous"
-          flat
-          icon="manage_accounts"
-          :label="$t('auth.accountNav')"
-          :to="{ name: 'account' }"
-        />
-        <q-btn flat icon="logout" label="Выйти" @click="onLogout" />
-      </div>
+    <!-- SC-BRAND-15: section nav / account / logout live in App header — no duplicate toolbar -->
+    <div class="q-mb-md">
+      <div class="text-h5">Лобби</div>
+      <div class="text-subtitle2 text-muted">Привет, {{ auth.displayName }}</div>
     </div>
 
     <div class="row q-col-gutter-md q-mb-lg">
@@ -239,11 +224,5 @@ async function onJoin(roomId: string) {
   } finally {
     joining.value = false;
   }
-}
-
-async function onLogout() {
-  await game.leaveGame();
-  await auth.logout();
-  await router.replace({ name: 'login' });
 }
 </script>

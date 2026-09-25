@@ -75,6 +75,7 @@ describe('content store simplify ACL (SC-PACK-100…114)', () => {
     await content.cancelRequest('r1');
     expect(client.http.post).toHaveBeenCalledWith('/api/content/requests/r1/cancel');
     expect(content.pendingRequestId).toBeNull();
+    expect(content.moderationStatus).toBe('draft');
   });
 
   it('SC-PACK-108: submitAddTaskSet POSTs add-task-set/submit', async () => {

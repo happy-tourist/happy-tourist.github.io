@@ -5,20 +5,99 @@
         <button
           type="button"
           class="brand-logo-control"
+          data-test-id="brand-logo"
           :aria-label="brandLogoAria"
           @click="onBrandLogoClick"
         >
           <img :src="brandLogoUrl" alt="" class="brand-logo" />
         </button>
+
+        <!-- SC-BRAND-11/12: section links right of logo (hidden on Game / auth) -->
+        <div
+          v-if="showSectionNav && !isNarrow"
+          class="row items-center q-gutter-xs q-ml-sm"
+          data-test-id="header-sections"
+        >
+          <q-btn
+            flat
+            dense
+            :label="t('header.packs')"
+            :to="{ name: 'content-catalog' }"
+            data-test-id="header-packs"
+          />
+          <q-btn
+            flat
+            dense
+            :label="t('header.maps')"
+            :to="{ name: 'content-maps' }"
+            data-test-id="header-maps"
+          />
+          <q-btn
+            flat
+            dense
+            :label="t('header.support')"
+            :to="{ name: 'support' }"
+            data-test-id="header-support"
+          />
+          <q-btn
+            v-if="auth.isStaff"
+            flat
+            dense
+            :label="t('header.moderation')"
+            :to="{ name: 'content-staff' }"
+            data-test-id="header-moderation"
+          />
+        </div>
+
+        <!-- SC-BRAND-14: burger on narrow viewport -->
+        <q-btn
+          v-if="showSectionNav && isNarrow"
+          flat
+          dense
+          round
+          icon="menu"
+          class="q-ml-sm"
+          data-test-id="header-burger"
+          :aria-label="t('header.menu')"
+        >
+          <q-menu data-test-id="header-burger-menu">
+            <q-list style="min-width: 180px">
+              <q-item clickable v-close-popup :to="{ name: 'content-catalog' }">
+                <q-item-section>{{ t('header.packs') }}</q-item-section>
+              </q-item>
+              <q-item clickable v-close-popup :to="{ name: 'content-maps' }">
+                <q-item-section>{{ t('header.maps') }}</q-item-section>
+              </q-item>
+              <q-item clickable v-close-popup :to="{ name: 'support' }">
+                <q-item-section>{{ t('header.support') }}</q-item-section>
+              </q-item>
+              <q-item
+                v-if="auth.isStaff"
+                clickable
+                v-close-popup
+                :to="{ name: 'content-staff' }"
+                data-test-id="header-burger-moderation"
+              >
+                <q-item-section>{{ t('header.moderation') }}</q-item-section>
+              </q-item>
+            </q-list>
+          </q-menu>
+        </q-btn>
+
         <q-space />
-        <div v-if="isGameRoute" class="text-subtitle1 text-center">{{ statusLabel }}</div>
+        <div v-if="isGameRoute" class="text-subtitle1 text-center" data-test-id="game-status">
+          {{ statusLabel }}
+        </div>
         <q-space />
+
+        <!-- SC-BRAND-13: Acc / Theme / Logout (logout rightmost); SC-LEAVE-09/11 Game leave -->
         <q-btn
           v-if="showAccountNav"
           flat
           round
           dense
           icon="manage_accounts"
+          data-test-id="header-account"
           :aria-label="t('auth.accountNavAria')"
           :to="{ name: 'account' }"
         />
@@ -26,11 +105,48 @@
           flat
           round
           dense
+          data-test-id="header-theme"
           :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
           aria-label="Toggle theme"
           @click="onToggleTheme"
         />
+        <q-btn
+          v-if="isGameRoute"
+          flat
+          dense
+          icon="exit_to_app"
+          data-test-id="header-game-leave"
+          :aria-label="t('game.leave')"
+          :label="t('game.leave')"
+          @click="onExitClick"
+        />
+        <q-btn
+          v-else-if="showSessionLogout"
+          flat
+          dense
+          icon="logout"
+          data-test-id="header-logout"
+          :aria-label="t('auth.logout')"
+          :label="t('auth.logout')"
+          @click="onSessionLogout"
+        />
       </q-toolbar>
+
+      <!-- SC-BRAND-16 / SC-PACK-180 / SC-MAP-44: breadcrumbs under header -->
+      <div
+        v-if="breadcrumbItems.length"
+        class="app-breadcrumbs q-px-md q-pb-sm"
+        data-test-id="app-breadcrumbs"
+      >
+        <q-breadcrumbs>
+          <q-breadcrumbs-el
+            v-for="(crumb, idx) in breadcrumbItems"
+            :key="`${crumb.label}-${idx}`"
+            :label="crumb.label"
+            :to="crumb.to"
+          />
+        </q-breadcrumbs>
+      </div>
     </q-header>
 
     <q-dialog v-model="leaveConfirmOpen">
@@ -81,22 +197,40 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 
 import brandLogoUrl from '@/assets/brand/logo.png';
 import { useAuthStore } from '@/stores/auth';
+import { useContentStore } from '@/stores/content';
 import { useGameStore } from '@/stores/game';
+import { useMapsStore } from '@/stores/maps';
 import { useThemeStore } from '@/stores/theme';
 
 const EMAIL_VERIFY_REMINDER_KEY = 'ht-email-verify-reminder';
 
 const AUTH_ROUTE_NAMES = new Set(['login', 'forgot-password', 'confirm-email', 'reset-password']);
 
+const PACKS_BREADCRUMB_ROUTES = new Set([
+  'content-catalog',
+  'content-pack',
+  'content-pack-new',
+  'content-pack-edit',
+  'content-pack-tasks',
+  'content-pack-add-task-set',
+  'content-pack-moderation',
+]);
+
+const MAPS_BREADCRUMB_ROUTES = new Set(['content-maps', 'content-map-edit']);
+
 const { t } = useI18n();
+const $q = useQuasar();
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const game = useGameStore();
+const content = useContentStore();
+const maps = useMapsStore();
 const theme = useThemeStore();
 
 const leaveConfirmOpen = ref(false);
@@ -106,6 +240,14 @@ let emailVerifyReminderShown = false;
 
 const isGameRoute = computed(() => route.name === 'game');
 const isLoginRoute = computed(() => AUTH_ROUTE_NAMES.has(String(route.name)));
+
+/** Narrow viewport → burger for sections (SC-BRAND-14). */
+const isNarrow = computed(() => $q.screen.lt.md);
+
+/** Authenticated non-Game / non-auth screens show section nav (SC-BRAND-11, SC-LEAVE-12). */
+const showSectionNav = computed(
+  () => auth.isAuthenticated && !isGameRoute.value && !isLoginRoute.value,
+);
 
 /** Brand logo click mode (design D2) — always same button DOM (SC-BRAND-09). */
 const brandLogoMode = computed<'noop' | 'leave' | 'toLobby'>(() => {
@@ -131,6 +273,78 @@ const brandLogoAria = computed(() => {
 const showAccountNav = computed(
   () => auth.isAuthenticated && auth.user && !auth.user.anonymous && !isLoginRoute.value,
 );
+
+/** Session logout rightmost off-Game (SC-BRAND-13); never on Game (SC-LEAVE-11). */
+const showSessionLogout = computed(
+  () => auth.isAuthenticated && !isGameRoute.value && !isLoginRoute.value,
+);
+
+type Crumb = { label: string; to?: { name: string; params?: Record<string, string> } };
+
+const breadcrumbItems = computed((): Crumb[] => {
+  const name = String(route.name ?? '');
+  if (!auth.isAuthenticated || isGameRoute.value || isLoginRoute.value) {
+    return [];
+  }
+  if (PACKS_BREADCRUMB_ROUTES.has(name)) {
+    const crumbs: Crumb[] = [
+      { label: t('header.lobby'), to: { name: 'lobby' } },
+      { label: t('header.packs'), to: { name: 'content-catalog' } },
+    ];
+    if (name === 'content-catalog' || name === 'content-pack-new') {
+      if (name === 'content-pack-new') {
+        crumbs.push({ label: t('content.create') });
+      }
+      return crumbs;
+    }
+    const packTitle = content.pack?.title || content.draft?.title || t('content.untitled');
+    const packId = String((route.params as { id?: string }).id ?? '');
+    if (name === 'content-pack') {
+      crumbs.push({ label: packTitle });
+    } else {
+      crumbs.push({
+        label: packTitle,
+        to: { name: 'content-pack', params: { id: packId } },
+      });
+    }
+    if (name === 'content-pack-edit') {
+      crumbs.push({ label: t('content.edit') });
+    } else if (name === 'content-pack-tasks') {
+      crumbs.push({ label: t('content.taskSets') });
+    } else if (name === 'content-pack-add-task-set') {
+      crumbs.push({ label: t('content.addTaskSet') });
+    } else if (name === 'content-pack-moderation') {
+      crumbs.push({ label: t('content.moderationTitle') });
+    }
+    return crumbs;
+  }
+  if (MAPS_BREADCRUMB_ROUTES.has(name)) {
+    const crumbs: Crumb[] = [
+      { label: t('header.lobby'), to: { name: 'lobby' } },
+      { label: t('header.maps'), to: { name: 'content-maps' } },
+    ];
+    if (name === 'content-map-edit') {
+      // Maps have no title field — use author (+ seats) for the entity crumb (SC-MAP-44).
+      const mapId = String((route.params as { id?: string }).id ?? '');
+      const m =
+        maps.map?.id === mapId
+          ? maps.map
+          : (maps.list?.find((row) => row.id === mapId) ?? maps.map);
+      const author = m?.authorDisplayName;
+      const seatLabel = m
+        ? t('maps.seatConfig', {
+            players: m.players,
+            tourists: m.touristsPerPlayer,
+          })
+        : '';
+      crumbs.push({
+        label: author ? (seatLabel ? `${author} · ${seatLabel}` : author) : t('maps.untitled'),
+      });
+    }
+    return crumbs;
+  }
+  return [];
+});
 
 /** Same branches as former GamePage statusLabel (SC-PRESENCE-23). */
 const statusLabel = computed(() => {
@@ -271,6 +485,12 @@ async function onLeave() {
   await game.leaveGame();
   await router.push({ name: 'lobby' });
 }
+
+async function onSessionLogout() {
+  await game.leaveGame();
+  await auth.logout();
+  await router.replace({ name: 'login' });
+}
 </script>
 
 <style scoped>
@@ -296,5 +516,9 @@ async function onLeave() {
 .brand-logo-control:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+.app-breadcrumbs {
+  font-size: 0.875rem;
 }
 </style>
