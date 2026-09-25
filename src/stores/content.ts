@@ -5,7 +5,7 @@ import { client } from '@/boot/colyseus';
 
 export type Difficulty = 1 | 2 | 3;
 /** API request types after simplify-content-pack-editing (D2). */
-export type ModerationRequestType = 'pack' | 'task_set';
+export type ModerationRequestType = 'pack' | 'task_set' | 'map';
 
 export interface ContentPackSummary {
   id: string;
@@ -64,6 +64,7 @@ export interface PackContent {
 export interface ModerationRequest {
   id: string;
   packId: string;
+  mapId?: string | null;
   changeAuthorId: string;
   revisionId: string;
   status: string;
@@ -83,24 +84,33 @@ export interface ModerationMessage {
 
 export interface StaffPendingItem {
   requestId: string;
-  packId: string;
+  packId: string | null;
+  mapId?: string | null;
   changeAuthorId: string;
   status: string;
   title: string;
-  blocked: boolean;
+  blocked?: boolean;
   type?: string;
   taskSetCount?: number;
   cardCount?: number;
+  players?: number;
+  touristsPerPlayer?: number;
+  grid?: string;
+  authorDisplayName?: string;
   updatedAt: string | Date;
 }
 
 /** Author «На модерации» row — open pending | needs_revision. */
 export interface MyModerationItem {
   requestId: string;
-  packId: string;
+  packId: string | null;
+  mapId?: string | null;
   type: string;
   status: string;
   title: string;
+  players?: number;
+  touristsPerPlayer?: number;
+  grid?: string;
   updatedAt: string | Date;
 }
 
@@ -123,10 +133,30 @@ export interface TypeModerationState {
   isAuthor: boolean;
 }
 
+export interface MapStaffContent {
+  grid: string;
+  players: number;
+  touristsPerPlayer: number;
+}
+
+export interface MapStaffSummary {
+  id: string;
+  createdBy: string;
+  authorDisplayName?: string;
+  hasLive: boolean;
+  inCatalog: boolean;
+  players: number;
+  touristsPerPlayer: number;
+  grid: string;
+}
+
 export interface StaffPreview {
   request: ModerationRequest;
-  pack: ContentPackSummary;
-  content: PackContent;
+  /** Present for pack | task_set requests. */
+  pack?: ContentPackSummary;
+  /** Present for map requests (SC-MAP-14). */
+  map?: MapStaffSummary;
+  content: PackContent | MapStaffContent;
   messages: ModerationMessage[];
   canApprove?: boolean;
 }
@@ -270,6 +300,7 @@ function findTaskInContent(content: PackContent, taskId: string): ContentTask | 
 function normalizeRequestType(raw: unknown): string {
   if (raw === 'task_set' || raw === 'tasks') return 'task_set';
   if (raw === 'pack' || raw === 'answers') return 'pack';
+  if (raw === 'map') return 'map';
   return typeof raw === 'string' ? raw : 'pack';
 }
 
@@ -989,12 +1020,14 @@ export const useContentStore = defineStore('content', () => {
         request: {
           ...data.request,
           type: normalizeRequestType(data.request.type),
+          packId: data.request.packId ?? data.pack?.id ?? '',
+          mapId: (data.request as ModerationRequest & { mapId?: string }).mapId ?? data.map?.id,
         },
       };
       staffPreview.value = preview;
       moderationRequest.value = preview.request;
       moderationMessages.value = data.messages ?? [];
-      pack.value = data.pack;
+      pack.value = data.pack ?? null;
       return preview;
     } catch (e) {
       error.value = mapContentError(e);

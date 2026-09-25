@@ -60,6 +60,24 @@ declare module 'vue-router' {
         Record<never, never>,
         Record<never, never>
       >;
+      'content-my-moderation': RouteRecordInfo<
+        'content-my-moderation',
+        '/content/my-moderation',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-maps': RouteRecordInfo<
+        'content-maps',
+        '/content/maps',
+        Record<never, never>,
+        Record<never, never>
+      >;
+      'content-map-edit': RouteRecordInfo<
+        'content-map-edit',
+        '/content/maps/:id/edit',
+        { id: string },
+        { id: string }
+      >;
       'content-pack-new': RouteRecordInfo<
         'content-pack-new',
         '/content/packs/new',

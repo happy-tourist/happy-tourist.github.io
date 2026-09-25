@@ -3,8 +3,13 @@
     <div class="row items-center justify-between q-mb-md">
       <div>
         <div class="text-h5">
-          {{ preview?.pack.title || $t('content.untitled') }}
-          <q-badge v-if="preview?.pack.blocked" color="negative" class="q-ml-sm">
+          <template v-if="isMapRequest">
+            {{ mapTitle }}
+          </template>
+          <template v-else>
+            {{ preview?.pack?.title || $t('content.untitled') }}
+          </template>
+          <q-badge v-if="preview?.pack?.blocked" color="negative" class="q-ml-sm">
             {{ $t('content.blocked') }}
           </q-badge>
         </div>
@@ -25,28 +30,116 @@
 
     <div v-if="content.loading && !preview" class="text-muted">{{ $t('content.loading') }}</div>
 
-    <template v-else-if="preview">
+    <template v-else-if="preview && isMapRequest && mapContent">
+      <div class="row q-col-gutter-md q-mb-lg items-start">
+        <div class="col-auto">
+          <MapGridPreview
+            :grid="mapContent.grid"
+            :size="200"
+            :aria-label="$t('maps.previewAria')"
+          />
+        </div>
+        <div class="col">
+          <div class="text-body1">
+            {{ preview.map?.authorDisplayName || $t('content.authorUser') }}
+          </div>
+          <div class="text-subtitle2 text-muted">
+            {{
+              $t('maps.seatConfig', {
+                players: mapContent.players,
+                tourists: mapContent.touristsPerPlayer,
+              })
+            }}
+          </div>
+        </div>
+      </div>
+
+      <div v-if="isOpen" class="q-gutter-sm q-mb-lg">
+        <q-btn
+          color="positive"
+          :label="$t('content.approve')"
+          :loading="content.loading"
+          :disable="!canApprove"
+          @click="onApprove"
+        />
+        <q-btn
+          color="warning"
+          :label="$t('content.needsRevision')"
+          :loading="content.loading"
+          @click="openNeedsRevision"
+        />
+        <q-btn
+          color="grey"
+          outline
+          :label="$t('content.cancelPending')"
+          :loading="content.loading"
+          @click="onCancel"
+        />
+        <div v-if="!canApprove" class="text-caption text-muted">
+          {{ $t('maps.approveNeedStarts') }}
+        </div>
+      </div>
+
+      <div class="text-h6 q-mb-sm">{{ $t('content.moderationThread') }}</div>
+      <q-list bordered separator class="rounded-borders q-mb-lg">
+        <q-item v-for="msg in preview.messages" :key="msg.id">
+          <q-item-section>
+            <q-item-label>
+              {{
+                msg.authorKind === 'staff' ? $t('content.authorStaff') : $t('content.authorUser')
+              }}
+            </q-item-label>
+            <q-item-label caption>{{ formatDate(msg.createdAt) }}</q-item-label>
+            <div class="q-mt-sm" style="white-space: pre-wrap">{{ msg.body }}</div>
+          </q-item-section>
+        </q-item>
+        <q-item v-if="!preview.messages.length">
+          <q-item-section class="text-muted">{{ $t('content.emptyThread') }}</q-item-section>
+        </q-item>
+      </q-list>
+
+      <q-form v-if="isOpen" ref="replyFormRef" class="q-gutter-md" @submit.prevent="onStaffReply">
+        <q-input
+          v-model="replyBody"
+          type="textarea"
+          outlined
+          dense
+          autogrow
+          lazy-rules
+          :label="$t('content.reply')"
+          :rules="[(v) => (!!v && String(v).trim().length > 0) || $t('content.bodyRequired')]"
+        />
+        <q-btn
+          type="submit"
+          color="primary"
+          :label="$t('content.sendReply')"
+          :loading="content.loading"
+        />
+      </q-form>
+    </template>
+
+    <template v-else-if="preview && packContent">
       <div class="text-body1 q-mb-md" style="white-space: pre-wrap">
-        {{ preview.content.description }}
+        {{ packContent.description }}
       </div>
 
       <template v-if="isPackRequest">
         <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
         <q-list bordered separator class="rounded-borders q-mb-lg">
-          <q-item v-for="card in preview.content.answerCards" :key="card.id">
+          <q-item v-for="card in packContent.answerCards" :key="card.id">
             <q-item-section>
               <q-item-label>{{ card.content }}</q-item-label>
               <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
             </q-item-section>
           </q-item>
-          <q-item v-if="!preview.content.answerCards.length">
+          <q-item v-if="!packContent.answerCards.length">
             <q-item-section class="text-muted">{{ $t('content.emptyCards') }}</q-item-section>
           </q-item>
         </q-list>
       </template>
 
       <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
-      <div v-for="(ts, si) in preview.content.taskSets" :key="ts.id" class="q-mb-md">
+      <div v-for="(ts, si) in packContent.taskSets" :key="ts.id" class="q-mb-md">
         <div class="text-subtitle1 q-mb-xs">
           {{
             $t('content.taskSetLabelFrom', {
@@ -66,7 +159,6 @@
                 {{ $t('content.difficultyLabel') }}:
                 {{ $t(`content.difficulty.${task.difficulty}`) }}
               </q-item-label>
-              <!-- SC-PACK-127 / D11: answer slots on every question row -->
               <div class="row q-gutter-xs q-mt-xs">
                 <q-chip
                   v-for="slot in task.slots"
@@ -85,7 +177,7 @@
           </q-item>
         </q-list>
       </div>
-      <div v-if="!preview.content.taskSets.length" class="text-muted q-mb-lg">
+      <div v-if="!packContent.taskSets.length" class="text-muted q-mb-lg">
         {{ $t('content.emptyTaskSets') }}
       </div>
 
@@ -188,8 +280,15 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
+import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore, type TaskSlot } from '@/stores/content';
+import {
+  contentErrorI18nKey,
+  useContentStore,
+  type MapStaffContent,
+  type PackContent,
+  type TaskSlot,
+} from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -204,14 +303,37 @@ const requestId = computed(() => {
 });
 const preview = computed(() => content.staffPreview);
 
+const isMapRequest = computed(() => preview.value?.request.type === 'map');
+
 const isPackRequest = computed(() => {
   const type = preview.value?.request.type;
-  return type !== 'task_set' && type !== 'tasks';
+  return type !== 'task_set' && type !== 'tasks' && type !== 'map';
 });
 
-const requestTypeLabel = computed(() =>
-  isPackRequest.value ? t('content.requestTypePack') : t('content.requestTypeTaskSet'),
-);
+const mapContent = computed((): MapStaffContent | null => {
+  if (!isMapRequest.value || !preview.value) return null;
+  const c = preview.value.content as MapStaffContent;
+  if (typeof c?.grid !== 'string') return null;
+  return c;
+});
+
+const packContent = computed((): PackContent | null => {
+  if (isMapRequest.value || !preview.value) return null;
+  const c = preview.value.content as PackContent;
+  if (!Array.isArray(c?.answerCards)) return null;
+  return c;
+});
+
+const mapTitle = computed(() => {
+  const c = mapContent.value;
+  if (!c) return t('maps.untitled');
+  return t('maps.seatConfig', { players: c.players, tourists: c.touristsPerPlayer });
+});
+
+const requestTypeLabel = computed(() => {
+  if (isMapRequest.value) return t('maps.requestType');
+  return isPackRequest.value ? t('content.requestTypePack') : t('content.requestTypeTaskSet');
+});
 
 const isOpen = computed(() => {
   const status = preview.value?.request.status;
@@ -220,7 +342,13 @@ const isOpen = computed(() => {
 
 const canApprove = computed(() => {
   if (typeof preview.value?.canApprove === 'boolean') return preview.value.canApprove;
-  const c = preview.value?.content;
+  if (isMapRequest.value) {
+    const c = mapContent.value;
+    if (!c) return false;
+    const starts = [...c.grid].filter((ch) => ch === '1').length;
+    return starts >= c.players * c.touristsPerPlayer;
+  }
+  const c = packContent.value;
   if (!c) return false;
   if (!isPackRequest.value) {
     return c.taskSets.length >= 1 && c.taskSets.every((ts) => ts.tasks.length >= 2);
@@ -247,11 +375,10 @@ function statusLabel(status: string) {
 }
 
 function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId || !preview.value) {
+  if (!slot.answerCardId || !packContent.value) {
     return t('content.slotEmpty');
   }
-  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
-  const card = preview.value.content.answerCards.find((c) => c.id === slot.answerCardId);
+  const card = packContent.value.answerCards.find((c) => c.id === slot.answerCardId);
   if (card) {
     const text = card.content?.trim();
     if (text) return text;

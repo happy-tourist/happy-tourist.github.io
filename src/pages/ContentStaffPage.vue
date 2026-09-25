@@ -46,16 +46,15 @@
           <q-item-section>
             <q-item-label>
               {{ item.title || $t('content.untitled') }}
-              <q-badge v-if="item.blocked" color="negative" class="q-ml-sm">
+              <q-badge v-if="item.type === 'map'" color="teal" class="q-ml-sm">
+                {{ $t('maps.requestTypeBadge') }}
+              </q-badge>
+              <q-badge v-else-if="item.blocked" color="negative" class="q-ml-sm">
                 {{ $t('content.blocked') }}
               </q-badge>
             </q-item-label>
             <q-item-label caption>
-              {{
-                item.type === 'task_set' || item.type === 'tasks'
-                  ? $t('content.requestTypeTaskSet')
-                  : $t('content.requestTypePack')
-              }}
+              {{ requestTypeLabel(item.type) }}
               · {{ queueStatusLabel(item.status) }} · {{ formatDate(item.updatedAt) }}
             </q-item-label>
           </q-item-section>
@@ -114,6 +113,12 @@ function queueStatusLabel(status: string) {
   if (status === 'needs_revision' || status === 'rejected')
     return t('content.statuses.needs_revision');
   return status;
+}
+
+function requestTypeLabel(type: string | undefined) {
+  if (type === 'map') return t('maps.requestType');
+  if (type === 'task_set' || type === 'tasks') return t('content.requestTypeTaskSet');
+  return t('content.requestTypePack');
 }
 
 function onRefresh() {

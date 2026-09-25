@@ -47,11 +47,7 @@
           <q-item-section>
             <q-item-label>{{ item.title || $t('content.untitled') }}</q-item-label>
             <q-item-label caption>
-              {{
-                item.type === 'task_set' || item.type === 'tasks'
-                  ? $t('content.requestTypeTaskSet')
-                  : $t('content.requestTypePack')
-              }}
+              {{ requestTypeLabel(item.type) }}
               · {{ queueStatusLabel(item.status) }} · {{ formatDate(item.updatedAt) }}
             </q-item-label>
           </q-item-section>
@@ -89,10 +85,19 @@ onMounted(() => {
 });
 
 function myModerationLink(item: MyModerationItem) {
+  if (item.type === 'map' && item.mapId) {
+    return { name: 'content-map-edit', params: { id: item.mapId } };
+  }
   if (item.type === 'task_set' || item.type === 'tasks') {
     return { name: 'content-pack-add-task-set', params: { id: item.packId } };
   }
   return { name: 'content-pack-edit', params: { id: item.packId } };
+}
+
+function requestTypeLabel(type: string) {
+  if (type === 'map') return t('maps.requestType');
+  if (type === 'task_set' || type === 'tasks') return t('content.requestTypeTaskSet');
+  return t('content.requestTypePack');
 }
 
 /** pending → на модерации; needs_revision → нужна доработка. */

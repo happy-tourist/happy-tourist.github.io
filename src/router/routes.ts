@@ -82,6 +82,18 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/content/maps',
+    name: 'content-maps',
+    component: () => import('@/pages/MapsListPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/content/maps/:id/edit',
+    name: 'content-map-edit',
+    component: () => import('@/pages/MapEditorPage.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/content/packs/new',
     name: 'content-pack-new',
     component: () => import('@/pages/ContentPackCreatePage.vue'),
