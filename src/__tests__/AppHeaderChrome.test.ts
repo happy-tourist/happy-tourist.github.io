@@ -47,6 +47,10 @@ const {
   const contentState = {
     pack: { id: 'p1', title: 'Пак Альфа' } as { id: string; title: string } | null,
     draft: { title: 'Пак Альфа' } as { title: string } | null,
+    staffPreview: null as {
+      pack?: { title?: string };
+      map?: { authorDisplayName?: string };
+    } | null,
   };
   const mapsState = {
     map: null as {
@@ -135,7 +139,7 @@ const stubs = {
   'q-layout': { template: '<div><slot /></div>' },
   'q-header': { template: '<div data-test-id="q-header"><slot /></div>' },
   'q-toolbar': { template: '<div data-test-id="q-toolbar"><slot /></div>' },
-  'q-page-container': { template: '<div><slot /></div>' },
+  'q-page-container': { template: '<div data-test-id="q-page-container"><slot /></div>' },
   'q-space': { template: '<div />' },
   'q-btn': {
     props: ['label', 'to', 'icon', 'ariaLabel'],
@@ -190,6 +194,7 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     gameState.isSeated = false;
     gameState.isPlaying = false;
     contentState.pack = { id: 'p1', title: 'Пак Альфа' };
+    contentState.staffPreview = null;
     mapsState.map = null;
     mapsState.list = [];
   });
@@ -219,7 +224,8 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(mod.attributes('data-to') ?? '').toContain('content-staff');
   });
 
-  it('SC-BRAND-13: logout rightmost vs account and theme on Lobby', async () => {
+  it('SC-BRAND-13: logout rightmost vs account and theme on Lobby (wide)', async () => {
+    screenLtMd.value = false;
     wrapper = mountApp();
     await flushPromises();
     const toolbar = wrapper.find('[data-test-id="q-toolbar"]');
@@ -230,6 +236,7 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(accountIdx).toBeGreaterThan(-1);
     expect(themeIdx).toBeGreaterThan(accountIdx);
     expect(logoutIdx).toBeGreaterThan(themeIdx);
+    expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(false);
   });
 
   it('SC-BRAND-14: burger exposes sections on narrow viewport', async () => {
@@ -246,6 +253,55 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(wrapper.text()).toContain('header.moderation');
   });
 
+  it('SC-BRAND-19: narrow burger is rightmost and holds Acc/Theme/Logout', async () => {
+    screenLtMd.value = true;
+    wrapper = mountApp();
+    await flushPromises();
+    const toolbar = wrapper.find('[data-test-id="q-toolbar"]');
+    expect(wrapper.find('[data-test-id="header-account"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-theme"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(true);
+    // Top-level toolbar header-* ids only (exclude menu internals header-burger-*).
+    const toolbarIds = [...toolbar.html().matchAll(/data-test-id="(header-[^"]+)"/g)]
+      .map((m) => m[1]!)
+      .filter((id) => !id.startsWith('header-burger-'));
+    expect(toolbarIds[toolbarIds.length - 1]).toBe('header-burger');
+    expect(wrapper.find('[data-test-id="header-burger-account"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="header-burger-theme"]').exists()).toBe(true);
+    const logoutItem = wrapper.find('[data-test-id="header-burger-logout"]');
+    expect(logoutItem.exists()).toBe(true);
+    const menuHtml = wrapper.find('[data-test-id="header-burger-menu"]').html();
+    const accIdx = menuHtml.indexOf('header-burger-account');
+    const themeIdx = menuHtml.indexOf('header-burger-theme');
+    const logoutIdx = menuHtml.indexOf('header-burger-logout');
+    expect(themeIdx).toBeGreaterThan(accIdx);
+    expect(logoutIdx).toBeGreaterThan(themeIdx);
+  });
+
+  it('SC-BRAND-19 / D21: Game and auth do not fold Acc/Theme into section burger', async () => {
+    screenLtMd.value = true;
+    routeState.name = 'game';
+    routeState.params = { roomId: 'r1' };
+    routeState.path = '/game/r1';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-theme"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="header-game-leave"]').exists()).toBe(true);
+
+    wrapper.unmount();
+    authState.isAuthenticated = false;
+    authState.user = null;
+    routeState.name = 'login';
+    routeState.params = {};
+    routeState.path = '/login';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-theme"]').exists()).toBe(true);
+  });
+
   it('SC-BRAND-16 / SC-PACK-180: breadcrumbs under header on pack route', async () => {
     routeState.name = 'content-pack';
     routeState.params = { id: 'p1' };
@@ -259,17 +315,19 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(crumbs.text()).toContain('Пак Альфа');
   });
 
-  it('SC-BRAND-17 / SC-PACK-193 / SC-MAP-52: breadcrumbs outside elevated header bar', async () => {
+  it('SC-BRAND-17 / SC-PACK-193 / SC-MAP-52: breadcrumbs inside page-container offset zone', async () => {
     routeState.name = 'content-pack';
     routeState.params = { id: 'p1' };
     routeState.path = '/content/packs/p1';
     wrapper = mountApp();
     await flushPromises();
     const header = wrapper.find('[data-test-id="q-header"]');
+    const pageContainer = wrapper.find('[data-test-id="q-page-container"]');
     const crumbs = wrapper.find('[data-test-id="app-breadcrumbs"]');
     expect(crumbs.exists()).toBe(true);
     expect(header.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(false);
     expect(header.html()).not.toContain('app-breadcrumbs');
+    expect(pageContainer.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(true);
 
     wrapper.unmount();
     routeState.name = 'content-maps';
@@ -280,7 +338,46 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(
       wrapper.find('[data-test-id="q-header"]').find('[data-test-id="app-breadcrumbs"]').exists(),
     ).toBe(false);
-    expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(true);
+    expect(
+      wrapper
+        .find('[data-test-id="q-page-container"]')
+        .find('[data-test-id="app-breadcrumbs"]')
+        .exists(),
+    ).toBe(true);
+  });
+
+  it('SC-BRAND-18: breadcrumbs on staff moderation queue and detail', async () => {
+    authState.isStaff = true;
+    routeState.name = 'content-staff';
+    routeState.path = '/content/staff';
+    wrapper = mountApp();
+    await flushPromises();
+    let crumbs = wrapper.find('[data-test-id="app-breadcrumbs"]');
+    expect(crumbs.exists()).toBe(true);
+    expect(crumbs.text()).toContain('header.lobby');
+    expect(crumbs.text()).toContain('header.moderation');
+
+    wrapper.unmount();
+    contentState.staffPreview = { pack: { title: 'Заявка Пак' } };
+    routeState.name = 'content-staff-request';
+    routeState.params = { id: 'r1' };
+    routeState.path = '/content/staff/r1';
+    wrapper = mountApp();
+    await flushPromises();
+    crumbs = wrapper.find('[data-test-id="app-breadcrumbs"]');
+    expect(crumbs.text()).toContain('header.lobby');
+    expect(crumbs.text()).toContain('header.moderation');
+    expect(crumbs.text()).toContain('Заявка Пак');
+
+    wrapper.unmount();
+    routeState.name = 'content-my-moderation';
+    routeState.params = {};
+    routeState.path = '/content/my-moderation';
+    wrapper = mountApp();
+    await flushPromises();
+    crumbs = wrapper.find('[data-test-id="app-breadcrumbs"]');
+    expect(crumbs.text()).toContain('header.lobby');
+    expect(crumbs.text()).toContain('header.moderation');
   });
 
   it('SC-MAP-44: breadcrumbs on Maps list and editor', async () => {

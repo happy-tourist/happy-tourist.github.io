@@ -6,7 +6,6 @@
         <div class="text-subtitle2 text-muted">{{ $t('content.staffQueueSubtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
         <q-btn
           flat
           icon="refresh"

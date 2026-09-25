@@ -49,14 +49,61 @@
           />
         </div>
 
-        <!-- SC-BRAND-14: burger on narrow viewport -->
+        <q-space />
+        <div v-if="isGameRoute" class="text-subtitle1 text-center" data-test-id="game-status">
+          {{ statusLabel }}
+        </div>
+        <q-space />
+
+        <!-- SC-BRAND-13 wide: Acc / Theme / Logout in toolbar; SC-BRAND-19 narrow: fold into burger -->
+        <q-btn
+          v-if="showAccountNav && !foldChromeIntoBurger"
+          flat
+          round
+          dense
+          icon="manage_accounts"
+          data-test-id="header-account"
+          :aria-label="t('auth.accountNavAria')"
+          :to="{ name: 'account' }"
+        />
+        <q-btn
+          v-if="!foldChromeIntoBurger"
+          flat
+          round
+          dense
+          data-test-id="header-theme"
+          :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
+          :aria-label="t('header.theme')"
+          @click="onToggleTheme"
+        />
+        <q-btn
+          v-if="isGameRoute"
+          flat
+          dense
+          icon="exit_to_app"
+          data-test-id="header-game-leave"
+          :aria-label="t('game.leave')"
+          :label="t('game.leave')"
+          @click="onExitClick"
+        />
+        <q-btn
+          v-else-if="showSessionLogout && !foldChromeIntoBurger"
+          flat
+          dense
+          icon="logout"
+          data-test-id="header-logout"
+          :aria-label="t('auth.logout')"
+          :label="t('auth.logout')"
+          @click="onSessionLogout"
+        />
+
+        <!-- SC-BRAND-14/19: narrow section burger rightmost; Acc/Theme/Logout inside -->
         <q-btn
           v-if="showSectionNav && isNarrow"
           flat
           dense
           round
           icon="menu"
-          class="q-ml-sm"
           data-test-id="header-burger"
           :aria-label="t('header.menu')"
         >
@@ -80,74 +127,37 @@
               >
                 <q-item-section>{{ t('header.moderation') }}</q-item-section>
               </q-item>
+              <q-item
+                v-if="showAccountNav"
+                clickable
+                v-close-popup
+                :to="{ name: 'account' }"
+                data-test-id="header-burger-account"
+              >
+                <q-item-section>{{ t('auth.accountNavAria') }}</q-item-section>
+              </q-item>
+              <q-item
+                clickable
+                v-close-popup
+                data-test-id="header-burger-theme"
+                @click="onToggleTheme"
+              >
+                <q-item-section>{{ t('header.theme') }}</q-item-section>
+              </q-item>
+              <q-item
+                v-if="showSessionLogout"
+                clickable
+                v-close-popup
+                data-test-id="header-burger-logout"
+                @click="onSessionLogout"
+              >
+                <q-item-section>{{ t('auth.logout') }}</q-item-section>
+              </q-item>
             </q-list>
           </q-menu>
         </q-btn>
-
-        <q-space />
-        <div v-if="isGameRoute" class="text-subtitle1 text-center" data-test-id="game-status">
-          {{ statusLabel }}
-        </div>
-        <q-space />
-
-        <!-- SC-BRAND-13: Acc / Theme / Logout (logout rightmost); SC-LEAVE-09/11 Game leave -->
-        <q-btn
-          v-if="showAccountNav"
-          flat
-          round
-          dense
-          icon="manage_accounts"
-          data-test-id="header-account"
-          :aria-label="t('auth.accountNavAria')"
-          :to="{ name: 'account' }"
-        />
-        <q-btn
-          flat
-          round
-          dense
-          data-test-id="header-theme"
-          :icon="$q.dark.isActive ? 'light_mode' : 'dark_mode'"
-          aria-label="Toggle theme"
-          @click="onToggleTheme"
-        />
-        <q-btn
-          v-if="isGameRoute"
-          flat
-          dense
-          icon="exit_to_app"
-          data-test-id="header-game-leave"
-          :aria-label="t('game.leave')"
-          :label="t('game.leave')"
-          @click="onExitClick"
-        />
-        <q-btn
-          v-else-if="showSessionLogout"
-          flat
-          dense
-          icon="logout"
-          data-test-id="header-logout"
-          :aria-label="t('auth.logout')"
-          :label="t('auth.logout')"
-          @click="onSessionLogout"
-        />
       </q-toolbar>
     </q-header>
-
-    <!-- SC-BRAND-17 / SC-PACK-193 / SC-MAP-52: crumbs below elevated header (page zone) -->
-    <div
-      v-if="breadcrumbItems.length"
-      class="app-breadcrumbs q-px-md q-py-sm"
-      data-test-id="app-breadcrumbs"
-    >
-      <q-breadcrumbs>
-        <q-breadcrumbs-el
-          v-for="(crumb, idx) in breadcrumbItems"
-          :key="`${crumb.label}-${idx}`"
-          :label="crumb.label"
-          :to="crumb.to"
-        />
-      </q-breadcrumbs>
-    </div>
 
     <q-dialog v-model="leaveConfirmOpen">
       <q-card style="min-width: 280px">
@@ -182,7 +192,22 @@
       </q-card>
     </q-dialog>
 
+    <!-- SC-BRAND-17: crumbs inside page-container (header offset zone), before router-view -->
     <q-page-container>
+      <div
+        v-if="breadcrumbItems.length"
+        class="app-breadcrumbs q-px-md q-py-sm"
+        data-test-id="app-breadcrumbs"
+      >
+        <q-breadcrumbs>
+          <q-breadcrumbs-el
+            v-for="(crumb, idx) in breadcrumbItems"
+            :key="`${crumb.label}-${idx}`"
+            :label="crumb.label"
+            :to="crumb.to"
+          />
+        </q-breadcrumbs>
+      </div>
       <q-banner v-if="theme.error" dense rounded class="bg-negative text-white q-ma-md">
         {{ theme.error }}
         <template #action>
@@ -223,6 +248,13 @@ const PACKS_BREADCRUMB_ROUTES = new Set([
 
 const MAPS_BREADCRUMB_ROUTES = new Set(['content-maps', 'content-map-edit']);
 
+const MODERATION_BREADCRUMB_ROUTES = new Set([
+  'content-staff',
+  'content-staff-request',
+  'content-staff-request-tasks',
+  'content-my-moderation',
+]);
+
 const { t } = useI18n();
 const $q = useQuasar();
 const route = useRoute();
@@ -248,6 +280,9 @@ const isNarrow = computed(() => $q.screen.lt.md);
 const showSectionNav = computed(
   () => auth.isAuthenticated && !isGameRoute.value && !isLoginRoute.value,
 );
+
+/** SC-BRAND-19 / D21: fold Acc/Theme/Logout into section burger on narrow only. */
+const foldChromeIntoBurger = computed(() => showSectionNav.value && isNarrow.value);
 
 /** Brand logo click mode (design D2) — always same button DOM (SC-BRAND-09). */
 const brandLogoMode = computed<'noop' | 'leave' | 'toLobby'>(() => {
@@ -340,6 +375,34 @@ const breadcrumbItems = computed((): Crumb[] => {
       crumbs.push({
         label: author ? (seatLabel ? `${author} · ${seatLabel}` : author) : t('maps.untitled'),
       });
+    }
+    return crumbs;
+  }
+  // SC-BRAND-18 / D20: staff + author moderation crumbs (Lobby / Модерация [/ …])
+  if (MODERATION_BREADCRUMB_ROUTES.has(name)) {
+    const crumbs: Crumb[] = [{ label: t('header.lobby'), to: { name: 'lobby' } }];
+    if (name === 'content-my-moderation') {
+      crumbs.push({ label: t('header.moderation') });
+      return crumbs;
+    }
+    crumbs.push({ label: t('header.moderation'), to: { name: 'content-staff' } });
+    if (name === 'content-staff') {
+      return crumbs;
+    }
+    const preview = content.staffPreview;
+    const entityLabel =
+      preview?.pack?.title || preview?.map?.authorDisplayName || t('content.untitled');
+    const requestId = String((route.params as { id?: string }).id ?? '');
+    if (name === 'content-staff-request') {
+      crumbs.push({ label: entityLabel });
+    } else {
+      crumbs.push({
+        label: entityLabel,
+        to: { name: 'content-staff-request', params: { id: requestId } },
+      });
+      if (name === 'content-staff-request-tasks') {
+        crumbs.push({ label: t('content.taskSets') });
+      }
     }
     return crumbs;
   }
@@ -518,7 +581,7 @@ async function onSessionLogout() {
   outline-offset: 2px;
 }
 
-/* Page-zone strip — not inside elevated q-header (SC-BRAND-17). */
+/* Page-container offset zone — not inside elevated q-header (SC-BRAND-17). */
 .app-breadcrumbs {
   font-size: 0.875rem;
   background: var(--q-page-bg, transparent);

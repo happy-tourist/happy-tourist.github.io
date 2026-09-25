@@ -102,6 +102,7 @@ export default {
     support: 'Поддержка',
     moderation: 'Модерация',
     menu: 'Меню разделов',
+    theme: 'Тема',
   },
   content: {
     nav: 'Наборы',

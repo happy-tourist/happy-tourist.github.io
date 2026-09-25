@@ -361,3 +361,18 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     expect(postModerationMessage).toHaveBeenCalledWith('p1', 'Will fix');
   });
 });
+
+describe('moderation chrome without «К наборам» (SC-PACK-194/195)', () => {
+  it('SC-PACK-194/195: pack/staff/my-moderation pages omit content.catalogNav', () => {
+    const pages = [
+      'src/pages/ContentPackModerationPage.vue',
+      'src/pages/ContentStaffPage.vue',
+      'src/pages/ContentStaffRequestPage.vue',
+      'src/pages/ContentMyModerationPage.vue',
+    ];
+    for (const rel of pages) {
+      const src = readFileSync(resolve(process.cwd(), rel), 'utf8');
+      expect(src, rel).not.toContain('content.catalogNav');
+    }
+  });
+});
