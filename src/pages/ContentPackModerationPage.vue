@@ -13,7 +13,7 @@
           :label="$t('content.edit')"
           :to="{ name: 'content-pack-edit', params: { id: packId } }"
         />
-        <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
       </div>
     </div>
 

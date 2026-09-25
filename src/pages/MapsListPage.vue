@@ -6,13 +6,7 @@
         <div class="text-subtitle2 text-muted">{{ $t('maps.subtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn
-          v-if="!auth.isStaff"
-          flat
-          icon="hourglass_top"
-          :label="$t('content.myModerationNav')"
-          :to="{ name: 'content-my-moderation' }"
-        />
+        <!-- SC-MAP-40: no non-staff my-moderation nav; staff keep queue -->
         <q-btn
           v-if="auth.isStaff"
           flat
@@ -31,23 +25,41 @@
       </template>
     </q-banner>
 
+    <!-- SC-MAP-33/34: list filters (no favorites) -->
+    <div class="row q-gutter-sm q-mb-md" data-test-id="maps-filters">
+      <q-btn
+        v-for="opt in filterOptions"
+        :key="opt.value"
+        dense
+        :outline="listFilter !== opt.value"
+        :color="listFilter === opt.value ? 'primary' : undefined"
+        :label="opt.label"
+        :data-test-id="`maps-filter-${opt.value}`"
+        :disable="opt.identityOnly && isGuest"
+        @click="onFilterClick(opt.value, opt.identityOnly)"
+      />
+    </div>
+
     <q-list bordered separator class="rounded-borders">
       <template v-if="maps.loading && !maps.list.length">
         <q-item>
           <q-item-section class="text-muted">{{ $t('maps.loading') }}</q-item-section>
         </q-item>
       </template>
-      <template v-else-if="!maps.list.length">
+      <template v-else-if="!filteredMaps.length">
         <q-item>
-          <q-item-section class="text-muted">{{ $t('maps.empty') }}</q-item-section>
+          <q-item-section class="text-muted">
+            {{ listFilter === 'all' ? $t('maps.empty') : $t('maps.emptyFiltered') }}
+          </q-item-section>
         </q-item>
       </template>
       <template v-else>
         <q-item
-          v-for="item in maps.list"
+          v-for="item in filteredMaps"
           :key="item.id"
           clickable
           v-ripple
+          :data-test-id="`maps-row-${item.id}`"
           @click="onRowClick(item)"
         >
           <q-item-section avatar>
@@ -56,11 +68,13 @@
           <q-item-section>
             <q-item-label>
               {{ item.authorDisplayName || $t('content.authorUser') }}
-              <q-badge v-if="item.hasLive && item.inCatalog === false" color="grey" class="q-ml-sm">
-                {{ $t('maps.unpublishedByStaff') }}
-              </q-badge>
-              <q-badge v-else-if="!item.hasLive" color="orange" class="q-ml-sm">
-                {{ $t('maps.draftOnly') }}
+              <q-badge
+                v-if="statusBadge(item)"
+                :color="statusBadgeColor(item)"
+                class="q-ml-sm"
+                :data-test-id="`maps-status-${item.id}`"
+              >
+                {{ statusBadge(item) }}
               </q-badge>
             </q-item-label>
             <q-item-label caption>
@@ -93,12 +107,34 @@
                 @click.stop="onRepublish(item.id)"
               />
               <q-btn
-                v-if="auth.isStaff && item.hasLive"
+                v-if="showStaffEdit(item)"
                 flat
                 dense
                 color="secondary"
                 :label="$t('maps.staffEdit')"
+                data-test-id="maps-staff-edit"
                 @click.stop="onStaffEdit(item.id)"
+              />
+              <q-btn
+                v-else-if="showStaffEditBlocked(item)"
+                flat
+                dense
+                color="secondary"
+                :label="$t('maps.staffEdit')"
+                disable
+                data-test-id="maps-staff-edit-blocked"
+              >
+                <q-tooltip>{{ $t('maps.staffEditBlockedAuthorRequest') }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                v-if="showAuthorEdit(item)"
+                flat
+                dense
+                color="primary"
+                icon="edit"
+                :aria-label="$t('content.edit')"
+                data-test-id="maps-author-edit"
+                @click.stop="onAuthorEdit(item.id)"
               />
               <q-icon name="chevron_right" />
             </div>
@@ -155,15 +191,28 @@ import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
 import { mapsErrorI18nKey, useMapsStore, type MapSummary } from '@/stores/maps';
 
+export type MapsListFilter = 'all' | 'moderation' | 'drafts' | 'mine';
+
 const auth = useAuthStore();
 const maps = useMapsStore();
 const router = useRouter();
 const { t } = useI18n();
 
+const listFilter = ref<MapsListFilter>('all');
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const unpublishConfirmOpen = ref(false);
 const pendingUnpublishId = ref<string | null>(null);
+
+const isGuest = computed(() => Boolean(auth.user?.anonymous));
+const uid = computed(() => auth.user?.id ?? '');
+
+const filterOptions = computed(() => [
+  { value: 'all' as const, label: t('maps.filterAll'), identityOnly: false },
+  { value: 'moderation' as const, label: t('maps.filterModeration'), identityOnly: true },
+  { value: 'drafts' as const, label: t('maps.filterDrafts'), identityOnly: true },
+  { value: 'mine' as const, label: t('maps.filterMine'), identityOnly: true },
+]);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('maps.gateLoginTitle') : t('maps.gateVerifyTitle'),
@@ -177,11 +226,83 @@ const errorLabel = computed(() => {
   return key ? t(key) : (maps.error ?? '');
 });
 
+/** Client-side filters over GET /api/content/maps (SC-MAP-33/34). */
+const filteredMaps = computed(() => {
+  const items = maps.list;
+  if (isGuest.value && listFilter.value !== 'all') {
+    return [];
+  }
+  switch (listFilter.value) {
+    case 'moderation':
+      return items.filter(
+        (m) => m.moderationStatus === 'pending' || m.moderationStatus === 'needs_revision',
+      );
+    case 'drafts':
+      return items.filter(
+        (m) => m.moderationStatus === 'draft' || (!m.hasLive && !m.moderationStatus),
+      );
+    case 'mine':
+      return items.filter((m) => m.createdBy === uid.value);
+    default:
+      return items;
+  }
+});
+
 onMounted(() => {
   void maps.listMaps().catch(() => {
     /* error in store */
   });
 });
+
+function onFilterClick(value: MapsListFilter, identityOnly: boolean) {
+  if (identityOnly && isGuest.value) return;
+  listFilter.value = value;
+}
+
+function statusBadge(item: MapSummary): string {
+  const status = item.moderationStatus;
+  if (status === 'pending') return t('content.statuses.pending');
+  if (status === 'needs_revision') return t('content.statuses.needs_revision');
+  if (status === 'draft' || (!item.hasLive && status !== 'unpublished')) {
+    return t('maps.draftOnly');
+  }
+  if (status === 'unpublished' || (item.hasLive && item.inCatalog === false)) {
+    return t('maps.unpublishedByStaff');
+  }
+  if (status === 'in_catalog' || (item.hasLive && item.inCatalog !== false)) {
+    return t('maps.statusInCatalog');
+  }
+  return '';
+}
+
+function statusBadgeColor(item: MapSummary): string {
+  const status = item.moderationStatus;
+  if (status === 'pending') return 'orange';
+  if (status === 'needs_revision') return 'warning';
+  if (status === 'draft' || !item.hasLive) return 'grey';
+  if (status === 'unpublished' || item.inCatalog === false) return 'grey';
+  return 'positive';
+}
+
+function hasOpenAuthorRequest(item: MapSummary): boolean {
+  // Prefer server flag so staff sees others' open requests (SC-MAP-36).
+  if (item.authorRequestOpen) return true;
+  return item.moderationStatus === 'pending' || item.moderationStatus === 'needs_revision';
+}
+
+function showStaffEdit(item: MapSummary): boolean {
+  return auth.isStaff && item.hasLive && !hasOpenAuthorRequest(item);
+}
+
+function showStaffEditBlocked(item: MapSummary): boolean {
+  return auth.isStaff && item.hasLive && hasOpenAuthorRequest(item);
+}
+
+function showAuthorEdit(item: MapSummary): boolean {
+  if (auth.isStaff || isGuest.value) return false;
+  if (!item.hasLive || item.inCatalog === false) return false;
+  return Boolean(uid.value) && item.createdBy === uid.value;
+}
 
 function confirmUnpublish(mapId: string) {
   pendingUnpublishId.value = mapId;
@@ -210,6 +331,10 @@ async function onRepublish(mapId: string) {
 
 function onStaffEdit(mapId: string) {
   void router.push({ name: 'content-map-edit', params: { id: mapId }, query: { staff: '1' } });
+}
+
+function onAuthorEdit(mapId: string) {
+  void router.push({ name: 'content-map-edit', params: { id: mapId }, query: { edit: '1' } });
 }
 
 function onRowClick(item: MapSummary) {

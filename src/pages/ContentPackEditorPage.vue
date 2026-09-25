@@ -19,7 +19,7 @@
         </div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
       </div>
     </div>
 
@@ -40,7 +40,7 @@
             outlined
             dense
             :label="$t('content.packTitle')"
-            :disable="readOnly"
+            :disable="cardsReadOnly"
             @update:model-value="scheduleAutosave"
           />
           <q-input
@@ -50,7 +50,7 @@
             dense
             autogrow
             :label="$t('content.packDescription')"
-            :disable="readOnly"
+            :disable="cardsReadOnly"
             @update:model-value="scheduleAutosave"
           />
         </q-card-section>
@@ -66,14 +66,14 @@
               outlined
               dense
               :label="$t('content.cardContent')"
-              :disable="readOnly"
+              :disable="cardsReadOnly"
             />
             <q-input
               v-model="cardForm.description"
               outlined
               dense
               :label="$t('content.cardDescription')"
-              :disable="readOnly"
+              :disable="cardsReadOnly"
             />
             <div class="row q-gutter-sm">
               <q-btn
@@ -81,13 +81,13 @@
                 color="primary"
                 :label="editingCardId ? $t('content.saveCard') : $t('content.addCard')"
                 :loading="content.saving"
-                :disable="readOnly || !cardForm.content.trim()"
+                :disable="cardsReadOnly || !cardForm.content.trim()"
               />
               <q-btn
                 v-if="editingCardId"
                 flat
                 :label="$t('content.cancelEditCard')"
-                :disable="readOnly"
+                :disable="cardsReadOnly"
                 @click="resetCardForm"
               />
             </div>
@@ -108,7 +108,7 @@
                 dense
                 icon="edit"
                 :aria-label="$t('content.editCard')"
-                :disable="readOnly"
+                :disable="cardsReadOnly"
                 @click="startEditCard(card)"
               />
               <q-btn
@@ -117,7 +117,7 @@
                 icon="delete"
                 color="negative"
                 :aria-label="$t('content.deleteCard')"
-                :disable="readOnly"
+                :disable="cardsReadOnly"
                 @click="confirmDeleteCard(card.id)"
               />
             </div>
@@ -294,7 +294,7 @@
           <div class="q-mt-sm">{{ gateText }}</div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+          <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
           <q-btn
             v-if="gateMode === 'login'"
             color="primary"
@@ -466,13 +466,32 @@ const meetsSubmitMinima = computed(() => {
   );
 });
 
-/** SC-PACK-102: unified submit for creator working copy. */
+/** SC-PACK-102/156: unified submit for creator / task-set-author working copy (incl. post-publish). */
 const canSubmit = computed(() => {
   if (staffMode.value || !local.value || readOnly.value) return false;
-  if (content.pack?.hasLive) return false;
-  if (!meetsSubmitMinima.value) return false;
+  if (content.editorKind === 'task_set_author') {
+    // Task-set author submits from cards page after editing own sets; minima = own sets.
+    const mine = local.value.taskSets.filter((ts) => ts.authorUserId === uid.value);
+    if (mine.length < 1) return false;
+    if (
+      !mine.every(
+        (ts) =>
+          ts.tasks.length >= 2 &&
+          ts.tasks.every(
+            (task) =>
+              task.question.trim() &&
+              task.slots.length > 0 &&
+              task.slots.every((s) => Boolean(s.answerCardId)),
+          ),
+      )
+    ) {
+      return false;
+    }
+  } else if (!meetsSubmitMinima.value) {
+    return false;
+  }
   if (content.pendingRequestId && !content.isPendingAuthor) return false;
-  if (content.moderationStatus === 'pending') return false;
+  // SC-PACK-163: author may resubmit while open/pending (incl. while staff holds take).
   return true;
 });
 
@@ -480,14 +499,20 @@ const submitHint = computed(() => {
   if (content.pendingRequestId && !content.isPendingAuthor) {
     return t('content.submitLockedOther');
   }
-  if (content.moderationStatus === 'pending') {
+  if (content.moderationStatus === 'pending' && content.isPendingAuthor) {
     return t('content.statusPendingAuthor');
+  }
+  if (content.editorKind === 'task_set_author') {
+    return t('content.submitHintTaskSetAuthor');
   }
   if (!meetsSubmitMinima.value) {
     return t('content.submitHint');
   }
   return t('content.submitHint');
 });
+
+/** Task-set author cannot edit answer cards (SC-PACK-159). */
+const cardsReadOnly = computed(() => readOnly.value || content.editorKind === 'task_set_author');
 
 const canOpenTasks = computed(() => {
   if (readOnly.value || !local.value) return false;
@@ -663,7 +688,7 @@ async function doDeletePack() {
   try {
     await content.deleteUnpublishedPack(packId.value);
     packDeleteConfirmOpen.value = false;
-    await router.replace({ name: 'content-collection' });
+    await router.replace({ name: 'content-catalog' });
   } catch {
     /* error in store */
   }
@@ -708,7 +733,12 @@ function isSetSoftUnpublished(ts: TaskSet): boolean {
 function canEnterEditorSet(ts: TaskSet): boolean {
   // Staff may still open soft-unpublished sets in Edit session (SC-PACK-132).
   if (staffMode.value) return true;
-  return !isSetSoftUnpublished(ts);
+  if (isSetSoftUnpublished(ts)) return false;
+  // SC-PACK-159: task-set author only own sets.
+  if (content.editorKind === 'task_set_author') {
+    return Boolean(uid.value) && ts.authorUserId === uid.value;
+  }
+  return true;
 }
 
 const canUnpublishSet = computed(() => {
@@ -840,8 +870,7 @@ async function load() {
   staffMode.value = false;
 
   try {
-    // Probe live first when possible via collection/pack flags is unknown — try draft, fall back staff.
-    // Prefer staff path when staff + published (or non-creator unpublished).
+    // Probe working copy for creator / task-set-author (incl. post-publish SC-PACK-156…159).
     let packHasLive = false;
     let createdBy = '';
     try {
@@ -850,6 +879,18 @@ async function load() {
       createdBy = draftData.pack.createdBy;
       // Unpublished creator path (even if staff) — keep submit.
       if (!packHasLive && createdBy === uid.value) {
+        suppressAutosave = true;
+        local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
+        suppressAutosave = false;
+        staffMode.value = false;
+        await loadThread();
+        return;
+      }
+      // Post-publish author / task-set-author: acquire lock + edit working copy.
+      if (packHasLive && (createdBy === uid.value || content.editorKind === 'task_set_author')) {
+        await content.acquireEditLock(packId.value);
+        lockHeld.value = true;
+        startLockHeartbeat();
         suppressAutosave = true;
         local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
         suppressAutosave = false;
@@ -873,7 +914,7 @@ async function load() {
       return;
     }
 
-    // Published non-staff → add-task-set or collection
+    // Published non-staff without edit rights → add-task-set
     if (content.pack?.hasLive || packHasLive) {
       await router.replace({
         name: 'content-pack-add-task-set',
@@ -881,10 +922,10 @@ async function load() {
       });
       return;
     }
-    await router.replace({ name: 'content-collection' });
+    await router.replace({ name: 'content-catalog' });
   } catch {
     /* error in store */
-    if (content.error === 'edit_locked') {
+    if (content.error === 'edit_locked' || content.error === 'author_request_open') {
       await router.replace({ name: 'content-pack', params: { id: packId.value } });
     }
   }

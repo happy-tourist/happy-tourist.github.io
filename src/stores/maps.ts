@@ -26,6 +26,10 @@ export interface MapSummary {
   players: number;
   touristsPerPlayer: number;
   grid: string;
+  /** Caller-facing list status (SC-MAP-31/32). */
+  moderationStatus?: 'in_catalog' | 'draft' | 'pending' | 'needs_revision' | 'unpublished' | null;
+  /** Open author request blocks staff Edit (SC-MAP-36); independent of caller's own status. */
+  authorRequestOpen?: boolean;
 }
 
 export interface MapRevision {
@@ -77,6 +81,9 @@ const KNOWN_ERROR_CODES = [
   'empty_comment',
   'edit_locked',
   'edit_lock_required',
+  'author_request_open',
+  'moderation_taken',
+  'moderation_take_required',
   'no_working_copy',
   'request_not_found',
   'thread_closed',

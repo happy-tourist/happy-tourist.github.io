@@ -446,7 +446,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     });
   });
 
-  it('SC-MAP-25: staff does not see author my-moderation nav on Maps', async () => {
+  it('SC-MAP-25/40: staff does not see author my-moderation nav on Maps', async () => {
     authState.isStaff = true;
     wrapper = getMapsListWrapper();
     await flushPromises();
@@ -457,14 +457,70 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.findAll('button').some((b) => b.text().includes('content.staffNav'))).toBe(true);
   });
 
-  it('SC-MAP-25: non-staff sees my-moderation nav on Maps', async () => {
+  it('SC-MAP-40: non-staff hides my-moderation nav; filters available', async () => {
     authState.isStaff = false;
     wrapper = getMapsListWrapper();
     await flushPromises();
 
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
-    ).toBe(true);
+    ).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filters"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(true);
+  });
+
+  it('SC-MAP-31/32: pending and needs_revision badges on Maps list', async () => {
+    mapsState.list = [
+      { ...approvedMap, id: 'm-pend', moderationStatus: 'pending', createdBy: 'u1' },
+      {
+        ...approvedMap,
+        id: 'm-nr',
+        moderationStatus: 'needs_revision',
+        createdBy: 'u1',
+        authorDisplayName: 'Me',
+      },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="maps-status-m-pend"]').text()).toContain(
+      'content.statuses.pending',
+    );
+    expect(wrapper.find('[data-test-id="maps-status-m-nr"]').text()).toContain(
+      'content.statuses.needs_revision',
+    );
+  });
+
+  it('SC-MAP-33: moderation filter shows only own open items', async () => {
+    mapsState.list = [
+      { ...approvedMap, id: 'm-pend', moderationStatus: 'pending', createdBy: 'u1' },
+      { ...approvedMap, id: 'm-other', moderationStatus: 'in_catalog', createdBy: 'other' },
+      { ...draftMap, moderationStatus: 'draft' },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    await wrapper.find('[data-test-id="maps-filter-moderation"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-pend"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-row-m-other"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-row-m-draft"]').exists()).toBe(false);
+  });
+
+  it('SC-MAP-34: mine filter includes catalog and drafts', async () => {
+    mapsState.list = [
+      { ...approvedMap, id: 'm-mine', createdBy: 'u1', moderationStatus: 'in_catalog' },
+      { ...draftMap, moderationStatus: 'draft' },
+      { ...approvedMap, id: 'm-other', createdBy: 'other', moderationStatus: 'in_catalog' },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    await wrapper.find('[data-test-id="maps-filter-mine"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-mine"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-row-m-draft"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-row-m-other"]').exists()).toBe(false);
   });
 
   it('SC-MAP-29: editor shows open thread status, messages, and reply', async () => {

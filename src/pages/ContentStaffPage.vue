@@ -6,7 +6,7 @@
         <div class="text-subtitle2 text-muted">{{ $t('content.staffQueueSubtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+        <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
         <q-btn
           flat
           icon="refresh"
@@ -42,6 +42,7 @@
           clickable
           v-ripple
           :to="{ name: 'content-staff-request', params: { id: item.requestId } }"
+          :data-test-id="`staff-queue-row-${item.requestId}`"
         >
           <q-item-section>
             <q-item-label>
@@ -52,6 +53,14 @@
               <q-badge v-else-if="item.blocked" color="negative" class="q-ml-sm">
                 {{ $t('content.blocked') }}
               </q-badge>
+              <q-badge
+                v-if="isTakenByOther(item)"
+                color="grey"
+                class="q-ml-sm"
+                data-test-id="staff-queue-taken"
+              >
+                {{ $t('content.moderationTaken') }}
+              </q-badge>
             </q-item-label>
             <q-item-label caption>
               {{ requestTypeLabel(item.type) }}
@@ -59,7 +68,19 @@
             </q-item-label>
           </q-item-section>
           <q-item-section side>
-            <q-icon name="chevron_right" />
+            <div class="row items-center no-wrap q-gutter-xs" @click.stop>
+              <q-btn
+                v-if="!isTakenByMe(item) && !isTakenByOther(item)"
+                flat
+                dense
+                color="primary"
+                :label="$t('content.takeModeration')"
+                :loading="content.loading"
+                data-test-id="staff-queue-take"
+                @click.stop="onTake(item.requestId)"
+              />
+              <q-icon name="chevron_right" />
+            </div>
           </q-item-section>
         </q-item>
       </template>
@@ -73,7 +94,12 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import {
+  contentErrorI18nKey,
+  moderationTakeHeldBy,
+  useContentStore,
+  type StaffPendingItem,
+} from '@/stores/content';
 
 const auth = useAuthStore();
 const content = useContentStore();
@@ -93,7 +119,7 @@ function load() {
 
 onMounted(() => {
   if (!auth.isStaff) {
-    void router.replace({ name: 'content-collection' });
+    void router.replace({ name: 'content-catalog' });
     return;
   }
   void load();
@@ -119,6 +145,30 @@ function requestTypeLabel(type: string | undefined) {
   if (type === 'map') return t('maps.requestType');
   if (type === 'task_set' || type === 'tasks') return t('content.requestTypeTaskSet');
   return t('content.requestTypePack');
+}
+
+function isTakenByMe(item: StaffPendingItem): boolean {
+  return moderationTakeHeldBy(item, auth.user?.id != null ? String(auth.user.id) : null);
+}
+
+function isTakenByOther(item: StaffPendingItem): boolean {
+  if (!item.takenBy) return false;
+  if (moderationTakeHeldBy(item, auth.user?.id != null ? String(auth.user.id) : null)) return false;
+  // Non-expired take by someone else (or unknown holder).
+  if (!item.takenAt) return Boolean(item.takenBy);
+  const t0 =
+    item.takenAt instanceof Date ? item.takenAt.getTime() : new Date(item.takenAt).getTime();
+  if (!Number.isFinite(t0)) return Boolean(item.takenBy);
+  return Date.now() - t0 <= 5 * 60 * 1000;
+}
+
+async function onTake(requestId: string) {
+  try {
+    await content.takeModerationRequest(requestId);
+    await router.push({ name: 'content-staff-request', params: { id: requestId } });
+  } catch {
+    /* error in store */
+  }
 }
 
 function onRefresh() {

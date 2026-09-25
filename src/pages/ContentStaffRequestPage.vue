@@ -56,16 +56,37 @@
 
       <div v-if="isOpen" class="q-gutter-sm q-mb-lg">
         <q-btn
+          v-if="!holdsTake"
+          color="primary"
+          :label="$t('content.takeModeration')"
+          :loading="content.loading"
+          :disable="takenByOther"
+          data-test-id="staff-take"
+          @click="onTake"
+        />
+        <q-btn
+          v-if="holdsTake"
+          color="grey"
+          outline
+          :label="$t('content.releaseModeration')"
+          :loading="content.loading"
+          data-test-id="staff-release"
+          @click="onRelease"
+        />
+        <q-btn
           color="positive"
           :label="$t('content.approve')"
           :loading="content.loading"
-          :disable="!canApprove"
+          :disable="!canApprove || !holdsTake"
+          data-test-id="staff-approve"
           @click="onApprove"
         />
         <q-btn
           color="warning"
           :label="$t('content.needsRevision')"
           :loading="content.loading"
+          :disable="!holdsTake"
+          data-test-id="staff-needs-revision"
           @click="openNeedsRevision"
         />
         <q-btn
@@ -73,9 +94,17 @@
           outline
           :label="$t('content.cancelPending')"
           :loading="content.loading"
+          :disable="!holdsTake"
+          data-test-id="staff-cancel"
           @click="onCancel"
         />
-        <div v-if="!canApprove" class="text-caption text-muted">
+        <div v-if="takenByOther" class="text-caption text-muted">
+          {{ $t('content.moderationTaken') }}
+        </div>
+        <div v-else-if="!holdsTake" class="text-caption text-muted">
+          {{ $t('content.takeModerationHint') }}
+        </div>
+        <div v-else-if="!canApprove" class="text-caption text-muted">
           {{ $t('maps.approveNeedStarts') }}
         </div>
       </div>
@@ -183,16 +212,37 @@
 
       <div v-if="isOpen" class="q-gutter-sm q-mb-lg">
         <q-btn
+          v-if="!holdsTake"
+          color="primary"
+          :label="$t('content.takeModeration')"
+          :loading="content.loading"
+          :disable="takenByOther"
+          data-test-id="staff-take"
+          @click="onTake"
+        />
+        <q-btn
+          v-if="holdsTake"
+          color="grey"
+          outline
+          :label="$t('content.releaseModeration')"
+          :loading="content.loading"
+          data-test-id="staff-release"
+          @click="onRelease"
+        />
+        <q-btn
           color="positive"
           :label="$t('content.approve')"
           :loading="content.loading"
-          :disable="!canApprove"
+          :disable="!canApprove || !holdsTake"
+          data-test-id="staff-approve"
           @click="onApprove"
         />
         <q-btn
           color="warning"
           :label="$t('content.needsRevision')"
           :loading="content.loading"
+          :disable="!holdsTake"
+          data-test-id="staff-needs-revision"
           @click="openNeedsRevision"
         />
         <q-btn
@@ -200,9 +250,17 @@
           outline
           :label="$t('content.cancelPending')"
           :loading="content.loading"
+          :disable="!holdsTake"
+          data-test-id="staff-cancel"
           @click="onCancel"
         />
-        <div v-if="!canApprove" class="text-caption text-muted">
+        <div v-if="takenByOther" class="text-caption text-muted">
+          {{ $t('content.moderationTaken') }}
+        </div>
+        <div v-else-if="!holdsTake" class="text-caption text-muted">
+          {{ $t('content.takeModerationHint') }}
+        </div>
+        <div v-else-if="!canApprove" class="text-caption text-muted">
           {{ $t('content.approveNeedTaskSets') }}
         </div>
       </div>
@@ -275,15 +333,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
+  moderationTakeHeldBy,
   useContentStore,
   type MapStaffContent,
   type PackContent,
@@ -338,6 +397,21 @@ const requestTypeLabel = computed(() => {
 const isOpen = computed(() => {
   const status = preview.value?.request.status;
   return status === 'pending' || status === 'needs_revision' || status === 'rejected';
+});
+
+/** SC-PACK-161…163 / SC-MAP-38/39: actions only after take. */
+const holdsTake = computed(() =>
+  moderationTakeHeldBy(preview.value?.request, auth.user?.id != null ? String(auth.user.id) : null),
+);
+
+const takenByOther = computed(() => {
+  const req = preview.value?.request;
+  if (!req?.takenBy) return false;
+  if (holdsTake.value) return false;
+  if (!req.takenAt) return true;
+  const t0 = req.takenAt instanceof Date ? req.takenAt.getTime() : new Date(req.takenAt).getTime();
+  if (!Number.isFinite(t0)) return true;
+  return Date.now() - t0 <= 5 * 60 * 1000;
 });
 
 const canApprove = computed(() => {
@@ -401,15 +475,50 @@ function load() {
 
 onMounted(() => {
   if (!auth.isStaff) {
-    void router.replace({ name: 'content-collection' });
+    void router.replace({ name: 'content-catalog' });
     return;
   }
   load();
 });
 watch(requestId, load);
 
+async function releaseIfHeld() {
+  if (!requestId.value || !holdsTake.value) return;
+  try {
+    await content.releaseModerationRequest(requestId.value);
+  } catch {
+    /* ignore */
+  }
+}
+
+onBeforeRouteLeave(() => {
+  void releaseIfHeld();
+});
+
+onBeforeUnmount(() => {
+  void releaseIfHeld();
+});
+
+async function onTake() {
+  if (!requestId.value) return;
+  try {
+    await content.takeModerationRequest(requestId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
+async function onRelease() {
+  if (!requestId.value) return;
+  try {
+    await content.releaseModerationRequest(requestId.value);
+  } catch {
+    /* error in store */
+  }
+}
+
 async function onApprove() {
-  if (!requestId.value || !canApprove.value) return;
+  if (!requestId.value || !canApprove.value || !holdsTake.value) return;
   try {
     await content.approveRequest(requestId.value);
     await router.replace({ name: 'content-staff' });
@@ -419,12 +528,13 @@ async function onApprove() {
 }
 
 function openNeedsRevision() {
+  if (!holdsTake.value) return;
   needsRevisionComment.value = '';
   needsRevisionOpen.value = true;
 }
 
 async function onNeedsRevision() {
-  if (!requestId.value || !needsRevisionComment.value.trim()) return;
+  if (!requestId.value || !needsRevisionComment.value.trim() || !holdsTake.value) return;
   try {
     await content.needsRevisionRequest(requestId.value, needsRevisionComment.value.trim());
     needsRevisionOpen.value = false;
@@ -435,7 +545,7 @@ async function onNeedsRevision() {
 }
 
 async function onCancel() {
-  if (!requestId.value) return;
+  if (!requestId.value || !holdsTake.value) return;
   try {
     await content.cancelRequest(requestId.value);
     await router.replace({ name: 'content-staff' });

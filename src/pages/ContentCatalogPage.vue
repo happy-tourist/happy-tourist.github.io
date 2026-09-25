@@ -6,15 +6,7 @@
         <div class="text-subtitle2 text-muted">{{ $t('content.catalogSubtitle') }}</div>
       </div>
       <div class="q-gutter-sm">
-        <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
-        <!-- SC-PACK-116: hide author my-moderation for staff -->
-        <q-btn
-          v-if="!auth.isStaff"
-          flat
-          icon="hourglass_top"
-          :label="$t('content.myModerationNav')"
-          :to="{ name: 'content-my-moderation' }"
-        />
+        <!-- SC-PACK-166: no non-staff my-moderation nav; staff keep queue -->
         <q-btn
           v-if="auth.isStaff"
           flat
@@ -33,24 +25,43 @@
       </template>
     </q-banner>
 
+    <!-- SC-PACK-151…153: list filters -->
+    <div class="row q-gutter-sm q-mb-md" data-test-id="packs-filters">
+      <q-btn
+        v-for="opt in filterOptions"
+        :key="opt.value"
+        dense
+        :outline="listFilter !== opt.value"
+        :color="listFilter === opt.value ? 'primary' : undefined"
+        :label="opt.label"
+        :data-test-id="`packs-filter-${opt.value}`"
+        :disable="opt.identityOnly && isGuest"
+        @click="onFilterClick(opt.value, opt.identityOnly)"
+      />
+    </div>
+
     <q-list bordered separator class="rounded-borders">
       <template v-if="content.loading && !content.catalog.length">
         <q-item>
           <q-item-section class="text-muted">{{ $t('content.loading') }}</q-item-section>
         </q-item>
       </template>
-      <template v-else-if="!content.catalog.length">
+      <template v-else-if="!filteredPacks.length">
         <q-item>
-          <q-item-section class="text-muted">{{ $t('content.emptyCatalog') }}</q-item-section>
+          <q-item-section class="text-muted">
+            {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
+          </q-item-section>
         </q-item>
       </template>
       <template v-else>
+        <!-- No row :to — star / staff actions must not race with navigation -->
         <q-item
-          v-for="item in content.catalog"
+          v-for="item in filteredPacks"
           :key="item.id"
           clickable
           v-ripple
-          :to="{ name: 'content-pack', params: { id: item.id } }"
+          :data-test-id="`packs-row-${item.id}`"
+          @click="onRowClick(item)"
         >
           <q-item-section>
             <q-item-label>
@@ -59,11 +70,12 @@
                 {{ $t('content.blocked') }}
               </q-badge>
               <q-badge
-                v-else-if="item.hasLive && item.inCatalog === false"
-                color="grey"
+                v-else-if="statusBadge(item)"
+                :color="statusBadgeColor(item)"
                 class="q-ml-sm"
+                :data-test-id="`packs-status-${item.id}`"
               >
-                {{ $t('content.unpublishedByStaff') }}
+                {{ statusBadge(item) }}
               </q-badge>
             </q-item-label>
             <q-item-label v-if="item.description" caption>
@@ -72,6 +84,20 @@
           </q-item-section>
           <q-item-section side>
             <div class="row items-center no-wrap q-gutter-xs" @click.stop>
+              <q-btn
+                v-if="canStar(item)"
+                flat
+                dense
+                round
+                :icon="item.isFavorite ? 'star' : 'star_border'"
+                :color="item.isFavorite ? 'amber' : undefined"
+                :aria-label="
+                  item.isFavorite ? $t('content.favoriteUnstar') : $t('content.favoriteStar')
+                "
+                :data-test-id="`packs-star-${item.id}`"
+                :loading="content.loading"
+                @click.stop="onToggleFavorite(item)"
+              />
               <q-btn
                 v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
                 flat
@@ -121,7 +147,6 @@
       </q-card>
     </q-dialog>
 
-    <!-- SC-PACK-129 / D16: confirm before pack unpublish -->
     <q-dialog v-model="unpublishConfirmOpen">
       <q-card style="min-width: 280px">
         <q-card-section>
@@ -148,17 +173,30 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
 import { useAuthStore } from '@/stores/auth';
-import { contentErrorI18nKey, useContentStore } from '@/stores/content';
+import { contentErrorI18nKey, useContentStore, type ContentPackSummary } from '@/stores/content';
+
+export type PacksListFilter = 'all' | 'moderation' | 'drafts' | 'mine' | 'favorites';
 
 const auth = useAuthStore();
 const content = useContentStore();
 const router = useRouter();
 const { t } = useI18n();
 
+const listFilter = ref<PacksListFilter>('all');
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const unpublishConfirmOpen = ref(false);
 const pendingUnpublishId = ref<string | null>(null);
+
+const isGuest = computed(() => Boolean(auth.user?.anonymous));
+
+const filterOptions = computed(() => [
+  { value: 'all' as const, label: t('content.filterAll'), identityOnly: false },
+  { value: 'moderation' as const, label: t('content.filterModeration'), identityOnly: true },
+  { value: 'drafts' as const, label: t('content.filterDrafts'), identityOnly: true },
+  { value: 'mine' as const, label: t('content.filterMine'), identityOnly: true },
+  { value: 'favorites' as const, label: t('content.filterFavorites'), identityOnly: true },
+]);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
@@ -172,11 +210,93 @@ const errorLabel = computed(() => {
   return key ? t(key) : (content.error ?? '');
 });
 
+/** Client-side filters over unified GET /api/content/packs (SC-PACK-151…153). */
+const filteredPacks = computed(() => {
+  const items = content.catalog;
+  if (isGuest.value && listFilter.value !== 'all') {
+    return [];
+  }
+  switch (listFilter.value) {
+    case 'moderation':
+      return items.filter(
+        (p) => p.moderationStatus === 'pending' || p.moderationStatus === 'needs_revision',
+      );
+    case 'drafts':
+      return items.filter(
+        (p) => p.moderationStatus === 'draft' || (!p.hasLive && !p.moderationStatus),
+      );
+    case 'mine':
+      return items.filter((p) => Boolean(p.isMine || p.isContributor));
+    case 'favorites':
+      return items.filter((p) => Boolean(p.isFavorite));
+    default:
+      return items;
+  }
+});
+
 onMounted(() => {
   void content.listCatalog().catch(() => {
     /* error in store */
   });
 });
+
+function onFilterClick(value: PacksListFilter, identityOnly: boolean) {
+  if (identityOnly && isGuest.value) return;
+  listFilter.value = value;
+}
+
+function statusBadge(item: ContentPackSummary): string {
+  if (item.blocked) return '';
+  const status = item.moderationStatus;
+  if (status === 'pending') return t('content.statuses.pending');
+  if (status === 'needs_revision') return t('content.statuses.needs_revision');
+  if (status === 'draft' || (!item.hasLive && status !== 'unpublished')) {
+    return t('content.statusDraft');
+  }
+  if (status === 'unpublished' || (item.hasLive && item.inCatalog === false)) {
+    return t('content.unpublishedByStaff');
+  }
+  if (status === 'in_catalog' || (item.hasLive && item.inCatalog !== false)) {
+    return t('content.statusInCatalog');
+  }
+  return '';
+}
+
+function statusBadgeColor(item: ContentPackSummary): string {
+  const status = item.moderationStatus;
+  if (status === 'pending') return 'orange';
+  if (status === 'needs_revision') return 'warning';
+  if (status === 'draft' || !item.hasLive) return 'grey';
+  if (status === 'unpublished' || item.inCatalog === false) return 'grey';
+  return 'positive';
+}
+
+function canStar(item: ContentPackSummary): boolean {
+  if (isGuest.value || auth.user?.anonymous) return false;
+  if (item.blocked) return false;
+  if (!item.hasLive || item.inCatalog === false) return false;
+  return true;
+}
+
+async function onToggleFavorite(item: ContentPackSummary) {
+  try {
+    if (item.isFavorite) {
+      await content.unstarPack(item.id);
+    } else {
+      await content.starPack(item.id);
+    }
+  } catch {
+    /* error in store */
+  }
+}
+
+function onRowClick(item: ContentPackSummary) {
+  if (!item.hasLive) {
+    void router.push({ name: 'content-pack-edit', params: { id: item.id } });
+    return;
+  }
+  void router.push({ name: 'content-pack', params: { id: item.id } });
+}
 
 function confirmUnpublish(packId: string) {
   pendingUnpublishId.value = packId;

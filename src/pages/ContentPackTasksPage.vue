@@ -231,7 +231,7 @@
           <div class="q-mt-sm">{{ gateText }}</div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+          <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
           <q-btn
             v-if="gateMode === 'login'"
             color="primary"
@@ -674,14 +674,11 @@ async function load() {
         payload = content.draft!;
       }
       startLockHeartbeat();
-    } else if (
-      !forceLiveView &&
-      content.draft &&
-      content.pack?.id === packId.value &&
-      !content.pack.hasLive
-    ) {
+    } else if (!forceLiveView && content.draft && content.pack?.id === packId.value) {
+      // Creator / task-set-author working copy (incl. post-publish SC-PACK-156…158).
       payload = content.draft;
-    } else if (forceLiveView || content.pack?.hasLive) {
+      startLockHeartbeat();
+    } else if (forceLiveView || (content.pack?.hasLive && !content.draft)) {
       // SC-PACK-130: live drill-in read-only (or soft-unpublished staff Edit via lock).
       const data = await content.loadLivePack(packId.value);
       payload = data.content;
@@ -689,6 +686,7 @@ async function load() {
     } else {
       const data = await content.loadDraft(packId.value);
       payload = data.draft;
+      startLockHeartbeat();
     }
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(payload)) as PackContent;

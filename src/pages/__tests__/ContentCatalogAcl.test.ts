@@ -43,6 +43,10 @@ vi.mock('@/stores/content', async (importOriginal) => {
     useContentStore: vi.fn(() => ({
       ...contentState,
       listCatalog,
+      starPack: vi.fn(),
+      unstarPack: vi.fn(),
+      unpublishPack: vi.fn(),
+      republishPack: vi.fn(),
     })),
   };
 });
@@ -66,7 +70,7 @@ const stubs = {
   'q-icon': true,
 };
 
-describe('catalog ACL (SC-PACK-116)', () => {
+describe('catalog ACL (SC-PACK-166)', () => {
   beforeEach(() => {
     contentState.error = null;
     contentState.catalog = [];
@@ -79,15 +83,16 @@ describe('catalog ACL (SC-PACK-116)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-116: non-staff sees my-moderation nav', async () => {
+  it('SC-PACK-166: non-staff does not see my-moderation nav; filters available', async () => {
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.myModerationNav')),
-    ).toBe(true);
+    ).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-116: staff does not see my-moderation; sees staff queue', async () => {
+  it('SC-PACK-166: staff does not see my-moderation; sees staff queue', async () => {
     authState.isStaff = true;
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();

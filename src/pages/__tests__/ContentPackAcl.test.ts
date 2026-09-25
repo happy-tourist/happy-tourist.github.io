@@ -4,41 +4,46 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContentPackPage from '@/pages/ContentPackPage.vue';
 import type { ContentPackSummary, PackContent } from '@/stores/content';
 
-const { contentState, authState, loadLivePack, acquireEditLock, routerPush } = vi.hoisted(() => {
-  const pack: ContentPackSummary = {
-    id: 'p1',
-    title: 'Live',
-    description: '',
-    blocked: false,
-    hasLive: true,
-    createdBy: 'u1',
-    inCollection: true,
-  };
-  const liveContent: PackContent = {
-    title: 'Live',
-    description: '',
-    answerCards: [{ id: 'c1', content: 'A', description: '' }],
-    taskSets: [],
-  };
-  const contentState = {
-    error: null as string | null,
-    loading: false,
-    pack,
-    liveContent,
-  };
-  const authState = {
-    user: { id: 'u1', anonymous: false } as { id: string; anonymous: boolean } | null,
-    needsEmailVerification: false,
-    isStaff: false,
-  };
-  return {
-    contentState,
-    authState,
-    loadLivePack: vi.fn().mockResolvedValue(undefined),
-    acquireEditLock: vi.fn().mockResolvedValue({ ok: true }),
-    routerPush: vi.fn(),
-  };
-});
+const { contentState, authState, loadLivePack, acquireEditLock, starPack, unstarPack, routerPush } =
+  vi.hoisted(() => {
+    const pack: ContentPackSummary = {
+      id: 'p1',
+      title: 'Live',
+      description: '',
+      blocked: false,
+      hasLive: true,
+      inCatalog: true,
+      createdBy: 'u1',
+      inCollection: false,
+      isFavorite: false,
+    };
+    const liveContent: PackContent = {
+      title: 'Live',
+      description: '',
+      answerCards: [{ id: 'c1', content: 'A', description: '' }],
+      taskSets: [],
+    };
+    const contentState = {
+      error: null as string | null,
+      loading: false,
+      pack,
+      liveContent,
+    };
+    const authState = {
+      user: { id: 'u1', anonymous: false } as { id: string; anonymous: boolean } | null,
+      needsEmailVerification: false,
+      isStaff: false,
+    };
+    return {
+      contentState,
+      authState,
+      loadLivePack: vi.fn().mockResolvedValue(undefined),
+      acquireEditLock: vi.fn().mockResolvedValue({ ok: true }),
+      starPack: vi.fn().mockResolvedValue({ ok: true, isFavorite: true }),
+      unstarPack: vi.fn().mockResolvedValue({ ok: true, isFavorite: false }),
+      routerPush: vi.fn(),
+    };
+  });
 
 vi.mock('vue-router', async (importOriginal) => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vitest importOriginal
@@ -63,7 +68,8 @@ vi.mock('@/stores/content', async (importOriginal) => {
       ...contentState,
       loadLivePack,
       acquireEditLock,
-      addToCollection: vi.fn(),
+      starPack,
+      unstarPack,
     })),
   };
 });
@@ -87,7 +93,7 @@ const stubs = {
   'q-card-actions': { template: '<div><slot /></div>' },
 };
 
-describe('live pack ACL (SC-PACK-53/106/112)', () => {
+describe('live pack ACL (SC-PACK-53/106/108/112/154/164/165)', () => {
   beforeEach(() => {
     contentState.error = null;
     contentState.pack = {
@@ -96,14 +102,18 @@ describe('live pack ACL (SC-PACK-53/106/112)', () => {
       description: '',
       blocked: false,
       hasLive: true,
+      inCatalog: true,
       createdBy: 'u1',
-      inCollection: true,
+      inCollection: false,
+      isFavorite: false,
     };
     authState.isStaff = false;
     authState.user = { id: 'u1', anonymous: false };
     authState.needsEmailVerification = false;
     loadLivePack.mockClear();
     acquireEditLock.mockClear();
+    starPack.mockClear();
+    unstarPack.mockClear();
     routerPush.mockClear();
   });
 
@@ -111,15 +121,38 @@ describe('live pack ACL (SC-PACK-53/106/112)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-53/106/117: non-staff sees add-task-set by tasks section, not Edit', async () => {
+  it('SC-PACK-108/164: verified non-creator sees add-task-set, not Edit/collect', async () => {
+    // Not pack creator — Edit is for creator / task-set-author (SC-PACK-156…158).
+    contentState.pack = { ...contentState.pack, createdBy: 'owner-other' };
+    authState.user = { id: 'u1', anonymous: false };
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
     const labels = wrapper.findAll('button').map((b) => b.text());
     expect(labels.some((l) => l.includes('content.edit'))).toBe(false);
     expect(labels.some((l) => l.includes('content.addTaskSetNav'))).toBe(true);
-    // Beside «Задания» heading, not only in page chrome.
+    expect(labels.some((l) => l.includes('content.addToCollection'))).toBe(false);
+    expect(labels.some((l) => l.includes('content.inCollection'))).toBe(false);
     expect(wrapper.text()).toContain('content.taskSets');
+  });
+
+  it('SC-PACK-165: guest does not see add-task-set or star', async () => {
+    authState.user = { id: 'g1', anonymous: true };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    const labels = wrapper.findAll('button').map((b) => b.text());
+    expect(labels.some((l) => l.includes('content.addTaskSetNav'))).toBe(false);
+    expect(wrapper.find('[data-test-id="pack-detail-star"]').exists()).toBe(false);
+  });
+
+  it('SC-PACK-154: detail star toggles favorite', async () => {
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    const star = wrapper.find('[data-test-id="pack-detail-star"]');
+    expect(star.exists()).toBe(true);
+    await star.trigger('click');
+    await flushPromises();
+    expect(starPack).toHaveBeenCalledWith('p1');
   });
 
   it('SC-PACK-112: staff Edit acquires lock then navigates', async () => {

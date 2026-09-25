@@ -69,11 +69,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/pages/ContentCatalogPage.vue'),
     meta: { requiresAuth: true },
   },
+  // SC-PACK-41 / D9: collection-first removed — redirect to unified packs list
   {
     path: '/content/collection',
     name: 'content-collection',
-    component: () => import('@/pages/ContentCollectionPage.vue'),
-    meta: { requiresAuth: true },
+    redirect: { name: 'content-catalog' },
   },
   {
     path: '/content/my-moderation',

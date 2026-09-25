@@ -248,7 +248,7 @@
           <div class="q-mt-sm">{{ gateText }}</div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn flat :label="$t('content.collectionNav')" :to="{ name: 'content-collection' }" />
+          <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
           <q-btn
             v-if="gateMode === 'login'"
             color="primary"

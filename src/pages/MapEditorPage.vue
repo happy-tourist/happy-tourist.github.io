@@ -294,10 +294,9 @@ const statusBadgeColor = computed(() => {
 
 const canSubmit = computed(() => {
   if (staffMode.value || viewOnly.value || gateOpen.value || !local.value) return false;
-  if (maps.map?.hasLive) return false;
   if (startCount.value < minStarts.value) return false;
   if (maps.pendingRequestId && !maps.isPendingAuthor) return false;
-  if (maps.moderationStatus === 'pending') return false;
+  // SC-MAP-35 / SC-PACK-163 parity: author may resubmit while open/pending.
   return true;
 });
 
@@ -305,7 +304,7 @@ const submitHint = computed(() => {
   if (maps.pendingRequestId && !maps.isPendingAuthor) {
     return t('content.submitLockedOther');
   }
-  if (maps.moderationStatus === 'pending') {
+  if (maps.moderationStatus === 'pending' && maps.isPendingAuthor) {
     return t('content.statusPendingAuthor');
   }
   if (startCount.value < minStarts.value) {
@@ -521,20 +520,29 @@ async function boot() {
   }
 
   const wantStaff = route.query.staff === '1' && auth.isStaff;
+  const wantAuthorEdit = route.query.edit === '1';
 
   if (wantStaff) {
     try {
       await enterStaffEdit();
       return;
     } catch {
+      // author_request_open / edit_locked — back to list
       await router.replace({ name: 'content-maps' });
       return;
     }
   }
 
-  // Prefer working copy for creator (never-published).
+  // Prefer working copy for creator (never-published or post-publish re-edit SC-MAP-35).
   try {
     await maps.loadDraft(mapId.value);
+    const isCreator = Boolean(uid.value) && maps.map?.createdBy === uid.value;
+    const needsLock = Boolean(maps.map?.hasLive) || wantAuthorEdit;
+    if (isCreator && needsLock) {
+      await maps.acquireEditLock(mapId.value);
+      lockHeld.value = true;
+      startLockHeartbeat();
+    }
     staffMode.value = false;
     viewOnly.value = false;
     local.value = maps.draft ? { ...maps.draft } : null;
@@ -544,7 +552,7 @@ async function boot() {
     await loadThread();
     return;
   } catch {
-    /* fall through to live */
+    /* fall through to live view-only */
   }
 
   try {

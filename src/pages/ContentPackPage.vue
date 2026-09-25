@@ -21,15 +21,47 @@
       </div>
       <div class="q-gutter-sm">
         <q-btn flat :label="$t('content.catalogNav')" :to="{ name: 'content-catalog' }" />
-        <!-- SC-PACK-53/111/112: staff Edit without collection. -->
+        <q-btn
+          v-if="showFavorite"
+          flat
+          round
+          dense
+          :icon="isFavorite ? 'star' : 'star_border'"
+          :color="isFavorite ? 'amber' : undefined"
+          :aria-label="isFavorite ? $t('content.favoriteUnstar') : $t('content.favoriteStar')"
+          data-test-id="pack-detail-star"
+          :loading="content.loading"
+          @click="onToggleFavorite"
+        />
+        <!-- SC-PACK-156…160: author Edit after publish; staff Edit when no open author request. -->
+        <q-btn
+          v-if="showAuthorEdit"
+          color="primary"
+          icon="edit"
+          :label="$t('content.edit')"
+          :loading="content.loading"
+          data-test-id="pack-author-edit"
+          @click="onAuthorEdit"
+        />
         <q-btn
           v-if="showStaffEdit"
           color="primary"
           icon="edit"
           :label="$t('content.edit')"
           :loading="content.loading"
+          data-test-id="pack-staff-edit"
           @click="onStaffEdit"
         />
+        <q-btn
+          v-else-if="showStaffEditBlocked"
+          color="primary"
+          icon="edit"
+          :label="$t('content.edit')"
+          disable
+          data-test-id="pack-staff-edit-blocked"
+        >
+          <q-tooltip>{{ $t('content.staffEditBlockedAuthorRequest') }}</q-tooltip>
+        </q-btn>
         <q-btn
           v-if="showUnpublish"
           flat
@@ -45,15 +77,6 @@
           :label="$t('content.republish')"
           :loading="content.loading"
           @click="onRepublish"
-        />
-        <q-btn
-          v-if="showCollect"
-          color="primary"
-          outline
-          :label="inCollection ? $t('content.inCollection') : $t('content.addToCollection')"
-          :loading="content.loading"
-          :disable="Boolean(content.pack?.blocked) || inCollection"
-          @click="onAdd"
         />
       </div>
     </div>
@@ -127,6 +150,15 @@
           <q-item-section side>
             <div class="q-gutter-xs" @click.stop>
               <q-btn
+                v-if="canAuthorEditSet(ts)"
+                flat
+                dense
+                icon="edit"
+                :aria-label="$t('content.edit')"
+                data-test-id="pack-task-set-author-edit"
+                @click.stop="onAuthorEditSet(ts)"
+              />
+              <q-btn
                 v-if="auth.isStaff && isSetSoftUnpublished(ts)"
                 flat
                 dense
@@ -136,7 +168,7 @@
                 @click.stop="onRepublishSet(ts.id)"
               />
               <q-btn
-                v-if="auth.isStaff && isSetSoftUnpublished(ts)"
+                v-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
                 flat
                 dense
                 icon="edit"
@@ -262,10 +294,34 @@ const packId = computed(() => {
   return typeof raw === 'string' ? raw : '';
 });
 const live = computed(() => content.liveContent);
-const inCollection = computed(() => Boolean(content.pack?.inCollection));
+const isFavorite = computed(() => Boolean(content.pack?.isFavorite));
+const uid = computed(() => auth.user?.id ?? '');
 
-/** SC-PACK-112/124: staff Edit without collection; hide if blocked. */
-const showStaffEdit = computed(() => auth.isStaff && !content.pack?.blocked);
+/** Open author pack|task_set request blocks staff content Edit (SC-PACK-157). */
+const hasOpenAuthorRequest = computed(
+  () => Boolean(content.pendingPackAuthorId) || Boolean(content.pendingTaskSetAuthorId),
+);
+
+/** SC-PACK-156: pack creator Edit after publish (in-catalog). */
+const showAuthorEdit = computed(
+  () =>
+    !auth.isStaff &&
+    Boolean(uid.value) &&
+    content.pack?.createdBy === uid.value &&
+    Boolean(content.pack?.hasLive) &&
+    content.pack?.inCatalog !== false &&
+    !content.pack?.blocked,
+);
+
+/** SC-PACK-112/124/157: staff Edit without collection; hide when author request open. */
+const showStaffEdit = computed(
+  () => auth.isStaff && !content.pack?.blocked && !hasOpenAuthorRequest.value,
+);
+
+/** Staff sees disabled Edit + tooltip while author request open. */
+const showStaffEditBlocked = computed(
+  () => auth.isStaff && !content.pack?.blocked && hasOpenAuthorRequest.value,
+);
 
 const showUnpublish = computed(
   () =>
@@ -283,17 +339,22 @@ const showRepublish = computed(
     !content.pack?.blocked,
 );
 
-/** Soft-unpublished packs are not collectable from live (already hidden for non-staff). */
-const showCollect = computed(() => content.pack?.inCatalog !== false);
+/** SC-PACK-154: star on detail for registered users on in-catalog packs. */
+const showFavorite = computed(
+  () =>
+    !auth.user?.anonymous &&
+    Boolean(content.pack?.hasLive) &&
+    content.pack?.inCatalog !== false &&
+    !content.pack?.blocked,
+);
 
 /**
- * SC-PACK-53/106/107: non-staff never get full Edit on live;
- * verified + inCollection may add a task set (in-catalog only).
+ * SC-PACK-108/164: verified non-anonymous may add-task-set without collection;
+ * in-catalog only (SC-PACK-117).
  */
 const showAddTaskSet = computed(() => {
   if (auth.isStaff || content.pack?.blocked) return false;
   if (content.pack?.inCatalog === false) return false;
-  if (!inCollection.value) return false;
   if (auth.user?.anonymous || auth.needsEmailVerification) return false;
   return true;
 });
@@ -303,7 +364,7 @@ const publishedSetCount = computed(
 );
 
 const editRedirect = computed(() =>
-  packId.value ? `/content/packs/${packId.value}/edit` : '/content/collection',
+  packId.value ? `/content/packs/${packId.value}/edit` : '/content/packs',
 );
 
 const gateTitle = computed(() =>
@@ -368,13 +429,48 @@ function ensureEligible(): boolean {
   return true;
 }
 
+function canAuthorEditSet(ts: TaskSet): boolean {
+  if (auth.isStaff || content.pack?.blocked) return false;
+  if (!content.pack?.hasLive || content.pack.inCatalog === false) return false;
+  if (auth.user?.anonymous || auth.needsEmailVerification) return false;
+  // Pack creator edits via header Edit; task-set author edits own set (SC-PACK-158/159).
+  if (content.pack.createdBy === uid.value) return false;
+  return Boolean(uid.value) && ts.authorUserId === uid.value;
+}
+
+async function onAuthorEdit() {
+  if (!packId.value) return;
+  if (!ensureEligible()) return;
+  try {
+    await content.acquireEditLock(packId.value);
+    await router.push({ name: 'content-pack-edit', params: { id: packId.value } });
+  } catch {
+    /* error in store — edit_locked / author_request_open via banner */
+  }
+}
+
+async function onAuthorEditSet(ts: TaskSet) {
+  if (!packId.value) return;
+  if (!ensureEligible()) return;
+  try {
+    await content.acquireEditLock(packId.value);
+    await content.loadDraft(packId.value);
+    await router.push({
+      name: 'content-pack-tasks',
+      params: { id: packId.value, taskSetId: ts.id },
+    });
+  } catch {
+    /* error in store */
+  }
+}
+
 async function onStaffEdit() {
   if (!packId.value) return;
   try {
     await content.acquireEditLock(packId.value);
     await router.push({ name: 'content-pack-edit', params: { id: packId.value } });
   } catch {
-    /* error in store — edit_locked shown via banner */
+    /* error in store — edit_locked / author_request_open shown via banner */
   }
 }
 
@@ -455,9 +551,14 @@ function onAddTaskSet() {
   void router.push({ name: 'content-pack-add-task-set', params: { id: packId.value } });
 }
 
-async function onAdd() {
+async function onToggleFavorite() {
+  if (!packId.value) return;
   try {
-    await content.addToCollection(packId.value);
+    if (isFavorite.value) {
+      await content.unstarPack(packId.value);
+    } else {
+      await content.starPack(packId.value);
+    }
   } catch {
     /* error in store */
   }

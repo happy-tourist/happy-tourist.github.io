@@ -7,6 +7,10 @@ export type Difficulty = 1 | 2 | 3;
 /** API request types after simplify-content-pack-editing (D2). */
 export type ModerationRequestType = 'pack' | 'task_set' | 'map';
 
+/** Unified list row status from GET /api/content/packs (SC-PACK-148…150). */
+export type PackListModerationStatus =
+  'in_catalog' | 'draft' | 'pending' | 'needs_revision' | 'unpublished';
+
 export interface ContentPackSummary {
   id: string;
   title: string;
@@ -18,7 +22,13 @@ export interface ContentPackSummary {
   createdBy: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+  /** Legacy; collection product paths removed (SC-PACK-164). */
   inCollection?: boolean;
+  /** Caller-facing list status (SC-PACK-148…150). */
+  moderationStatus?: PackListModerationStatus | null;
+  isMine?: boolean;
+  isContributor?: boolean;
+  isFavorite?: boolean;
 }
 
 export interface AnswerCard {
@@ -69,8 +79,27 @@ export interface ModerationRequest {
   revisionId: string;
   status: string;
   type?: string;
+  /** Staff take holder (SC-PACK-161…163 / SC-MAP-38/39). */
+  takenBy?: string | null;
+  takenAt?: string | Date | null;
   createdAt?: string | Date;
   updatedAt?: string | Date;
+}
+
+/** Edit lock TTL / moderation take TTL (5 min) — mirror server EDIT_LOCK_TTL_MS. */
+export const CONTENT_LOCK_TTL_MS = 5 * 60 * 1000;
+
+export type PackEditorKind = 'creator' | 'task_set_author';
+
+export function moderationTakeHeldBy(
+  req: { takenBy?: string | null; takenAt?: string | Date | null } | null | undefined,
+  userId: string | null | undefined,
+): boolean {
+  if (!req?.takenBy || !userId || req.takenBy !== userId) return false;
+  if (!req.takenAt) return false;
+  const t = req.takenAt instanceof Date ? req.takenAt.getTime() : new Date(req.takenAt).getTime();
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t <= CONTENT_LOCK_TTL_MS;
 }
 
 export interface ModerationMessage {
@@ -97,6 +126,8 @@ export interface StaffPendingItem {
   touristsPerPlayer?: number;
   grid?: string;
   authorDisplayName?: string;
+  takenBy?: string | null;
+  takenAt?: string | Date | null;
   updatedAt: string | Date;
 }
 
@@ -241,6 +272,9 @@ const KNOWN_ERROR_CODES = [
   'task_set_not_found',
   'edit_locked',
   'edit_lock_required',
+  'author_request_open',
+  'moderation_taken',
+  'moderation_take_required',
   'no_working_copy',
   'use_submit_pack',
   'use_submit_add_task_set',
@@ -332,6 +366,8 @@ export const useContentStore = defineStore('content', () => {
   const addTaskSet = ref<AddTaskSetState | null>(null);
   const editLock = ref<EditLockSnapshot | null>(null);
   const staffEditTarget = ref<'live' | 'working' | null>(null);
+  /** Creator vs task-set-author working-copy edit (SC-PACK-156…159). */
+  const editorKind = ref<PackEditorKind | null>(null);
   const loading = ref(false);
   const saving = ref(false);
   const error = ref<string | null>(null);
@@ -345,6 +381,7 @@ export const useContentStore = defineStore('content', () => {
     pendingRequestId.value = null;
     isPendingAuthor.value = false;
     moderationStatus.value = null;
+    editorKind.value = null;
   }
 
   /** Drop cascade yellow when gaps are filled or the task is gone. */
@@ -442,6 +479,54 @@ export const useContentStore = defineStore('content', () => {
         pack.value = { ...pack.value, inCollection: false };
       }
       return { ok: true, packId };
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  function patchFavorite(packId: string, isFavorite: boolean) {
+    catalog.value = catalog.value.map((p) => (p.id === packId ? { ...p, isFavorite } : p));
+    collection.value = collection.value.map((p) => (p.id === packId ? { ...p, isFavorite } : p));
+    if (pack.value?.id === packId) {
+      pack.value = { ...pack.value, isFavorite };
+    }
+  }
+
+  /** Star in-catalog pack (SC-PACK-154); registered non-anonymous only. */
+  async function starPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        isFavorite: boolean;
+      }>(`/api/content/packs/${packId}/favorite`, { body: {} });
+      patchFavorite(packId, data?.isFavorite ?? true);
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Unstar pack (SC-PACK-154). */
+  async function unstarPack(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        isFavorite: boolean;
+      }>(`/api/content/packs/${packId}/unfavorite`, { body: {} });
+      patchFavorite(packId, data?.isFavorite ?? false);
+      return data;
     } catch (e) {
       error.value = mapContentError(e);
       throw e;
@@ -573,7 +658,14 @@ export const useContentStore = defineStore('content', () => {
         pendingAnswersAuthorId?: string | null;
         pendingTasksAuthorId?: string | null;
       }>(`/api/content/packs/${packId}`);
-      pack.value = data.pack;
+      const fromList = catalog.value.find((p) => p.id === packId);
+      pack.value = {
+        ...data.pack,
+        isFavorite: data.pack.isFavorite ?? fromList?.isFavorite ?? false,
+        moderationStatus: data.pack.moderationStatus ?? fromList?.moderationStatus ?? null,
+        isMine: data.pack.isMine ?? fromList?.isMine,
+        isContributor: data.pack.isContributor ?? fromList?.isContributor,
+      };
       liveContent.value = data.content;
       pendingPackAuthorId.value =
         typeof data.pendingPackAuthorId === 'string'
@@ -626,7 +718,7 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  /** Creator working copy (unpublished only). */
+  /** Creator / task-set-author working copy (incl. post-publish re-edit SC-PACK-156…159). */
   async function loadDraft(packId: string) {
     loading.value = true;
     error.value = null;
@@ -637,17 +729,23 @@ export const useContentStore = defineStore('content', () => {
         pendingRequestId?: string | null;
         isPendingAuthor?: boolean;
         moderationStatus?: string | null;
+        editorKind?: PackEditorKind | null;
       }>(`/api/content/packs/${packId}/draft`);
       pack.value = data.pack;
       draft.value = data.draft;
       pendingRequestId.value = data.pendingRequestId ?? null;
       isPendingAuthor.value = Boolean(data.isPendingAuthor);
       moderationStatus.value = data.moderationStatus ?? null;
+      editorKind.value =
+        data.editorKind === 'creator' || data.editorKind === 'task_set_author'
+          ? data.editorKind
+          : null;
       pruneCascadeGaps(data.draft);
       return data;
     } catch (e) {
       error.value = mapContentError(e);
       draft.value = null;
+      editorKind.value = null;
       throw e;
     } finally {
       loading.value = false;
@@ -1022,6 +1120,8 @@ export const useContentStore = defineStore('content', () => {
           type: normalizeRequestType(data.request.type),
           packId: data.request.packId ?? data.pack?.id ?? '',
           mapId: (data.request as ModerationRequest & { mapId?: string }).mapId ?? data.map?.id,
+          takenBy: data.request.takenBy ?? null,
+          takenAt: data.request.takenAt ?? null,
         },
       };
       staffPreview.value = preview;
@@ -1035,6 +1135,76 @@ export const useContentStore = defineStore('content', () => {
       throw e;
     } finally {
       loading.value = false;
+    }
+  }
+
+  /** Staff take open request before moderating (SC-PACK-161…163 / SC-MAP-38/39). */
+  async function takeModerationRequest(requestId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        request: ModerationRequest;
+        take?: { takenBy: string | null; takenAt: string | null; expiresAt: string | null };
+      }>(`/api/content/staff/requests/${requestId}/take`);
+      const req = {
+        ...data.request,
+        type: normalizeRequestType(data.request.type),
+        takenBy: data.request.takenBy ?? data.take?.takenBy ?? null,
+        takenAt: data.request.takenAt ?? data.take?.takenAt ?? null,
+      };
+      if (staffPreview.value?.request.id === requestId) {
+        staffPreview.value = {
+          ...staffPreview.value,
+          request: { ...staffPreview.value.request, ...req },
+        };
+      }
+      moderationRequest.value = req;
+      staffPending.value = staffPending.value.map((item) =>
+        item.requestId === requestId
+          ? { ...item, takenBy: req.takenBy ?? null, takenAt: req.takenAt ?? null }
+          : item,
+      );
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** Staff release take without terminal action. */
+  async function releaseModerationRequest(requestId: string) {
+    try {
+      const { data } = await client.http.post<{ ok: boolean; requestId: string }>(
+        `/api/content/staff/requests/${requestId}/release`,
+      );
+      if (staffPreview.value?.request.id === requestId) {
+        staffPreview.value = {
+          ...staffPreview.value,
+          request: {
+            ...staffPreview.value.request,
+            takenBy: null,
+            takenAt: null,
+          },
+        };
+      }
+      if (moderationRequest.value?.id === requestId) {
+        moderationRequest.value = {
+          ...moderationRequest.value,
+          takenBy: null,
+          takenAt: null,
+        };
+      }
+      staffPending.value = staffPending.value.map((item) =>
+        item.requestId === requestId ? { ...item, takenBy: null, takenAt: null } : item,
+      );
+      return data;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
     }
   }
 
@@ -1199,6 +1369,7 @@ export const useContentStore = defineStore('content', () => {
     addTaskSet,
     editLock,
     staffEditTarget,
+    editorKind,
     loading,
     saving,
     error,
@@ -1207,6 +1378,8 @@ export const useContentStore = defineStore('content', () => {
     listCollection,
     addToCollection,
     removeFromCollection,
+    starPack,
+    unstarPack,
     unpublishPack,
     republishPack,
     unpublishTaskSet,
@@ -1229,6 +1402,8 @@ export const useContentStore = defineStore('content', () => {
     listStaffPending,
     listMyModeration,
     loadStaffPreview,
+    takeModerationRequest,
+    releaseModerationRequest,
     approveRequest,
     needsRevisionRequest,
     rejectRequest,
