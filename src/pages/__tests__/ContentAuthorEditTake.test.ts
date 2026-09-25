@@ -132,8 +132,9 @@ const stubs = {
   'q-item': {
     name: 'QItem',
     props: ['to', 'clickable'],
+    inheritAttrs: false,
     template:
-      '<div class="q-item-stub" @click="$emit(\'click\')"><slot /><slot name="side" /></div>',
+      '<div class="q-item-stub" v-bind="$attrs" @click="$emit(\'click\')"><slot /><slot name="side" /></div>',
   },
   'q-item-section': { template: '<div><slot /></div>' },
   'q-item-label': { template: '<div><slot /></div>' },
@@ -353,6 +354,101 @@ describe('live task-set moderation marks (SC-PACK-171…174)', () => {
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
       'content.taskSetStatusMarks.needs_moderation',
     );
+  });
+});
+
+describe('never-live add-task-set ghost (SC-PACK-188…190)', () => {
+  beforeEach(() => {
+    authState.user = { id: 'contrib', anonymous: false };
+    authState.needsEmailVerification = false;
+    authState.isStaff = false;
+    contentState.error = null;
+    contentState.pack = {
+      id: 'p1',
+      title: 'Live',
+      description: '',
+      blocked: false,
+      hasLive: true,
+      inCatalog: true,
+      createdBy: 'owner',
+      inCollection: false,
+      isFavorite: false,
+    };
+    contentState.liveContent = {
+      title: 'Live',
+      description: '',
+      answerCards: [{ id: 'c1', content: 'A', description: '' }],
+      taskSets: [
+        {
+          id: 'ts0',
+          authorUserId: 'other',
+          authorDisplayName: 'Other',
+          coauthorLabels: [],
+          moderationStatus: null,
+          tasks: [{ id: 't0', question: 'Q0', difficulty: 1, slots: [] }],
+        },
+        {
+          id: 'ts-ghost',
+          authorUserId: 'contrib',
+          authorDisplayName: 'Contrib',
+          coauthorLabels: [],
+          moderationStatus: 'needs_revision',
+          neverLive: true,
+          tasks: [{ id: 'tg1', question: 'Ghost Q', difficulty: 1, slots: [] }],
+        },
+      ],
+    };
+    contentState.pendingPackAuthorId = null;
+    contentState.pendingTaskSetAuthorId = 'contrib';
+    routerPush.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('SC-PACK-188: set author sees never-live set with needs_revision; live set not falsely marked', async () => {
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-ghost-ts-ghost"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts-ghost"]').text()).toContain(
+      'content.taskSetStatusMarks.needs_revision',
+    );
+    // S0 remains without inheriting needs_revision from ghost S1 (SC-PACK-187 client view).
+    expect(wrapper.find('[data-test-id="pack-task-set-status-ts0"]').exists()).toBe(false);
+  });
+
+  it('SC-PACK-189: others do not see never-live set on live list', async () => {
+    // Server omits ghost for non-authors — client just renders what it receives.
+    authState.user = { id: 'owner', anonymous: false };
+    contentState.liveContent = {
+      ...contentState.liveContent,
+      taskSets: [
+        {
+          id: 'ts0',
+          authorUserId: 'other',
+          authorDisplayName: 'Other',
+          coauthorLabels: [],
+          moderationStatus: null,
+          tasks: [{ id: 't0', question: 'Q0', difficulty: 1, slots: [] }],
+        },
+      ],
+    };
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="pack-task-set-ghost-ts-ghost"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Ghost Q');
+  });
+
+  it('SC-PACK-190: never-live set row opens Edit (add-task-set amend)', async () => {
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+    await wrapper.find('[data-test-id="pack-task-set-ghost-ts-ghost"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack-add-task-set',
+      params: { id: 'p1' },
+    });
   });
 });
 

@@ -259,6 +259,30 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(crumbs.text()).toContain('Пак Альфа');
   });
 
+  it('SC-BRAND-17 / SC-PACK-193 / SC-MAP-52: breadcrumbs outside elevated header bar', async () => {
+    routeState.name = 'content-pack';
+    routeState.params = { id: 'p1' };
+    routeState.path = '/content/packs/p1';
+    wrapper = mountApp();
+    await flushPromises();
+    const header = wrapper.find('[data-test-id="q-header"]');
+    const crumbs = wrapper.find('[data-test-id="app-breadcrumbs"]');
+    expect(crumbs.exists()).toBe(true);
+    expect(header.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(false);
+    expect(header.html()).not.toContain('app-breadcrumbs');
+
+    wrapper.unmount();
+    routeState.name = 'content-maps';
+    routeState.params = {};
+    routeState.path = '/content/maps';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(
+      wrapper.find('[data-test-id="q-header"]').find('[data-test-id="app-breadcrumbs"]').exists(),
+    ).toBe(false);
+    expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(true);
+  });
+
   it('SC-MAP-44: breadcrumbs on Maps list and editor', async () => {
     routeState.name = 'content-maps';
     routeState.path = '/content/maps';

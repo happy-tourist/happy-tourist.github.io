@@ -828,4 +828,46 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
     expect(wrapper.find('[data-test-id="map-view-meta"]').exists()).toBe(false);
     expect(acquireEditLock).not.toHaveBeenCalled();
   });
+
+  it('SC-MAP-50: author pending map opens Edit from list (not View-first)', async () => {
+    mapsState.list = [
+      {
+        ...approvedMap,
+        createdBy: 'u1',
+        moderationStatus: 'pending',
+      },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="maps-row-m-approved"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-map-edit',
+      params: { id: 'm-approved' },
+      query: { edit: '1' },
+    });
+  });
+
+  it('SC-MAP-51: View Edit control is in the title row (not below view meta alone)', async () => {
+    loadDraft.mockRejectedValueOnce(new Error('map_published'));
+    loadLiveMap.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.liveContent = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.liveContent });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+    const editBtn = wrapper.find('[data-test-id="map-view-edit"]');
+    expect(editBtn.exists()).toBe(true);
+    // Title-row Edit must not sit inside map-view-meta (author/seats block).
+    expect(
+      wrapper
+        .find('[data-test-id="map-view-meta"]')
+        .find('[data-test-id="map-view-edit"]')
+        .exists(),
+    ).toBe(false);
+    expect(wrapper.html().indexOf('map-view-edit')).toBeLessThan(
+      wrapper.html().indexOf('map-view-meta'),
+    );
+  });
 });

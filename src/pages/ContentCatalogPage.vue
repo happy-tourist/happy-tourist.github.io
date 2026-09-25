@@ -282,11 +282,28 @@ async function onToggleFavorite(item: ContentPackSummary) {
 }
 
 function onRowClick(item: ContentPackSummary) {
-  if (!item.hasLive) {
+  // SC-PACK-186/191/192: never-published or pack-level author work → Edit;
+  // add-task-set-only open work → live first; clean in-catalog → live.
+  if (shouldOpenPackEditFromList(item)) {
     void router.push({ name: 'content-pack-edit', params: { id: item.id } });
     return;
   }
   void router.push({ name: 'content-pack', params: { id: item.id } });
+}
+
+/** SC-PACK-186 / 191 / 192 — pack-level Edit vs live-first for add-task-set. */
+function shouldOpenPackEditFromList(item: ContentPackSummary): boolean {
+  if (!item.hasLive) return true;
+  const status = item.moderationStatus;
+  if (status !== 'pending' && status !== 'needs_revision' && status !== 'draft') {
+    return false;
+  }
+  if (item.openRequestType === 'task_set') return false;
+  if (item.openRequestType === 'pack') return true;
+  // Draft with live = pack-level cancel/working (SC-PACK-175…179 / 192).
+  if (status === 'draft') return true;
+  // pending/needs_revision without type: mine → pack Edit; contributor → live (SC-PACK-191).
+  return Boolean(item.isMine);
 }
 
 function confirmUnpublish(packId: string) {

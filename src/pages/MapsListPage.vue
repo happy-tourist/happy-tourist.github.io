@@ -333,6 +333,24 @@ function onRowClick(item: MapSummary) {
   if (item.hasLive && item.inCatalog === false && !auth.isStaff) {
     return;
   }
+  // SC-MAP-49/50: never-published OR author draft/pending/needs_revision → Edit (not View-first).
+  const status = item.moderationStatus;
+  const authorWork =
+    !item.hasLive || status === 'draft' || status === 'pending' || status === 'needs_revision';
+  if (authorWork && !auth.isStaff) {
+    if (item.hasLive) {
+      void router.push({
+        name: 'content-map-edit',
+        params: { id: item.id },
+        query: { edit: '1' },
+      });
+    } else {
+      // Never-published: boot enters Edit without query (SC-MAP-49).
+      void router.push({ name: 'content-map-edit', params: { id: item.id } });
+    }
+    return;
+  }
+  // SC-MAP-46: clean published → View
   void router.push({ name: 'content-map-edit', params: { id: item.id } });
 }
 

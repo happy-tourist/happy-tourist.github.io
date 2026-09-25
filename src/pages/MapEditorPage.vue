@@ -15,6 +15,16 @@
         </div>
       </div>
       <div class="q-gutter-sm">
+        <!-- SC-MAP-51: Edit in title row (pack live parity), not below view meta -->
+        <q-btn
+          v-if="canEnterEditFromView"
+          color="primary"
+          icon="edit"
+          :label="$t('content.edit')"
+          data-test-id="map-view-edit"
+          :loading="maps.loading"
+          @click="onEnterEditFromView"
+        />
         <!-- SC-MAP-44: «К картам» replaced by App breadcrumbs -->
         <q-btn
           v-if="canDelete"
@@ -63,14 +73,6 @@
                 }}
               </div>
             </div>
-            <q-btn
-              v-if="canEnterEditFromView"
-              color="primary"
-              :label="$t('content.edit')"
-              data-test-id="map-view-edit"
-              :loading="maps.loading"
-              @click="onEnterEditFromView"
-            />
           </template>
           <template v-else>
             <div class="text-subtitle2 q-mb-sm">{{ $t('maps.palette') }}</div>
@@ -631,7 +633,8 @@ async function boot() {
     }
   }
 
-  // Default open: never-published → Edit; published → View (SC-MAP-46/49).
+  // Default open: never-published → Edit; author draft/pending/needs_revision → Edit;
+  // clean published → View (SC-MAP-46/49/50).
   try {
     await maps.loadDraft(mapId.value);
     if (!maps.map?.hasLive) {
@@ -644,7 +647,24 @@ async function boot() {
       await loadThread();
       return;
     }
-    // Published map with working draft available — still open View first (D17).
+    const status = maps.moderationStatus;
+    const isCreator = Boolean(uid.value) && maps.map.createdBy === uid.value;
+    const authorWork = status === 'pending' || status === 'needs_revision' || status === 'draft';
+    if (isCreator && authorWork && !auth.isStaff) {
+      try {
+        await maps.acquireEditLock(mapId.value);
+        lockHeld.value = true;
+        startLockHeartbeat();
+      } catch {
+        /* edit_locked — stay with draft unlocked if possible */
+      }
+      staffMode.value = false;
+      viewOnly.value = false;
+      local.value = maps.draft ? { ...maps.draft } : null;
+      await loadThread();
+      return;
+    }
+    // Clean published — open View first (D17 / SC-MAP-46).
   } catch {
     /* fall through to live view-only */
   }

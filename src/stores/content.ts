@@ -11,6 +11,9 @@ export type ModerationRequestType = 'pack' | 'task_set' | 'map';
 export type PackListModerationStatus =
   'in_catalog' | 'draft' | 'pending' | 'needs_revision' | 'unpublished';
 
+/** Open moderation kind on list row (SC-PACK-191/192): pack-level vs add-task-set. */
+export type PackListOpenRequestType = 'pack' | 'task_set';
+
 export interface ContentPackSummary {
   id: string;
   title: string;
@@ -26,6 +29,11 @@ export interface ContentPackSummary {
   inCollection?: boolean;
   /** Caller-facing list status (SC-PACK-148…150). */
   moderationStatus?: PackListModerationStatus | null;
+  /**
+   * When caller has open pending/needs_revision (or pack-level draft), which kind.
+   * `task_set` → list opens live first (SC-PACK-191); `pack` → Edit (SC-PACK-192).
+   */
+  openRequestType?: PackListOpenRequestType | null;
   isMine?: boolean;
   isContributor?: boolean;
   isFavorite?: boolean;
@@ -67,6 +75,11 @@ export interface TaskSet {
    * Visible to that set's author and staff; null for others (incl. pack creator).
    */
   moderationStatus?: TaskSetModerationStatus;
+  /**
+   * Never-live add-task-set ghost for set author only (D19 / SC-PACK-188…190).
+   * Row → Edit (add-task-set amend), not live tasks drill-in.
+   */
+  neverLive?: boolean;
   tasks: ContentTask[];
 }
 
@@ -671,6 +684,7 @@ export const useContentStore = defineStore('content', () => {
         ...data.pack,
         isFavorite: data.pack.isFavorite ?? fromList?.isFavorite ?? false,
         moderationStatus: data.pack.moderationStatus ?? fromList?.moderationStatus ?? null,
+        openRequestType: data.pack.openRequestType ?? fromList?.openRequestType ?? null,
         isMine: data.pack.isMine ?? fromList?.isMine,
         isContributor: data.pack.isContributor ?? fromList?.isContributor,
       };

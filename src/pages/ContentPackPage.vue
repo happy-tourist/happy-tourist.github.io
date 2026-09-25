@@ -124,6 +124,9 @@
           :key="ts.id"
           :clickable="canEnterTaskSet(ts)"
           :class="{ 'text-grey-6': isSetSoftUnpublished(ts) }"
+          :data-test-id="
+            isNeverLiveGhost(ts) ? `pack-task-set-ghost-${ts.id}` : `pack-task-set-row-${ts.id}`
+          "
           v-ripple="canEnterTaskSet(ts)"
           @click="onTaskSetClick(ts)"
         >
@@ -391,6 +394,11 @@ function isSetSoftUnpublished(ts: TaskSet): boolean {
   return ts.inCatalog === false;
 }
 
+/** D19 / SC-PACK-188…190: never-live add-task-set ghost for set author. */
+function isNeverLiveGhost(ts: TaskSet): boolean {
+  return ts.neverLive === true;
+}
+
 /** SC-PACK-171…174 / D10: pending | needs_revision | draft for set author + staff only. */
 function setModerationBadge(ts: TaskSet): string {
   const status = ts.moderationStatus;
@@ -458,6 +466,8 @@ function canAuthorEditSet(ts: TaskSet): boolean {
   if (auth.isStaff || content.pack?.blocked) return false;
   if (!content.pack?.hasLive || content.pack.inCatalog === false) return false;
   if (auth.user?.anonymous || auth.needsEmailVerification) return false;
+  // Ghost never-live row opens Edit via row click (SC-PACK-190) — no side Edit.
+  if (isNeverLiveGhost(ts)) return false;
   // Pack creator edits via header Edit; task-set author edits own set (SC-PACK-158/159).
   if (content.pack.createdBy === uid.value) return false;
   return Boolean(uid.value) && ts.authorUserId === uid.value;
@@ -538,6 +548,12 @@ async function onRepublish() {
 
 function onTaskSetClick(ts: TaskSet) {
   if (!canEnterTaskSet(ts) || !packId.value) return;
+  // SC-PACK-190: never-live ghost → add-task-set Edit (amend).
+  if (isNeverLiveGhost(ts)) {
+    if (!ensureEligible()) return;
+    void router.push({ name: 'content-pack-add-task-set', params: { id: packId.value } });
+    return;
+  }
   void router.push({
     name: 'content-pack-tasks',
     params: { id: packId.value, taskSetId: ts.id },

@@ -383,4 +383,64 @@ describe('cancel → draft list UX (SC-PACK-175…178)', () => {
     await flushPromises();
     expect(wrapper.find('[data-test-id="packs-row-draft1"]').exists()).toBe(false);
   });
+
+  it('SC-PACK-191: packs list with open add-task-set opens live first', async () => {
+    contentState.catalog = [
+      {
+        id: 'ats1',
+        title: 'Add-task-set pack',
+        description: '',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'owner',
+        moderationStatus: 'pending',
+        openRequestType: 'task_set',
+        isMine: false,
+        isContributor: true,
+        isFavorite: false,
+      },
+    ];
+    wrapper = getWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="packs-row-ats1"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack',
+      params: { id: 'ats1' },
+    });
+    expect(routerPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'content-pack-edit' }),
+    );
+    expect(routerPush).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'content-pack-add-task-set' }),
+    );
+  });
+
+  it('SC-PACK-192: pack-level pending opens Edit from list', async () => {
+    contentState.catalog = [
+      {
+        id: 'pack-pend',
+        title: 'Pack pending',
+        description: '',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'u1',
+        moderationStatus: 'pending',
+        openRequestType: 'pack',
+        isMine: true,
+        isContributor: false,
+        isFavorite: false,
+      },
+    ];
+    wrapper = getWrapper();
+    await flushPromises();
+    await wrapper.find('[data-test-id="packs-row-pack-pend"]').trigger('click');
+    await flushPromises();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack-edit',
+      params: { id: 'pack-pend' },
+    });
+  });
 });

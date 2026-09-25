@@ -131,23 +131,23 @@
           @click="onSessionLogout"
         />
       </q-toolbar>
-
-      <!-- SC-BRAND-16 / SC-PACK-180 / SC-MAP-44: breadcrumbs under header -->
-      <div
-        v-if="breadcrumbItems.length"
-        class="app-breadcrumbs q-px-md q-pb-sm"
-        data-test-id="app-breadcrumbs"
-      >
-        <q-breadcrumbs>
-          <q-breadcrumbs-el
-            v-for="(crumb, idx) in breadcrumbItems"
-            :key="`${crumb.label}-${idx}`"
-            :label="crumb.label"
-            :to="crumb.to"
-          />
-        </q-breadcrumbs>
-      </div>
     </q-header>
+
+    <!-- SC-BRAND-17 / SC-PACK-193 / SC-MAP-52: crumbs below elevated header (page zone) -->
+    <div
+      v-if="breadcrumbItems.length"
+      class="app-breadcrumbs q-px-md q-py-sm"
+      data-test-id="app-breadcrumbs"
+    >
+      <q-breadcrumbs>
+        <q-breadcrumbs-el
+          v-for="(crumb, idx) in breadcrumbItems"
+          :key="`${crumb.label}-${idx}`"
+          :label="crumb.label"
+          :to="crumb.to"
+        />
+      </q-breadcrumbs>
+    </div>
 
     <q-dialog v-model="leaveConfirmOpen">
       <q-card style="min-width: 280px">
@@ -518,7 +518,9 @@ async function onSessionLogout() {
   outline-offset: 2px;
 }
 
+/* Page-zone strip — not inside elevated q-header (SC-BRAND-17). */
 .app-breadcrumbs {
   font-size: 0.875rem;
+  background: var(--q-page-bg, transparent);
 }
 </style>
