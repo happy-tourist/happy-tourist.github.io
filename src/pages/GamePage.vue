@@ -1854,7 +1854,9 @@ function onRescueClick(pieceId: string) {
   if (!isInteractive.value || !mySeat.value || game.steps <= 0) {
     return;
   }
-  const trapped = mySeat.value.pieces.find((p) => p.pieceId === pieceId && p.trapped && !p.finished);
+  const trapped = mySeat.value.pieces.find(
+    (p) => p.pieceId === pieceId && p.trapped && !p.finished,
+  );
   if (!trapped) {
     return;
   }
@@ -3707,7 +3709,8 @@ body.body--dark .say-bubble {
    Hit-area ≥ ~32px; icon glyph may stay smaller. */
 .say-affordance {
   position: absolute;
-  top: -8px;
+  /* Raised above focus so hit areas do not overlap (SC-PRESENCE-33 / D8). */
+  top: -32px;
   right: -8px;
   z-index: 5;
   width: 36px;
@@ -3732,10 +3735,10 @@ body.body--dark .say-bubble {
   background: #1e88e5;
 }
 
-/* Focus between say (top-right) and end-turn (right-center) — SC-PRESENCE-30. */
+/* Focus between say (above) and end-turn (right-center) — SC-PRESENCE-30/33. */
 .focus-affordance {
   position: absolute;
-  top: 22%;
+  top: 32%;
   right: -8px;
   transform: translateY(-50%);
   z-index: 5;

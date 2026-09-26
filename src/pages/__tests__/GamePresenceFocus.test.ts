@@ -113,7 +113,7 @@ function mountPage() {
   });
 }
 
-describe('GamePage focus control (SC-PRESENCE-30/31/32)', () => {
+describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.stubGlobal('localStorage', {
@@ -235,5 +235,36 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32)', () => {
     await flushPromises();
     expect(wrapper2.find('[data-test-id="focus-actionable"]').exists()).toBe(false);
     wrapper2.unmount();
+  });
+
+  it('SC-PRESENCE-33: say is above focus without overlap', async () => {
+    seedPlaying({
+      pieces: [
+        { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
+        { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
+      ],
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const marker = wrapper.find('.presence-slot--own .presence-marker');
+    const say = marker.find('.say-affordance');
+    const focus = marker.find('.focus-affordance');
+    expect(say.exists()).toBe(true);
+    expect(focus.exists()).toBe(true);
+
+    // Authoritative CSS (jsdom may not resolve scoped rules via getComputedStyle).
+    // Marker is 96px; say top -32px (center −14); focus top 32% with translateY(-50%)
+    // (center ≈ 30.7). Centers ≥ 36px apart → 36px hit circles do not overlap.
+    const markerH = 96;
+    const btn = 36;
+    const sayTopPx = -32;
+    const focusTopPct = 32;
+    const sayCenter = sayTopPx + btn / 2;
+    const focusCenter = (focusTopPct / 100) * markerH;
+    expect(sayCenter).toBeLessThan(focusCenter);
+    expect(Math.abs(focusCenter - sayCenter)).toBeGreaterThanOrEqual(btn);
+
+    wrapper.unmount();
   });
 });

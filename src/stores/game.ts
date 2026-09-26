@@ -43,11 +43,13 @@ export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
 /** Create option catapult density presets (D6 / SC-LOBBY-16…18). */
 export type CreateGameCatapultDensity = 'few' | 'medium' | 'many';
 
-/** Create options — map + pack/sets; maxSeats comes from map.players on server (D2). */
+/** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2). */
 export interface CreateGameOptions {
   mapId: string;
   packId: string;
   taskSetIds: string[];
+  /** Chosen seats 1…map.players; server defaults to min(2, map.players) if omitted. */
+  maxSeats: number;
   /** few/medium/many → 12/22/35% of task cells; default medium on server. */
   grilleDensity?: CreateGameGrilleDensity;
   /** few/medium/many → 12/22/35% of task cells; default medium on server. Independent of grilleDensity. */
@@ -1120,7 +1122,7 @@ export const useGameStore = defineStore('game', {
       // Phase-first: started mirrors playing (legacy field may still exist on server).
       this.started = this.phase === 'playing';
       const maxRaw = Number(s.maxSeats);
-      this.maxSeats = maxRaw === 2 || maxRaw === 3 || maxRaw === 4 ? maxRaw : 2;
+      this.maxSeats = Number.isInteger(maxRaw) && maxRaw >= 1 && maxRaw <= 4 ? maxRaw : 2;
       const cd = Number(s.countdownRemaining ?? 0);
       this.countdownRemaining = Number.isFinite(cd) && cd > 0 ? Math.floor(cd) : 0;
       this.currentTurnSessionId =

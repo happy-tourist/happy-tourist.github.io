@@ -86,6 +86,7 @@ export default {
     map: 'Карта',
     mapRequired: 'Выберите карту',
     mapCapacity: '{players}×{tourists}',
+    maxSeats: 'Число мест',
     pack: 'Набор карточек',
     packRequired: 'Выберите набор',
     taskSets: 'Наборы заданий',

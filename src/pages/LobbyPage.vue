@@ -142,6 +142,7 @@
             :loading="pickersLoading"
             :label="$t('lobby.map')"
             :disable="creating"
+            @update:model-value="onMapSelected"
           >
             <template #option="scope">
               <q-item v-bind="scope.itemProps" :data-test-id="`lobby-map-opt-${scope.opt.value}`">
@@ -170,18 +171,19 @@
               </q-item>
             </template>
           </q-select>
-          <div
-            v-if="selectedMap"
-            class="text-caption text-muted q-mt-xs"
-            data-test-id="lobby-create-map-capacity"
-          >
-            {{
-              $t('lobby.mapCapacity', {
-                players: selectedMap.players,
-                tourists: selectedMap.touristsPerPlayer,
-              })
-            }}
-          </div>
+        </q-card-section>
+
+        <q-card-section v-if="selectedMap" class="q-pt-none">
+          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.maxSeats') }}</div>
+          <q-option-group
+            v-model="createMaxSeats"
+            type="radio"
+            color="primary"
+            data-test-id="lobby-create-max-seats"
+            :options="maxSeatsOptions"
+            inline
+            :disable="creating"
+          />
         </q-card-section>
 
         <q-card-section class="q-pt-none">
@@ -336,6 +338,8 @@ const packDetailLoading = ref(false);
 const createMapId = ref<string | null>(null);
 const createPackId = ref<string | null>(null);
 const createTaskSetIds = ref<string[]>([]);
+/** Chosen seats 1…map.players; default min(2, map.players) after map select (SC-LOBBY-28). */
+const createMaxSeats = ref(2);
 /** Default medium (22%) — SC-LOBBY-15. */
 const createGrilleDensity = ref<CreateGameGrilleDensity>('medium');
 /** Default medium (22%) — SC-LOBBY-18. */
@@ -348,6 +352,15 @@ const inCatalogMaps = computed(() =>
 const selectedMap = computed(
   () => inCatalogMaps.value.find((m) => m.id === createMapId.value) ?? null,
 );
+
+const maxSeatsOptions = computed(() => {
+  const players = selectedMap.value?.players ?? 0;
+  const ceiling = Math.max(1, Math.min(4, Math.floor(players)));
+  return Array.from({ length: ceiling }, (_, i) => {
+    const n = i + 1;
+    return { label: String(n), value: n };
+  });
+});
 
 const mapOptions = computed(() =>
   inCatalogMaps.value.map((m) => ({
@@ -402,7 +415,11 @@ const taskSetOptions = computed(() =>
 
 const canConfirmCreate = computed(
   () =>
-    Boolean(createMapId.value) && Boolean(createPackId.value) && createTaskSetIds.value.length > 0,
+    Boolean(createMapId.value) &&
+    Boolean(createPackId.value) &&
+    createTaskSetIds.value.length > 0 &&
+    createMaxSeats.value >= 1 &&
+    createMaxSeats.value <= (selectedMap.value?.players ?? 0),
 );
 
 const grilleDensityOptions = computed(() => [
@@ -429,6 +446,7 @@ function resetCreateForm() {
   createMapId.value = null;
   createPackId.value = null;
   createTaskSetIds.value = [];
+  createMaxSeats.value = 2;
   createGrilleDensity.value = 'medium';
   createCatapultDensity.value = 'medium';
 }
@@ -454,6 +472,16 @@ function closeCreateModal() {
   createModalOpen.value = false;
 }
 
+function onMapSelected(mapId: string | null) {
+  const map = inCatalogMaps.value.find((m) => m.id === mapId);
+  if (!map) {
+    createMaxSeats.value = 2;
+    return;
+  }
+  const ceiling = Math.max(1, Math.min(4, Math.floor(map.players)));
+  createMaxSeats.value = Math.min(2, ceiling);
+}
+
 async function onPackSelected(packId: string | null) {
   createTaskSetIds.value = [];
   if (!packId) {
@@ -462,6 +490,11 @@ async function onPackSelected(packId: string | null) {
   packDetailLoading.value = true;
   try {
     await content.loadLivePack(packId);
+    // SC-LOBBY-30: exactly one published set → pre-check it.
+    const sets = (content.liveContent?.taskSets ?? []).filter(isPublishedTaskSet);
+    if (sets.length === 1 && sets[0]) {
+      createTaskSetIds.value = [sets[0].id];
+    }
   } catch {
     // error in store
   } finally {
@@ -474,7 +507,9 @@ function selectAllTaskSets() {
 }
 
 function roomMapCapacity(room: RoomAvailable<GameRoomMeta>): string | null {
-  const players = room.metadata?.players;
+  // Listing capacity uses room maxSeats (chosen at create), not map.players (SC-LOBBY-25).
+  const players =
+    typeof room.metadata?.maxSeats === 'number' ? room.metadata.maxSeats : room.metadata?.players;
   const tourists = room.metadata?.touristsPerPlayer;
   if (typeof players !== 'number' || typeof tourists !== 'number') {
     return null;
@@ -509,6 +544,7 @@ async function onConfirmCreate() {
       mapId: createMapId.value,
       packId: createPackId.value,
       taskSetIds: [...createTaskSetIds.value],
+      maxSeats: createMaxSeats.value,
       grilleDensity: createGrilleDensity.value,
       catapultDensity: createCatapultDensity.value,
     });

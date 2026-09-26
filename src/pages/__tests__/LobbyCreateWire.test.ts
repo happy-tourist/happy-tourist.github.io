@@ -163,7 +163,7 @@ const stubs = {
     props: ['modelValue', 'options', 'type', 'disable'],
     emits: ['update:modelValue'],
     template: `
-      <div class="q-option-group-stub" :data-type="type">
+      <div class="q-option-group-stub" v-bind="$attrs" :data-type="type">
         <label
           v-for="opt in options"
           :key="String(opt.value)"
@@ -183,6 +183,7 @@ const stubs = {
             type="radio"
             :value="opt.value"
             :checked="modelValue === opt.value"
+            :data-test-id="'seat-' + opt.value"
             @change="$emit('update:modelValue', opt.value)"
           />
           <span>{{ opt.label }}</span>
@@ -209,7 +210,7 @@ const stubs = {
   },
 };
 
-describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
+describe('lobby create & listing wire (SC-LOBBY-21…30)', () => {
   let wrapper: ReturnType<typeof mount> | null = null;
 
   beforeEach(() => {
@@ -219,7 +220,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
         authorDisplayName: 'Автор карты',
         hasLive: true,
         inCatalog: true,
-        players: 3,
+        players: 4,
         touristsPerPlayer: 2,
         grid: '1'.repeat(100),
       },
@@ -250,6 +251,38 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
     mapsState.listMaps.mockClear();
     contentState.listCatalog.mockClear();
     contentState.loadLivePack.mockClear();
+    contentState.loadLivePack.mockImplementation((packId: string) => {
+      contentState.pack = { id: packId, title: 'Математика' };
+      contentState.liveContent = {
+        title: 'Математика',
+        taskSets: [
+          {
+            id: 's1',
+            authorUserId: 'a1',
+            authorDisplayName: 'Иван',
+            coauthorLabels: [],
+            inCatalog: true,
+            tasks: [],
+          },
+          {
+            id: 's2',
+            authorUserId: 'a2',
+            authorDisplayName: 'Мария',
+            coauthorLabels: [],
+            inCatalog: true,
+            tasks: [],
+          },
+          {
+            id: 's-soft',
+            authorUserId: 'a3',
+            authorDisplayName: 'Hidden',
+            coauthorLabels: [],
+            inCatalog: false,
+            tasks: [],
+          },
+        ],
+      };
+    });
   });
 
   afterEach(() => {
@@ -265,7 +298,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
     await flushPromises();
   }
 
-  it('SC-LOBBY-21: create requires map; capacity shown after map select; soft-unpublished maps omitted', async () => {
+  it('SC-LOBBY-21/29: create requires map; capacity in options only (no duplicate caption)', async () => {
     await openCreate();
     expect(mapsState.listMaps).toHaveBeenCalled();
     expect(wrapper!.find('[data-test-id="lobby-create-map"]').attributes('data-label')).toBe(
@@ -279,8 +312,26 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
 
     await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
     await flushPromises();
-    expect(wrapper!.find('[data-test-id="lobby-create-map-capacity"]').exists()).toBe(true);
-    expect(wrapper!.text()).toContain('lobby.mapCapacity');
+    // SC-LOBBY-29: no second capacity caption under closed map select.
+    expect(wrapper!.find('[data-test-id="lobby-create-map-capacity"]').exists()).toBe(false);
+  });
+
+  it('SC-LOBBY-28: seats picker 1…map.players; default min(2, players)', async () => {
+    await openCreate();
+    expect(wrapper!.find('[data-test-id="lobby-create-max-seats"]').exists()).toBe(false);
+
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+
+    const seats = wrapper!.find('[data-test-id="lobby-create-max-seats"]');
+    expect(seats.exists()).toBe(true);
+    expect(wrapper!.find('[data-test-id="seat-1"]').exists()).toBe(true);
+    expect(wrapper!.find('[data-test-id="seat-2"]').exists()).toBe(true);
+    expect(wrapper!.find('[data-test-id="seat-3"]').exists()).toBe(true);
+    expect(wrapper!.find('[data-test-id="seat-4"]').exists()).toBe(true);
+    expect((wrapper!.get('[data-test-id="seat-2"]').element as HTMLInputElement).checked).toBe(
+      true,
+    );
   });
 
   it('SC-LOBBY-23/24: multi-select published sets within one pack; row shows pack theme + author', async () => {
@@ -306,11 +357,40 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
     expect(confirm.attributes('disabled')).toBeFalsy();
   });
 
-  it('SC-LOBBY-22: confirm create sends mapId/packId/taskSetIds (no maxSeats picker)', async () => {
+  it('SC-LOBBY-30: single published set is pre-checked', async () => {
+    contentState.loadLivePack.mockImplementation((packId: string) => {
+      contentState.pack = { id: packId, title: 'Математика' };
+      contentState.liveContent = {
+        title: 'Математика',
+        taskSets: [
+          {
+            id: 's-only',
+            authorUserId: 'a1',
+            authorDisplayName: 'Иван',
+            coauthorLabels: [],
+            inCatalog: true,
+            tasks: [],
+          },
+        ],
+      };
+    });
     await openCreate();
-    expect(wrapper!.text()).not.toContain('lobby.maxSeats');
-
     await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
+    await flushPromises();
+
+    expect(
+      (wrapper!.get('[data-test-id="check-s-only"]').element as HTMLInputElement).checked,
+    ).toBe(true);
+    const confirm = wrapper!.get('[data-test-id="lobby-create-confirm"]');
+    expect(confirm.attributes('disabled')).toBeFalsy();
+  });
+
+  it('SC-LOBBY-22: confirm create sends mapId/packId/taskSetIds/maxSeats', async () => {
+    await openCreate();
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+    await wrapper!.get('[data-test-id="seat-3"]').setValue(true);
     await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
     await flushPromises();
     await wrapper!.get('[data-test-id="check-s1"]').setValue(true);
@@ -323,6 +403,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
       mapId: 'map-m',
       packId: 'pack-p',
       taskSetIds: ['s1'],
+      maxSeats: 3,
       grilleDensity: 'medium',
       catapultDensity: 'medium',
     });
@@ -342,7 +423,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
     expect(gameState.createGame).not.toHaveBeenCalled();
   });
 
-  it('SC-LOBBY-25/26: listing shows map preview, capacity, pack/set labels', async () => {
+  it('SC-LOBBY-25/26: listing shows map preview, room maxSeats capacity, pack/set labels', async () => {
     gameState.rooms = [
       {
         roomId: 'r1',
@@ -354,7 +435,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
           seats: 1,
           maxSeats: 2,
           mapGrid: '1'.repeat(100),
-          players: 2,
+          players: 4,
           touristsPerPlayer: 3,
           packTitle: 'Математика',
           taskSetLabels: [{ taskSetId: 's1', authorDisplayName: 'Мария' }],
@@ -366,6 +447,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…27)', () => {
 
     expect(wrapper.find('[data-test-id="lobby-room-r1"]').exists()).toBe(true);
     expect(wrapper.find('.map-grid-preview-stub').exists()).toBe(true);
+    // Capacity caption uses chosen maxSeats (2), not map players (4).
     expect(wrapper.find('[data-test-id="lobby-room-map-capacity"]').text()).toContain(
       'lobby.mapCapacityCaption',
     );
