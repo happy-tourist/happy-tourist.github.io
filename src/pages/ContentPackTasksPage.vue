@@ -148,7 +148,15 @@
         </q-card-section>
       </q-card>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.questionsList') }}</div>
+      <PackTasksCsvControls
+        :tasks="taskSet.tasks"
+        :answer-cards="local.answerCards"
+        :pack-title="local.title"
+        :set-number="taskSetNumber"
+        :read-only="readOnly"
+        :ready="Boolean(local && taskSet)"
+        @append="onTasksCsvAppend"
+      />
       <q-list bordered separator class="rounded-borders q-mb-lg">
         <q-item
           v-for="(task, ti) in taskSet.tasks"
@@ -307,6 +315,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
+import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -430,6 +439,13 @@ const taskSetHeading = computed(() => {
     n: idx + 1,
     name: ts.authorDisplayName || t('content.authorUser'),
   });
+});
+
+/** 1-based set index for CSV export filename (D9 / SC-PACK-213). */
+const taskSetNumber = computed(() => {
+  const sets = local.value?.taskSets ?? [];
+  const idx = sets.findIndex((ts) => ts.id === taskSetId.value);
+  return idx >= 0 ? idx + 1 : 1;
 });
 
 const locked = computed(() => Boolean(content.pack?.blocked) || !local.value?.answerCards.length);
@@ -616,6 +632,12 @@ async function onAddOrUpdateTask() {
     });
   }
   resetTaskForm();
+  await flushAutosave();
+}
+
+async function onTasksCsvAppend(tasks: ContentTask[]) {
+  if (!taskSet.value || readOnly.value || !tasks.length) return;
+  taskSet.value.tasks.push(...tasks);
   await flushAutosave();
 }
 

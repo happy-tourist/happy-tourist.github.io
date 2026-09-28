@@ -126,7 +126,15 @@
         </q-card-section>
       </q-card>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.questionsList') }}</div>
+      <PackTasksCsvControls
+        :tasks="taskSet?.tasks ?? []"
+        :answer-cards="liveCards"
+        :pack-title="content.pack?.title || ''"
+        :set-number="1"
+        :read-only="readOnly"
+        :ready="Boolean(local)"
+        @append="onTasksCsvAppend"
+      />
       <q-list bordered separator class="rounded-borders q-mb-lg">
         <q-item v-for="task in taskSet?.tasks ?? []" :key="task.id">
           <q-item-section>
@@ -273,6 +281,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
+import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -502,6 +511,12 @@ function onAddOrUpdateTask() {
     });
   }
   resetTaskForm();
+}
+
+function onTasksCsvAppend(tasks: ContentTask[]) {
+  if (readOnly.value || !tasks.length) return;
+  const set = ensureLocalSet();
+  set.tasks.push(...tasks);
 }
 
 function removeTask(taskId: string) {

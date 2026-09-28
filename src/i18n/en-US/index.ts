@@ -194,6 +194,20 @@ export default {
     deleteTaskSetConfirm:
       'Набор заданий будет удалён из черновика (и из live-заданий, если пак ещё не опубликован). Продолжить?',
     answerCards: 'Карточки-ответы',
+    /** SC-PACK-210…212: answers CSV on cards editor. */
+    exportAnswersCsv: 'Экспорт CSV',
+    importAnswersCsv: 'Импорт CSV',
+    csvImportFailed: 'Не удалось импортировать CSV — черновик не изменён.',
+    csvImportDisabled: 'Импорт недоступен — карточки только для чтения.',
+    csvAnswersHint: 'Разделитель «;», без кавычек. Импорт добавляет карточки в конец.',
+    /** SC-PACK-213…218: tasks CSV on add-task-set + tasks editor. */
+    exportTasksCsv: 'Экспорт CSV',
+    importTasksCsv: 'Импорт CSV',
+    csvTasksHint: 'Разделитель «;», без кавычек. Импорт добавляет задания в конец набора.',
+    csvTasksNeedAnswers: 'Сначала нужны карточки-ответы — без них импорт заданий недоступен.',
+    csvTasksImportDisabled: 'Импорт недоступен — задания только для чтения.',
+    csvTasksMissingAnswers:
+      'Импорт невозможен — в карточках нет ответов: {list}. Набор заданий не изменён.',
     taskSets: 'Наборы заданий',
     taskSetLabel: 'Набор заданий {n}',
     /** SC-PACK-135 / D18: author on every task-set row. */

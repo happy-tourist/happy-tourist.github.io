@@ -56,7 +56,46 @@
         </q-card-section>
       </q-card>
 
-      <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
+      <div class="row items-center justify-between q-mb-sm">
+        <div class="text-h6">{{ $t('content.answerCards') }}</div>
+        <div class="q-gutter-sm">
+          <q-btn
+            flat
+            dense
+            icon="download"
+            :label="$t('content.exportAnswersCsv')"
+            :disable="!local"
+            @click="onExportAnswersCsv"
+          />
+          <q-btn
+            flat
+            dense
+            icon="upload"
+            :label="$t('content.importAnswersCsv')"
+            :disable="cardsReadOnly"
+            @click="openAnswersCsvPicker"
+          >
+            <q-tooltip>
+              {{ cardsReadOnly ? $t('content.csvImportDisabled') : $t('content.csvAnswersHint') }}
+            </q-tooltip>
+          </q-btn>
+          <input
+            ref="answersCsvInput"
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            class="hidden"
+            style="display: none"
+            @change="onAnswersCsvSelected"
+          />
+        </div>
+      </div>
+
+      <q-banner v-if="csvImportError" dense rounded class="bg-negative text-white q-mb-md">
+        {{ csvImportError }}
+        <template #action>
+          <q-btn flat dense label="OK" @click="csvImportError = null" />
+        </template>
+      </q-banner>
 
       <q-card flat bordered class="q-mb-md">
         <q-card-section>
@@ -369,6 +408,12 @@ import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
+import {
+  downloadCsvText,
+  parseAnswers,
+  sanitizePackCsvFilename,
+  serializeAnswers,
+} from '@/lib/packContentCsv';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -403,6 +448,8 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingCardId = ref<string | null>(null);
 const cardForm = reactive({ content: '', description: '' });
+const answersCsvInput = ref<HTMLInputElement | null>(null);
+const csvImportError = ref<string | null>(null);
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
 const packDeleteConfirmOpen = ref(false);
@@ -620,6 +667,45 @@ function resetCardForm() {
   editingCardId.value = null;
   cardForm.content = '';
   cardForm.description = '';
+}
+
+function onExportAnswersCsv() {
+  if (!local.value) return;
+  const base = sanitizePackCsvFilename(local.value.title);
+  const csv = serializeAnswers(local.value.answerCards);
+  downloadCsvText(`${base}.csv`, csv);
+}
+
+function openAnswersCsvPicker() {
+  if (cardsReadOnly.value) return;
+  csvImportError.value = null;
+  answersCsvInput.value?.click();
+}
+
+async function onAnswersCsvSelected(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = '';
+  if (!file || !local.value || cardsReadOnly.value) return;
+
+  let rows;
+  try {
+    const text = await file.text();
+    rows = parseAnswers(text);
+  } catch {
+    csvImportError.value = t('content.csvImportFailed');
+    return;
+  }
+
+  for (const row of rows) {
+    local.value.answerCards.push({
+      id: newLocalId('card'),
+      content: row.content,
+      description: row.description,
+    });
+  }
+  csvImportError.value = null;
+  await flushAutosave();
 }
 
 function startEditCard(card: AnswerCard) {
