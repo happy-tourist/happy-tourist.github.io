@@ -92,17 +92,19 @@
 
     <template v-else-if="live">
       <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="card in live.answerCards" :key="card.id">
-          <q-item-section>
-            <q-item-label>{{ card.content }}</q-item-label>
-            <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!live.answerCards.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyCards') }}</q-item-section>
-        </q-item>
-      </q-list>
+      <div
+        v-if="live.answerCards.length"
+        class="pack-card-grid q-mb-lg"
+        data-testid="answer-card-grid"
+      >
+        <PackAnswerCardTile
+          v-for="card in live.answerCards"
+          :key="card.id"
+          :content="card.content"
+          :description="card.description"
+        />
+      </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyCards') }}</div>
 
       <!-- SC-PACK-117/D7: add-task-set beside «Задания» section, not header. -->
       <div class="row items-center justify-between q-mb-sm">
@@ -284,6 +286,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
+import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
 

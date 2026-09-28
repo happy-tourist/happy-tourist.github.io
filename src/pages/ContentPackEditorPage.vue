@@ -64,7 +64,8 @@
             dense
             icon="download"
             :label="$t('content.exportAnswersCsv')"
-            :disable="!local"
+            :disable="answersExportDisabled"
+            data-testid="export-answers-csv"
             @click="onExportAnswersCsv"
           />
           <q-btn
@@ -73,29 +74,23 @@
             icon="upload"
             :label="$t('content.importAnswersCsv')"
             :disable="cardsReadOnly"
-            @click="openAnswersCsvPicker"
+            data-testid="import-answers-csv"
+            @click="openAnswersCsvImport"
           >
             <q-tooltip>
               {{ cardsReadOnly ? $t('content.csvImportDisabled') : $t('content.csvAnswersHint') }}
             </q-tooltip>
           </q-btn>
-          <input
-            ref="answersCsvInput"
-            type="file"
-            accept=".csv,text/csv,text/plain"
-            class="hidden"
-            style="display: none"
-            @change="onAnswersCsvSelected"
-          />
         </div>
       </div>
 
-      <q-banner v-if="csvImportError" dense rounded class="bg-negative text-white q-mb-md">
-        {{ csvImportError }}
-        <template #action>
-          <q-btn flat dense label="OK" @click="csvImportError = null" />
-        </template>
-      </q-banner>
+      <PackCsvImportDialog
+        v-model="answersCsvImportOpen"
+        v-model:error="csvImportError"
+        :format-example="$t('content.csvAnswersFormatExample')"
+        :format-hint="$t('content.csvAnswersHint')"
+        @file="onAnswersCsvFile"
+      />
 
       <q-card flat bordered class="q-mb-md">
         <q-card-section>
@@ -134,38 +129,22 @@
         </q-card-section>
       </q-card>
 
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="card in local.answerCards" :key="card.id">
-          <q-item-section>
-            <q-item-label>{{ card.content || $t('content.untitled') }}</q-item-label>
-            <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <div class="q-gutter-xs">
-              <q-btn
-                flat
-                dense
-                icon="edit"
-                :aria-label="$t('content.editCard')"
-                :disable="cardsReadOnly"
-                @click="startEditCard(card)"
-              />
-              <q-btn
-                flat
-                dense
-                icon="delete"
-                color="negative"
-                :aria-label="$t('content.deleteCard')"
-                :disable="cardsReadOnly"
-                @click="confirmDeleteCard(card.id)"
-              />
-            </div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!local.answerCards.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyCards') }}</q-item-section>
-        </q-item>
-      </q-list>
+      <div
+        v-if="local.answerCards.length"
+        class="pack-card-grid q-mb-lg"
+        data-testid="answer-card-grid"
+      >
+        <PackAnswerCardTile
+          v-for="card in local.answerCards"
+          :key="card.id"
+          :content="card.content"
+          :description="card.description"
+          :editable="!cardsReadOnly"
+          @edit="startEditCard(card)"
+          @delete="confirmDeleteCard(card.id)"
+        />
+      </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyCards') }}</div>
 
       <div class="row items-center justify-between q-mb-sm">
         <div class="text-h6">{{ $t('content.taskSets') }}</div>
@@ -408,6 +387,8 @@ import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
+import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackCsvImportDialog from '@/components/PackCsvImportDialog.vue';
 import {
   downloadCsvText,
   parseAnswers,
@@ -448,7 +429,7 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingCardId = ref<string | null>(null);
 const cardForm = reactive({ content: '', description: '' });
-const answersCsvInput = ref<HTMLInputElement | null>(null);
+const answersCsvImportOpen = ref(false);
 const csvImportError = ref<string | null>(null);
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
@@ -561,6 +542,9 @@ const submitHint = computed(() => {
 /** Task-set author cannot edit answer cards (SC-PACK-159). */
 const cardsReadOnly = computed(() => readOnly.value || content.editorKind === 'task_set_author');
 
+/** SC-PACK-219: Export disabled when there are zero draft answer cards. */
+const answersExportDisabled = computed(() => !local.value || local.value.answerCards.length === 0);
+
 const canOpenTasks = computed(() => {
   if (readOnly.value || !local.value) return false;
   return local.value.answerCards.length > 0;
@@ -670,29 +654,32 @@ function resetCardForm() {
 }
 
 function onExportAnswersCsv() {
-  if (!local.value) return;
+  if (answersExportDisabled.value || !local.value) return;
   const base = sanitizePackCsvFilename(local.value.title);
   const csv = serializeAnswers(local.value.answerCards);
   downloadCsvText(`${base}.csv`, csv);
 }
 
-function openAnswersCsvPicker() {
+function openAnswersCsvImport() {
   if (cardsReadOnly.value) return;
   csvImportError.value = null;
-  answersCsvInput.value?.click();
+  answersCsvImportOpen.value = true;
 }
 
-async function onAnswersCsvSelected(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0] ?? null;
-  input.value = '';
-  if (!file || !local.value || cardsReadOnly.value) return;
+async function onAnswersCsvFile(file: File) {
+  if (!local.value || cardsReadOnly.value) return;
 
   let rows;
   try {
     const text = await file.text();
     rows = parseAnswers(text);
   } catch {
+    csvImportError.value = t('content.csvImportFailed');
+    return;
+  }
+
+  // D6′: empty file → in-modal error, draft unchanged, modal stays open.
+  if (rows.length === 0) {
     csvImportError.value = t('content.csvImportFailed');
     return;
   }
@@ -705,6 +692,7 @@ async function onAnswersCsvSelected(ev: Event) {
     });
   }
   csvImportError.value = null;
+  answersCsvImportOpen.value = false;
   await flushAutosave();
 }
 

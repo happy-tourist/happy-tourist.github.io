@@ -8,3 +8,10 @@
 .body--dark .text-muted {
   color: rgba(255, 255, 255, 0.7);
 }
+
+/* Playing-card wrap grid for pack answer/task tiles (SC-PACK-222…224). */
+.pack-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

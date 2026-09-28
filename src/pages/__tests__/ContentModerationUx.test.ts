@@ -249,6 +249,16 @@ const stubs = {
   'q-space': true,
   'q-dialog': { template: '<div><slot /></div>' },
   'q-icon': true,
+  PackAnswerCardTile: {
+    props: ['content', 'description', 'editable', 'selectable', 'selected', 'disabled'],
+    template: '<div class="pack-answer-tile-stub">{{ content }}</div>',
+  },
+  PackTaskTile: {
+    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    template:
+      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
+  },
+  PackTasksCsvControls: { template: '<div data-testid="tasks-csv-stub" />' },
 };
 
 describe('moderation UX follow-up (SC-PACK-126…128)', () => {
@@ -313,20 +323,20 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     expect(contentState.taskSetHasCascadeGap).toHaveBeenCalled();
   });
 
-  it('SC-PACK-127: staff hub question rows show answer slot chips', async () => {
+  it('SC-PACK-127/223: staff hub question rows show answer slots on task tiles', async () => {
     authState.isStaff = true;
     contentState.staffPreview = structuredClone(staffPreviewFixture);
 
     const wrapper = shallowMount(ContentStaffRequestPage, { global: { stubs } });
     await flushPromises();
 
-    const chips = wrapper.findAll('.q-chip-stub');
-    expect(chips.length).toBeGreaterThanOrEqual(2);
+    const tiles = wrapper.findAll('.pack-task-tile-stub');
+    expect(tiles.length).toBeGreaterThanOrEqual(1);
     expect(wrapper.text()).toContain('Alpha');
     expect(wrapper.text()).toContain('content.slotEmpty');
   });
 
-  it('SC-PACK-127: add-task-set question list shows answer slot chips', async () => {
+  it('SC-PACK-127/223: add-task-set question list shows answer slots on task tiles', async () => {
     contentState.addTaskSet = structuredClone(addTaskSetFixture);
 
     const wrapper = shallowMount(ContentPackAddTaskSetPage, { global: { stubs } });
@@ -335,8 +345,8 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     expect(wrapper.text()).toContain('New Q?');
     expect(wrapper.text()).toContain('Alpha');
     expect(wrapper.text()).toContain('content.slotEmpty');
-    const chips = wrapper.findAll('.q-chip-stub');
-    expect(chips.length).toBeGreaterThanOrEqual(2);
+    const tiles = wrapper.findAll('.pack-task-tile-stub');
+    expect(tiles.length).toBeGreaterThanOrEqual(1);
   });
 
   it('SC-PACK-128: add-task-set shows needs_revision status, thread, and reply', async () => {

@@ -22,12 +22,21 @@ const stubs = {
   'q-btn': {
     props: ['label', 'disable', 'icon'],
     template:
-      '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon">{{ label }}<slot /></button>',
+      '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon" @click="$emit(\'click\', $event)"><slot />{{ label }}</button>',
   },
   'q-tooltip': { template: '<span class="tooltip-stub"><slot /></span>' },
   'q-banner': {
-    template: '<div class="banner-stub"><slot /><slot name="action" /></div>',
+    template: '<div class="banner-stub" data-testid="csv-import-error"><slot /></div>',
   },
+  'q-dialog': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template:
+      '<div v-if="modelValue" class="dialog-stub" data-testid="csv-import-dialog"><slot /></div>',
+  },
+  'q-card': { template: '<div><slot /></div>' },
+  'q-card-section': { template: '<div><slot /></div>' },
+  'q-card-actions': { template: '<div><slot /></div>' },
 };
 
 function mountControls(
@@ -50,11 +59,40 @@ function mountControls(
       ready: true,
       ...props,
     },
-    global: { stubs },
+    global: {
+      stubs: {
+        ...stubs,
+        PackCsvImportDialog: false,
+      },
+    },
   });
 }
 
-describe('PackTasksCsvControls (SC-PACK-213…218)', () => {
+async function openImportAndPickFile(
+  wrapper: ReturnType<typeof mountControls>,
+  file: File | { text: () => Promise<string> },
+) {
+  const importBtn = wrapper
+    .findAll('button')
+    .find((b) => b.attributes('data-label') === 'content.importTasksCsv');
+  expect(importBtn).toBeTruthy();
+  await importBtn!.trigger('click');
+  await flushPromises();
+
+  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+  expect(wrapper.text()).toContain('content.csvTasksFormatExample');
+
+  const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
+  expect(fileInput.exists()).toBe(true);
+  Object.defineProperty(fileInput.element, 'files', {
+    value: [file],
+    configurable: true,
+  });
+  await fileInput.trigger('change');
+  await flushPromises();
+}
+
+describe('PackTasksCsvControls (SC-PACK-213…221)', () => {
   let createObjectURL: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -86,7 +124,6 @@ describe('PackTasksCsvControls (SC-PACK-213…218)', () => {
     expect(text).toBe('Capital?;2;Paris');
 
     clickSpy.mockRestore();
-    // Re-run to inspect download name via createElement spy
     const createSpy = vi.spyOn(document, 'createElement');
     await exportBtn!.trigger('click');
     const anchorCalls = createSpy.mock.results
@@ -97,18 +134,33 @@ describe('PackTasksCsvControls (SC-PACK-213…218)', () => {
     createSpy.mockRestore();
   });
 
+  it('SC-PACK-220: export disabled when current set has zero tasks', () => {
+    const wrapper = mountControls({ tasks: [] });
+    const exportBtn = wrapper
+      .findAll('button')
+      .find((b) => b.attributes('data-label') === 'content.exportTasksCsv');
+    expect(exportBtn).toBeTruthy();
+    expect(exportBtn!.attributes('disabled')).toBeDefined();
+  });
+
+  it('SC-PACK-221: Import opens format modal before file pick', async () => {
+    const wrapper = mountControls();
+    const importBtn = wrapper
+      .findAll('button')
+      .find((b) => b.attributes('data-label') === 'content.importTasksCsv');
+    await importBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvTasksFormatExample');
+    expect(wrapper.find('[data-testid="csv-import-choose-file"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-import-file-input"]').exists()).toBe(true);
+  });
+
   it('SC-PACK-214: import appends tasks with resolved slots and difficulty default 1', async () => {
     const wrapper = mountControls();
-    const fileInput = wrapper.find('input[type="file"]');
-    expect(fileInput.exists()).toBe(true);
-
     const file = new File(['Q1;;Paris\nQ2;9;Rome'], 'tasks.csv', { type: 'text/csv' });
-    Object.defineProperty(fileInput.element, 'files', {
-      value: [file],
-      configurable: true,
-    });
-    await fileInput.trigger('change');
-    await flushPromises();
+    await openImportAndPickFile(wrapper, file);
 
     const appendEvents = wrapper.emitted('append');
     expect(appendEvents).toBeTruthy();
@@ -126,23 +178,30 @@ describe('PackTasksCsvControls (SC-PACK-213…218)', () => {
       slots: [{ answerCardId: 'c2' }],
     });
     expect(appended[0]!.id).not.toBe('t1');
-    expect(wrapper.find('.banner-stub').exists()).toBe(false);
+    // Success closes modal (D6′)
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-215/218: missing slot texts reject whole file and emit nothing', async () => {
+  it('SC-PACK-215/218: missing slot texts keep modal error and emit nothing', async () => {
     const wrapper = mountControls();
-    const fileInput = wrapper.find('input[type="file"]');
-
     const file = new File(['Q1;1;Berlin\nQ2;2;Paris'], 'tasks.csv', { type: 'text/csv' });
-    Object.defineProperty(fileInput.element, 'files', {
-      value: [file],
-      configurable: true,
-    });
-    await fileInput.trigger('change');
-    await flushPromises();
+    await openImportAndPickFile(wrapper, file);
 
     expect(wrapper.emitted('append')).toBeUndefined();
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvTasksMissingAnswers');
+  });
+
+  it('D6′: empty CSV keeps modal error and emit nothing', async () => {
+    const wrapper = mountControls();
+    const file = new File(['\n'], 'empty.csv', { type: 'text/csv' });
+    await openImportAndPickFile(wrapper, file);
+
+    expect(wrapper.emitted('append')).toBeUndefined();
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvImportFailed');
   });
 
   it('SC-PACK-216: import disabled when answer context is empty', () => {

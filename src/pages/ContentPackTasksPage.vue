@@ -110,18 +110,17 @@
               </q-chip>
             </div>
             <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
-            <div class="row q-gutter-sm q-mb-md">
-              <q-chip
+            <div class="pack-card-grid q-mb-md" data-testid="slot-picker-grid">
+              <PackAnswerCardTile
                 v-for="card in local.answerCards"
                 :key="card.id"
-                clickable
-                outline
-                color="secondary"
-                :disable="readOnly || !card.content.trim()"
-                @click="fillNextFormSlot(card.id)"
-              >
-                {{ card.content.trim() || $t('content.untitled') }}
-              </q-chip>
+                :content="card.content"
+                :description="card.description"
+                selectable
+                :disabled="readOnly || !card.content.trim()"
+                :selected="taskForm.slots.some((s) => s.answerCardId === card.id)"
+                @select="fillNextFormSlot(card.id)"
+              />
             </div>
             <div class="row q-gutter-sm">
               <q-btn
@@ -157,66 +156,21 @@
         :ready="Boolean(local && taskSet)"
         @append="onTasksCsvAppend"
       />
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item
+      <div v-if="taskSet.tasks.length" class="pack-card-grid q-mb-lg" data-testid="task-card-grid">
+        <PackTaskTile
           v-for="(task, ti) in taskSet.tasks"
           :key="task.id"
-          :class="{ 'cascade-gap-outline': content.taskHasCascadeGap(task.id) }"
-        >
-          <q-item-section>
-            <q-item-label>{{ task.question || $t('content.taskN', { n: ti + 1 }) }}</q-item-label>
-            <q-item-label caption>
-              {{ $t('content.difficultyLabel') }}:
-              {{ $t(`content.difficulty.${task.difficulty}`) }}
-            </q-item-label>
-            <!-- SC-PACK-84 / D47: explicit answer slots on each task row -->
-            <div class="row q-gutter-xs q-mt-xs">
-              <q-chip
-                v-for="slot in task.slots"
-                :key="slot.id"
-                dense
-                :outline="!slot.answerCardId"
-                :color="
-                  slot.answerCardId
-                    ? 'primary'
-                    : content.taskHasCascadeGap(task.id)
-                      ? 'warning'
-                      : 'grey'
-                "
-              >
-                {{ slotLabel(slot) }}
-              </q-chip>
-              <span v-if="!task.slots.length" class="text-caption text-muted">
-                {{ $t('content.slotEmpty') }}
-              </span>
-            </div>
-          </q-item-section>
-          <q-item-section side v-if="!viewOnly">
-            <div class="q-gutter-xs">
-              <q-btn
-                flat
-                dense
-                icon="edit"
-                :aria-label="$t('content.editTask')"
-                :disable="readOnly"
-                @click="startEditTask(task)"
-              />
-              <q-btn
-                flat
-                dense
-                icon="delete"
-                color="negative"
-                :aria-label="$t('content.deleteTask')"
-                :disable="readOnly"
-                @click="confirmDeleteTask(task.id)"
-              />
-            </div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!taskSet.tasks.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyTasks') }}</q-item-section>
-        </q-item>
-      </q-list>
+          :question="task.question"
+          :difficulty="task.difficulty"
+          :slot-labels="taskSlotLabels(task)"
+          :editable="!viewOnly && !readOnly"
+          :cascade-gap="content.taskHasCascadeGap(task.id)"
+          :fallback-question="$t('content.taskN', { n: ti + 1 })"
+          @edit="startEditTask(task)"
+          @delete="confirmDeleteTask(task.id)"
+        />
+      </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyTasks') }}</div>
 
       <div class="row q-gutter-sm">
         <q-btn
@@ -315,6 +269,8 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
+import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -605,6 +561,10 @@ function slotLabel(slot: TaskSlot) {
     if (text) return text;
   }
   return t('content.slotFilled');
+}
+
+function taskSlotLabels(task: ContentTask): string[] {
+  return task.slots.map((slot) => slotLabel(slot));
 }
 
 async function onAddOrUpdateTask() {

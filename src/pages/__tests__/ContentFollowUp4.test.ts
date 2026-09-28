@@ -217,6 +217,14 @@ const stubs = {
   'q-space': true,
   'q-tooltip': { template: '<span><slot /></span>' },
   'q-icon': true,
+  PackAnswerCardTile: {
+    props: ['content', 'description', 'editable', 'selectable', 'selected', 'disabled'],
+    template: '<div class="pack-answer-tile-stub">{{ content }}</div>',
+  },
+  PackTaskTile: {
+    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    template: '<div class="pack-task-tile-stub">{{ question }}</div>',
+  },
 };
 
 describe('follow-up 4 UI (SC-PACK-129…133)', () => {
@@ -526,14 +534,14 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     ).toBe(true);
   });
 
-  it('SC-PACK-133: AddTaskSet answer tiles are q-chip, not rectangular q-btn', async () => {
+  it('SC-PACK-133/222: AddTaskSet answer tiles use playing-card chrome (not rectangular q-btn)', async () => {
     authState.user = { id: 'u1', anonymous: false };
     const wrapper = shallowMount(ContentPackAddTaskSetPage, { global: { stubs } });
     await flushPromises();
 
-    const chips = wrapper.findAll('.q-chip-stub');
-    expect(chips.some((c) => c.text().includes('A'))).toBe(true);
-    expect(chips.some((c) => c.text().includes('B'))).toBe(true);
+    const tiles = wrapper.findAll('.pack-answer-tile-stub');
+    expect(tiles.some((c) => c.text().includes('A'))).toBe(true);
+    expect(tiles.some((c) => c.text().includes('B'))).toBe(true);
     const tileBtns = wrapper.findAll('button').filter((b) => b.text() === 'A' || b.text() === 'B');
     expect(tileBtns.length).toBe(0);
   });

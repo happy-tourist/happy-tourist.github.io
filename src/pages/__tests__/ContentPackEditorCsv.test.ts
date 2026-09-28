@@ -103,11 +103,12 @@ const stubs = {
   'q-btn': {
     props: ['label', 'disable', 'icon'],
     template:
-      '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon">{{ label }}<slot /></button>',
+      '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon" @click="$emit(\'click\', $event)"><slot />{{ label }}</button>',
   },
   'q-tooltip': { template: '<span class="tooltip-stub"><slot /></span>' },
   'q-banner': {
-    template: '<div class="banner-stub"><slot /><slot name="action" /></div>',
+    template:
+      '<div class="banner-stub" data-testid="csv-import-error"><slot /><slot name="action" /></div>',
   },
   'q-badge': true,
   'q-card': { template: '<div><slot /></div>' },
@@ -121,10 +122,50 @@ const stubs = {
       '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   'q-space': true,
-  'q-dialog': { template: '<div><slot /></div>' },
+  'q-dialog': {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template:
+      '<div v-if="modelValue" class="dialog-stub" data-testid="csv-import-dialog"><slot /></div>',
+  },
 };
 
-describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
+function mountEditor() {
+  return shallowMount(ContentPackEditorPage, {
+    global: {
+      stubs: {
+        ...stubs,
+        PackCsvImportDialog: false,
+      },
+    },
+  });
+}
+
+async function openImportAndPickFile(
+  wrapper: ReturnType<typeof mountEditor>,
+  file: File | { text: () => Promise<string> },
+) {
+  const importBtn = wrapper
+    .findAll('button')
+    .find((b) => b.attributes('data-label') === 'content.importAnswersCsv');
+  expect(importBtn).toBeTruthy();
+  await importBtn!.trigger('click');
+  await flushPromises();
+
+  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+  expect(wrapper.text()).toContain('content.csvAnswersFormatExample');
+
+  const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
+  expect(fileInput.exists()).toBe(true);
+  Object.defineProperty(fileInput.element, 'files', {
+    value: [file],
+    configurable: true,
+  });
+  await fileInput.trigger('change');
+  await flushPromises();
+}
+
+describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () => {
   let createObjectURL: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -164,7 +205,7 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
 
   it('SC-PACK-210: shows export control and downloads CSV named from pack title', async () => {
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-    const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
+    const wrapper = mountEditor();
     await flushPromises();
 
     const exportBtn = wrapper
@@ -181,20 +222,46 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
     clickSpy.mockRestore();
   });
 
-  it('SC-PACK-211: import appends parsed cards with new ids', async () => {
-    const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
+  it('SC-PACK-219: export disabled when there are zero draft answer cards', async () => {
+    const emptyDraft = structuredClone(draftBody);
+    emptyDraft.answerCards = [];
+    contentState.draft = emptyDraft;
+    loadDraft.mockResolvedValue({
+      pack: contentState.pack,
+      draft: structuredClone(emptyDraft),
+    });
+
+    const wrapper = mountEditor();
     await flushPromises();
 
-    const fileInput = wrapper.find('input[type="file"]');
-    expect(fileInput.exists()).toBe(true);
+    const exportBtn = wrapper
+      .findAll('button')
+      .find((b) => b.attributes('data-label') === 'content.exportAnswersCsv');
+    expect(exportBtn).toBeTruthy();
+    expect(exportBtn!.attributes('disabled')).toBeDefined();
+  });
+
+  it('SC-PACK-221: Import opens format modal before file pick', async () => {
+    const wrapper = mountEditor();
+    await flushPromises();
+
+    const importBtn = wrapper
+      .findAll('button')
+      .find((b) => b.attributes('data-label') === 'content.importAnswersCsv');
+    await importBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvAnswersFormatExample');
+    expect(wrapper.find('[data-testid="csv-import-choose-file"]').exists()).toBe(true);
+  });
+
+  it('SC-PACK-211: import appends parsed cards with new ids', async () => {
+    const wrapper = mountEditor();
+    await flushPromises();
 
     const file = new File(['Berlin;City\nMadrid'], 'answers.csv', { type: 'text/csv' });
-    Object.defineProperty(fileInput.element, 'files', {
-      value: [file],
-      configurable: true,
-    });
-    await fileInput.trigger('change');
-    await flushPromises();
+    await openImportAndPickFile(wrapper, file);
 
     expect(saveDraft).toHaveBeenCalled();
     const saved = saveDraft.mock.calls[0]![1] as PackContent;
@@ -205,6 +272,7 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
     expect(saved.answerCards[3]).toMatchObject({ content: 'Madrid', description: '' });
     expect(saved.answerCards[2]!.id).not.toBe('c1');
     expect(saved.answerCards[2]!.id).not.toBe('c2');
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
   });
 
   it('SC-PACK-212: import disabled when cardsReadOnly (task_set_author)', async () => {
@@ -218,7 +286,7 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
       draft: structuredClone(draftBody),
     });
 
-    const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
+    const wrapper = mountEditor();
     await flushPromises();
 
     const importBtn = wrapper
@@ -228,21 +296,30 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212)', () => {
     expect(importBtn!.attributes('disabled')).toBeDefined();
   });
 
-  it('SC-PACK-218-ish: failed file read shows error and does not append', async () => {
-    const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
+  it('SC-PACK-218-ish: failed file read shows in-modal error and does not append', async () => {
+    const wrapper = mountEditor();
     await flushPromises();
 
-    const fileInput = wrapper.find('input[type="file"]');
     const badFile = {
       text: () => Promise.reject(new Error('unreadable')),
     } as unknown as File;
-    Object.defineProperty(fileInput.element, 'files', {
-      value: [badFile],
-      configurable: true,
-    });
-    await fileInput.trigger('change');
+    await openImportAndPickFile(wrapper, badFile);
+
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvImportFailed');
+    expect(saveDraft).not.toHaveBeenCalled();
+  });
+
+  it('D6′: empty CSV keeps modal error and does not append', async () => {
+    const wrapper = mountEditor();
     await flushPromises();
 
+    const file = new File(['\n\n'], 'empty.csv', { type: 'text/csv' });
+    await openImportAndPickFile(wrapper, file);
+
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvImportFailed');
     expect(saveDraft).not.toHaveBeenCalled();
   });

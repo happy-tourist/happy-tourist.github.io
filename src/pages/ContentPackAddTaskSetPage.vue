@@ -35,12 +35,19 @@
     <template v-else-if="local">
       <!-- SC-PACK-107: no editable lists of existing cards/sets — only new set. -->
       <div class="text-caption text-muted q-mb-md">{{ $t('content.addTaskSetLiveCardsHint') }}</div>
-      <div class="row q-gutter-xs q-mb-lg">
-        <q-chip v-for="card in liveCards" :key="card.id" dense outline color="primary">
-          {{ card.content }}
-        </q-chip>
-        <span v-if="!liveCards.length" class="text-muted">{{ $t('content.emptyCards') }}</span>
+      <div
+        v-if="liveCards.length"
+        class="pack-card-grid q-mb-lg"
+        data-testid="live-answer-card-grid"
+      >
+        <PackAnswerCardTile
+          v-for="card in liveCards"
+          :key="card.id"
+          :content="card.content"
+          :description="card.description"
+        />
       </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyCards') }}</div>
 
       <q-card flat bordered class="q-mb-md">
         <q-card-section>
@@ -88,18 +95,17 @@
               </q-chip>
             </div>
             <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
-            <div class="row q-gutter-sm q-mb-md">
-              <q-chip
+            <div class="pack-card-grid q-mb-md" data-testid="slot-picker-grid">
+              <PackAnswerCardTile
                 v-for="card in liveCards"
                 :key="card.id"
-                clickable
-                outline
-                color="secondary"
-                :disable="readOnly || !card.content.trim()"
-                @click="fillNextFormSlot(card.id)"
-              >
-                {{ card.content.trim() || $t('content.untitled') }}
-              </q-chip>
+                :content="card.content"
+                :description="card.description"
+                selectable
+                :disabled="readOnly || !card.content.trim()"
+                :selected="taskForm.slots.some((s) => s.answerCardId === card.id)"
+                @select="fillNextFormSlot(card.id)"
+              />
             </div>
             <div class="row q-gutter-sm">
               <q-btn
@@ -135,56 +141,23 @@
         :ready="Boolean(local)"
         @append="onTasksCsvAppend"
       />
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item v-for="task in taskSet?.tasks ?? []" :key="task.id">
-          <q-item-section>
-            <q-item-label>{{ task.question }}</q-item-label>
-            <q-item-label caption>
-              {{ $t('content.difficultyLabel') }}:
-              {{ $t(`content.difficulty.${task.difficulty}`) }}
-            </q-item-label>
-            <!-- SC-PACK-127 / D11: answer slots on every question row -->
-            <div class="row q-gutter-xs q-mt-xs">
-              <q-chip
-                v-for="slot in task.slots"
-                :key="slot.id"
-                dense
-                :outline="!slot.answerCardId"
-                :color="slot.answerCardId ? 'primary' : 'grey'"
-              >
-                {{ slotLabel(slot) }}
-              </q-chip>
-              <span v-if="!task.slots.length" class="text-caption text-muted">
-                {{ $t('content.slotEmpty') }}
-              </span>
-            </div>
-          </q-item-section>
-          <q-item-section side>
-            <div class="q-gutter-xs">
-              <q-btn
-                flat
-                dense
-                icon="edit"
-                :aria-label="$t('content.editTask')"
-                :disable="readOnly"
-                @click="startEditTask(task)"
-              />
-              <q-btn
-                flat
-                dense
-                icon="delete"
-                color="negative"
-                :aria-label="$t('content.deleteTask')"
-                :disable="readOnly"
-                @click="removeTask(task.id)"
-              />
-            </div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!taskSet?.tasks.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyTasks') }}</q-item-section>
-        </q-item>
-      </q-list>
+      <div
+        v-if="(taskSet?.tasks ?? []).length"
+        class="pack-card-grid q-mb-lg"
+        data-testid="task-card-grid"
+      >
+        <PackTaskTile
+          v-for="task in taskSet?.tasks ?? []"
+          :key="task.id"
+          :question="task.question"
+          :difficulty="task.difficulty"
+          :slot-labels="taskSlotLabels(task)"
+          :editable="!readOnly"
+          @edit="startEditTask(task)"
+          @delete="removeTask(task.id)"
+        />
+      </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyTasks') }}</div>
 
       <div class="row q-gutter-sm">
         <q-btn
@@ -281,6 +254,8 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
+import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
@@ -477,6 +452,10 @@ function slotLabel(slot: TaskSlot) {
     if (text) return text;
   }
   return t('content.slotFilled');
+}
+
+function taskSlotLabels(task: ContentTask): string[] {
+  return task.slots.map((slot) => slotLabel(slot));
 }
 
 function messageAuthorLabel(msg: ModerationMessage) {

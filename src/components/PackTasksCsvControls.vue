@@ -8,7 +8,8 @@
           dense
           icon="download"
           :label="$t('content.exportTasksCsv')"
-          :disable="!ready"
+          :disable="exportDisabled"
+          data-testid="export-tasks-csv"
           @click="onExport"
         />
         <q-btn
@@ -17,27 +18,21 @@
           icon="upload"
           :label="$t('content.importTasksCsv')"
           :disable="importDisabled"
-          @click="openPicker"
+          data-testid="import-tasks-csv"
+          @click="openImportModal"
         >
           <q-tooltip>{{ importTooltip }}</q-tooltip>
         </q-btn>
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".csv,text/csv,text/plain"
-          class="hidden"
-          style="display: none"
-          @change="onFileSelected"
-        />
       </div>
     </div>
 
-    <q-banner v-if="importError" dense rounded class="bg-negative text-white q-mb-md">
-      {{ importError }}
-      <template #action>
-        <q-btn flat dense label="OK" @click="importError = null" />
-      </template>
-    </q-banner>
+    <PackCsvImportDialog
+      v-model="importOpen"
+      v-model:error="importError"
+      :format-example="$t('content.csvTasksFormatExample')"
+      :format-hint="$t('content.csvTasksHint')"
+      @file="onImportFile"
+    />
   </div>
 </template>
 
@@ -45,6 +40,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import PackCsvImportDialog from '@/components/PackCsvImportDialog.vue';
 import {
   collectMissingSlotTexts,
   downloadCsvText,
@@ -74,7 +70,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const fileInput = ref<HTMLInputElement | null>(null);
+const importOpen = ref(false);
 const importError = ref<string | null>(null);
 
 const ready = computed(() => props.ready !== false);
@@ -83,6 +79,9 @@ const noAnswerContext = computed(() => props.answerCards.length === 0);
 
 const importDisabled = computed(() => !ready.value || props.readOnly || noAnswerContext.value);
 
+/** SC-PACK-220: Export disabled when current set has zero tasks. */
+const exportDisabled = computed(() => !ready.value || props.tasks.length === 0);
+
 const importTooltip = computed(() => {
   if (noAnswerContext.value) return t('content.csvTasksNeedAnswers');
   if (props.readOnly) return t('content.csvTasksImportDisabled');
@@ -90,30 +89,33 @@ const importTooltip = computed(() => {
 });
 
 function onExport() {
-  if (!ready.value) return;
+  if (exportDisabled.value) return;
   const base = sanitizePackCsvFilename(props.packTitle);
   const n = props.setNumber > 0 ? props.setNumber : 1;
   const csv = serializeTasks(props.tasks, props.answerCards);
   downloadCsvText(`${base}-tasks-${n}.csv`, csv);
 }
 
-function openPicker() {
+function openImportModal() {
   if (importDisabled.value) return;
   importError.value = null;
-  fileInput.value?.click();
+  importOpen.value = true;
 }
 
-async function onFileSelected(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0] ?? null;
-  input.value = '';
-  if (!file || importDisabled.value) return;
+async function onImportFile(file: File) {
+  if (importDisabled.value) return;
 
   let rows;
   try {
     const text = await file.text();
     rows = parseTasks(text);
   } catch {
+    importError.value = t('content.csvImportFailed');
+    return;
+  }
+
+  // D6′: empty file → in-modal error, draft unchanged, modal stays open.
+  if (rows.length === 0) {
     importError.value = t('content.csvImportFailed');
     return;
   }
@@ -148,5 +150,6 @@ async function onFileSelected(ev: Event) {
 
   importError.value = null;
   emit('append', appended);
+  importOpen.value = false;
 }
 </script>

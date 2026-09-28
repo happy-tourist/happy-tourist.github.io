@@ -154,17 +154,19 @@
 
       <template v-if="isPackRequest">
         <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
-        <q-list bordered separator class="rounded-borders q-mb-lg">
-          <q-item v-for="card in packContent.answerCards" :key="card.id">
-            <q-item-section>
-              <q-item-label>{{ card.content }}</q-item-label>
-              <q-item-label v-if="card.description" caption>{{ card.description }}</q-item-label>
-            </q-item-section>
-          </q-item>
-          <q-item v-if="!packContent.answerCards.length">
-            <q-item-section class="text-muted">{{ $t('content.emptyCards') }}</q-item-section>
-          </q-item>
-        </q-list>
+        <div
+          v-if="packContent.answerCards.length"
+          class="pack-card-grid q-mb-lg"
+          data-testid="answer-card-grid"
+        >
+          <PackAnswerCardTile
+            v-for="card in packContent.answerCards"
+            :key="card.id"
+            :content="card.content"
+            :description="card.description"
+          />
+        </div>
+        <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyCards') }}</div>
       </template>
 
       <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
@@ -180,31 +182,15 @@
             {{ ts.coauthorLabels.join(', ') }}
           </span>
         </div>
-        <q-list bordered separator class="rounded-borders">
-          <q-item v-for="task in ts.tasks" :key="task.id">
-            <q-item-section>
-              <q-item-label>{{ task.question }}</q-item-label>
-              <q-item-label caption>
-                {{ $t('content.difficultyLabel') }}:
-                {{ $t(`content.difficulty.${task.difficulty}`) }}
-              </q-item-label>
-              <div class="row q-gutter-xs q-mt-xs">
-                <q-chip
-                  v-for="slot in task.slots"
-                  :key="slot.id"
-                  dense
-                  :outline="!slot.answerCardId"
-                  :color="slot.answerCardId ? 'primary' : 'grey'"
-                >
-                  {{ slotLabel(slot) }}
-                </q-chip>
-                <span v-if="!task.slots.length" class="text-caption text-muted">
-                  {{ $t('content.slotEmpty') }}
-                </span>
-              </div>
-            </q-item-section>
-          </q-item>
-        </q-list>
+        <div v-if="ts.tasks.length" class="pack-card-grid" data-testid="task-card-grid">
+          <PackTaskTile
+            v-for="task in ts.tasks"
+            :key="task.id"
+            :question="task.question"
+            :difficulty="task.difficulty"
+            :slot-labels="taskSlotLabels(task)"
+          />
+        </div>
       </div>
       <div v-if="!packContent.taskSets.length" class="text-muted q-mb-lg">
         {{ $t('content.emptyTaskSets') }}
@@ -339,11 +325,14 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import MapGridPreview from '@/components/MapGridPreview.vue';
+import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackTaskTile from '@/components/PackTaskTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
   moderationTakeHeldBy,
   useContentStore,
+  type ContentTask,
   type MapStaffContent,
   type PackContent,
   type TaskSlot,
@@ -458,6 +447,10 @@ function slotLabel(slot: TaskSlot) {
     if (text) return text;
   }
   return t('content.slotFilled');
+}
+
+function taskSlotLabels(task: ContentTask): string[] {
+  return task.slots.map((slot) => slotLabel(slot));
 }
 
 function formatDate(value: string | Date) {

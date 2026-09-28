@@ -255,6 +255,15 @@ const stubs = {
     template: '<input :aria-label="label" :value="modelValue" />',
   },
   'q-select': { template: '<select />' },
+  PackAnswerCardTile: {
+    props: ['content', 'description', 'editable', 'selectable', 'selected', 'disabled'],
+    template: '<div class="pack-answer-tile-stub">{{ content }} {{ description }}</div>',
+  },
+  PackTaskTile: {
+    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    template:
+      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
+  },
 };
 
 describe('content follow-up 5 (SC-PACK-134…136)', () => {
