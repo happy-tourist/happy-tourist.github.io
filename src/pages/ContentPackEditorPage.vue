@@ -56,41 +56,62 @@
         </q-card-section>
       </q-card>
 
-      <div class="row items-center justify-between q-mb-sm">
-        <div class="text-h6">{{ $t('content.answerCards') }}</div>
-        <div class="q-gutter-sm">
-          <q-btn
-            flat
-            dense
-            icon="download"
-            :label="$t('content.exportAnswersCsv')"
-            :disable="answersExportDisabled"
-            data-testid="export-answers-csv"
-            @click="onExportAnswersCsv"
-          />
-          <q-btn
-            flat
-            dense
-            icon="upload"
-            :label="$t('content.importAnswersCsv')"
-            :disable="cardsReadOnly"
-            data-testid="import-answers-csv"
-            @click="openAnswersCsvImport"
-          >
-            <q-tooltip>
-              {{ cardsReadOnly ? $t('content.csvImportDisabled') : $t('content.csvAnswersHint') }}
-            </q-tooltip>
-          </q-btn>
-        </div>
-      </div>
+      <div class="text-h6 q-mb-sm">{{ $t('content.answerCards') }}</div>
 
-      <PackCsvImportDialog
-        v-model="answersCsvImportOpen"
-        v-model:error="csvImportError"
-        :format-example="$t('content.csvAnswersFormatExample')"
-        :format-hint="$t('content.csvAnswersHint')"
-        @file="onAnswersCsvFile"
-      />
+      <q-card flat bordered class="q-mb-md" data-testid="csv-controls-frame">
+        <q-card-section class="q-pa-sm">
+          <div class="row q-gutter-sm items-center">
+            <q-btn
+              flat
+              dense
+              icon="download"
+              :label="$t('content.exportAnswersCsv')"
+              :disable="answersExportDisabled"
+              data-testid="export-answers-csv"
+              @click="onExportAnswersCsv"
+            />
+            <q-btn
+              flat
+              dense
+              icon="upload"
+              :label="$t('content.importAnswersCsv')"
+              :disable="cardsReadOnly"
+              data-testid="import-answers-csv"
+              @click="triggerAnswersCsvPicker"
+            />
+            <input
+              ref="answersCsvFileInput"
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              class="hidden"
+              style="display: none"
+              data-testid="csv-import-file-input"
+              @change="onAnswersCsvFileSelected"
+            />
+          </div>
+
+          <div class="q-mt-sm text-caption">
+            <div class="text-muted">{{ $t('content.csvImportFormatLabel') }}</div>
+            <code class="csv-format-example block q-mt-xs">{{
+              $t('content.csvAnswersFormatExample')
+            }}</code>
+            <div class="q-mt-xs">{{ $t('content.csvAnswersHint') }}</div>
+            <div v-if="cardsReadOnly" class="q-mt-xs text-warning">
+              {{ $t('content.csvImportDisabled') }}
+            </div>
+          </div>
+
+          <q-banner
+            v-if="csvImportError"
+            dense
+            rounded
+            class="bg-negative text-white q-mt-sm"
+            data-testid="csv-import-error"
+          >
+            {{ csvImportError }}
+          </q-banner>
+        </q-card-section>
+      </q-card>
 
       <q-card flat bordered class="q-mb-md">
         <q-card-section>
@@ -160,7 +181,7 @@
           <q-tooltip v-if="!canOpenTasks">{{ $t('content.tasksNeedCards') }}</q-tooltip>
         </q-btn>
       </div>
-      <!-- SC-PACK-229 / D13: 100×200 task-set cards; soft-unpublish preserved -->
+      <!-- SC-PACK-229 / D13′: 150×200 task-set cards; actions bottom text; soft-unpublish preserved -->
       <div
         v-if="local.taskSets.length"
         class="pack-card-grid q-mb-lg"
@@ -186,30 +207,28 @@
               {{ $t('content.unpublishedByStaff') }}
             </q-badge>
           </template>
-          <template #trailing>
-            <q-btn
-              v-if="canOpenTasks && canEnterEditorSet(ts)"
-              flat
-              dense
-              round
-              size="sm"
-              icon="edit"
-              :aria-label="$t('content.edit')"
-              :data-test-id="`editor-task-set-edit-${ts.id}`"
-              :disable="!canOpenTasks"
-              @click.stop="openTaskSet(ts.id)"
-            />
-          </template>
           <template #caption>
             {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
             <span v-if="ts.coauthorLabels?.length"> · {{ ts.coauthorLabels.join(', ') }}</span>
           </template>
           <template #actions>
             <q-btn
+              v-if="canOpenTasks && canEnterEditorSet(ts)"
+              flat
+              dense
+              no-caps
+              class="full-width"
+              :label="$t('content.edit')"
+              :data-test-id="`editor-task-set-edit-${ts.id}`"
+              :disable="!canOpenTasks"
+              @click.stop="openTaskSet(ts.id)"
+            />
+            <q-btn
               v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="primary"
               :label="$t('content.republish')"
               :loading="content.loading"
@@ -221,7 +240,8 @@
               "
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="warning"
               :label="$t('content.unpublish')"
               :loading="content.loading"
@@ -233,7 +253,8 @@
               "
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="warning"
               :label="$t('content.unpublish')"
               disable
@@ -395,7 +416,6 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
-import PackCsvImportDialog from '@/components/PackCsvImportDialog.vue';
 import PackListCardTile from '@/components/PackListCardTile.vue';
 import {
   downloadCsvText,
@@ -437,7 +457,7 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingCardId = ref<string | null>(null);
 const cardForm = reactive({ content: '', description: '' });
-const answersCsvImportOpen = ref(false);
+const answersCsvFileInput = ref<HTMLInputElement | null>(null);
 const csvImportError = ref<string | null>(null);
 const deleteConfirmOpen = ref(false);
 const pendingDeleteCardId = ref<string | null>(null);
@@ -668,10 +688,18 @@ function onExportAnswersCsv() {
   downloadCsvText(`${base}.csv`, csv);
 }
 
-function openAnswersCsvImport() {
+function triggerAnswersCsvPicker() {
   if (cardsReadOnly.value) return;
   csvImportError.value = null;
-  answersCsvImportOpen.value = true;
+  answersCsvFileInput.value?.click();
+}
+
+function onAnswersCsvFileSelected(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = '';
+  if (!file) return;
+  void onAnswersCsvFile(file);
 }
 
 async function onAnswersCsvFile(file: File) {
@@ -686,7 +714,7 @@ async function onAnswersCsvFile(file: File) {
     return;
   }
 
-  // D6′: empty file → in-modal error, draft unchanged, modal stays open.
+  // D6″: empty file → framed error, draft unchanged.
   if (rows.length === 0) {
     csvImportError.value = t('content.csvImportFailed');
     return;
@@ -700,7 +728,6 @@ async function onAnswersCsvFile(file: File) {
     });
   }
   csvImportError.value = null;
-  answersCsvImportOpen.value = false;
   await flushAutosave();
 }
 
@@ -1039,5 +1066,12 @@ onBeforeUnmount(() => {
 .cascade-gap-outline {
   outline: 2px solid var(--q-warning);
   outline-offset: -2px;
+}
+
+.csv-format-example {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 </style>

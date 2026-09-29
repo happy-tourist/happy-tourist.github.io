@@ -119,7 +119,7 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-229 / D13: 100×200 task-set cards; soft-unpublish / open rules preserved -->
+      <!-- SC-PACK-229 / D13′: 150×200 task-set cards; actions bottom; soft-unpublish / open preserved -->
       <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
         <PackListCardTile
           v-for="(ts, si) in live.taskSets"
@@ -150,29 +150,6 @@
               {{ setModerationBadge(ts) }}
             </q-badge>
           </template>
-          <template #trailing>
-            <q-btn
-              v-if="canAuthorEditSet(ts)"
-              flat
-              dense
-              round
-              size="sm"
-              icon="edit"
-              :aria-label="$t('content.edit')"
-              data-test-id="pack-task-set-author-edit"
-              @click.stop="onAuthorEditSet(ts)"
-            />
-            <q-btn
-              v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
-              flat
-              dense
-              round
-              size="sm"
-              icon="edit"
-              :aria-label="$t('content.edit')"
-              @click.stop="onStaffEditSet(ts.id)"
-            />
-          </template>
           <template #caption>
             {{ $t('content.tasksCount', { n: ts.tasks.length }) }} ·
             {{ difficultySummary(ts) }}
@@ -180,10 +157,30 @@
           </template>
           <template #actions>
             <q-btn
+              v-if="canAuthorEditSet(ts)"
+              flat
+              dense
+              no-caps
+              class="full-width"
+              :label="$t('content.edit')"
+              data-test-id="pack-task-set-author-edit"
+              @click.stop="onAuthorEditSet(ts)"
+            />
+            <q-btn
+              v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
+              flat
+              dense
+              no-caps
+              class="full-width"
+              :label="$t('content.edit')"
+              @click.stop="onStaffEditSet(ts.id)"
+            />
+            <q-btn
               v-if="auth.isStaff && isSetSoftUnpublished(ts)"
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="primary"
               :label="$t('content.republish')"
               :loading="content.loading"
@@ -193,7 +190,8 @@
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="warning"
               :label="$t('content.unpublish')"
               :loading="content.loading"
@@ -203,7 +201,8 @@
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
               flat
               dense
-              size="sm"
+              no-caps
+              class="full-width"
               color="warning"
               :label="$t('content.unpublish')"
               disable

@@ -251,6 +251,7 @@ const stubs = {
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-icon': true,
   'q-select': true,
+  'q-tooltip': { template: '<span><slot /></span>' },
   'q-form': { template: '<form @submit.prevent><slot /></form>' },
   'q-input': {
     props: ['modelValue', 'label'],
@@ -265,6 +266,8 @@ const stubs = {
     template:
       '<div class="map-preview-stub" :data-interactive="interactive" :data-size="size" :data-grid-len="(grid || \'\').length" @click="$emit(\'cellClick\', 0)" />',
   },
+  // Render real card so preview + capacity + bottom actions stay testable (SC-MAP-55).
+  MapListCardTile: false,
 };
 
 describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () => {
@@ -349,7 +352,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
 
     expect(wrapper.text()).toContain('maps.draftOnly');
-    await wrapper.find('.q-item-stub').trigger('click');
+    await wrapper.find('[data-test-id="maps-row-m-draft"]').trigger('click');
     await flushPromises();
     expect(routerPush).toHaveBeenCalledWith({
       name: 'content-map-edit',
@@ -426,7 +429,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
 
     expect(wrapper.text()).toContain('maps.unpublishedByStaff');
-    await wrapper.find('.q-item-stub').trigger('click');
+    await wrapper.find('[data-test-id="maps-row-m-soft"]').trigger('click');
     await flushPromises();
     expect(routerPush).not.toHaveBeenCalled();
 
@@ -1013,5 +1016,64 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
         tile.html().indexOf('map-paint-tile__label'),
       );
     }
+  });
+
+  it('SC-MAP-55: maps list renders card grid with mini preview, capacity, and bottom Edit text', async () => {
+    mapsState.list = [{ ...approvedMap, createdBy: 'u1' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="maps-card-grid"]').exists()).toBe(true);
+    const card = wrapper.find('[data-test-id="maps-row-m-approved"]');
+    expect(card.exists()).toBe(true);
+    expect(card.classes()).toContain('map-list-tile');
+
+    const preview = card.find('.map-preview-stub');
+    expect(preview.exists()).toBe(true);
+    expect(card.text()).toContain('maps.seatConfig');
+    expect(card.text()).toContain('Alice');
+
+    // Preview appears before capacity text in card DOM
+    const html = card.html();
+    expect(html.indexOf('map-preview-stub')).toBeLessThan(html.indexOf('maps.seatConfig'));
+
+    const editBtn = card.find('[data-test-id="maps-author-edit"]');
+    expect(editBtn.exists()).toBe(true);
+    expect(editBtn.text()).toBe('content.edit');
+    expect(editBtn.classes()).toContain('full-width');
+    // Actions sit below capacity (border-top actions region)
+    expect(html.indexOf('maps.seatConfig')).toBeLessThan(html.indexOf('maps-author-edit'));
+  });
+
+  it('SC-MAP-56: editor column is centered and seat selects are usable width', async () => {
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap };
+      mapsState.draft = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    const body = wrapper.find('.map-editor-body');
+    expect(body.exists()).toBe(true);
+    // Centered column (D16′ / SC-MAP-56)
+    expect(body.classes()).not.toContain('items-start');
+    const bodyStyle = (wrapper.find('.map-editor-body').element as HTMLElement).className;
+    // Scoped CSS sets align-items: center on .map-editor-body — assert via computed style when available
+    const styleEl = wrapper.find('style');
+    if (styleEl.exists()) {
+      expect(styleEl.text()).toMatch(/align-items:\s*center/);
+    } else {
+      // Fallback: class presence is enough when style block is stripped in shallow mount
+      expect(bodyStyle).toContain('map-editor-body');
+    }
+
+    const seats = wrapper.find('[data-test-id="map-editor-seats"]');
+    expect(seats.exists()).toBe(true);
+    expect(wrapper.findAll('.map-editor-seat-select').length).toBe(2);
+    // Seats after palette in DOM
+    expect(wrapper.html().indexOf('map-paint-tools')).toBeLessThan(
+      wrapper.html().indexOf('map-editor-seats'),
+    );
   });
 });

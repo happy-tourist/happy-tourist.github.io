@@ -15,41 +15,40 @@
       <q-tooltip>{{ difficultyLabel }}</q-tooltip>
     </q-badge>
 
+    <div class="pack-task-tile__body">
+      <div class="pack-task-tile__question">
+        {{ question.trim() || fallbackQuestion }}
+      </div>
+      <div class="pack-task-tile__slots">
+        <div v-if="slotLabels.length" class="pack-task-tile__slot-list">
+          <q-chip v-for="(label, i) in slotLabels" :key="i" dense class="pack-task-tile__slot">
+            {{ label }}
+          </q-chip>
+        </div>
+        <div v-else class="text-muted">{{ $t('content.slotEmpty') }}</div>
+      </div>
+    </div>
+
     <div v-if="editable" class="pack-task-tile__actions" @click.stop>
       <q-btn
         flat
         dense
-        round
-        size="sm"
-        icon="edit"
-        class="pack-task-tile__edit-btn"
-        :aria-label="$t('content.editTask')"
+        no-caps
+        class="full-width pack-task-tile__edit-btn"
+        :label="$t('content.editTask')"
         data-testid="pack-task-tile-edit"
         @click="emit('edit')"
       />
       <q-btn
         flat
         dense
-        round
-        size="sm"
-        icon="delete"
+        no-caps
+        class="full-width"
         color="negative"
-        :aria-label="$t('content.deleteTask')"
+        :label="$t('content.deleteTask')"
         data-testid="pack-task-tile-delete"
         @click="emit('delete')"
       />
-    </div>
-
-    <div class="pack-task-tile__question">
-      {{ question.trim() || fallbackQuestion }}
-    </div>
-    <div class="pack-task-tile__slots">
-      <div v-if="slotLabels.length" class="pack-task-tile__slot-list">
-        <div v-for="(label, i) in slotLabels" :key="i" class="pack-task-tile__slot">
-          {{ label }}
-        </div>
-      </div>
-      <div v-else class="text-muted">{{ $t('content.slotEmpty') }}</div>
     </div>
   </div>
 </template>
@@ -90,7 +89,7 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
 </script>
 
 <style scoped>
-/* Fixed 200×200 + explicit light/dark contrast (D12 / SC-PACK-226/227). */
+/* Fixed 300×200 + vertical split + chip row (D12′/D19 / SC-PACK-223/226/227). */
 .pack-task-tile {
   --pack-tile-bg: #ffffff;
   --pack-tile-fg: rgba(0, 0, 0, 0.87);
@@ -98,10 +97,11 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   --pack-tile-border: rgba(0, 0, 0, 0.14);
   --pack-tile-splitter: rgba(0, 0, 0, 0.12);
   --pack-tile-edit: rgba(0, 0, 0, 0.72);
+  --pack-tile-chip-bg: rgba(0, 0, 0, 0.08);
 
   position: relative;
   box-sizing: border-box;
-  width: 200px;
+  width: 300px;
   height: 200px;
   display: flex;
   flex-direction: column;
@@ -120,6 +120,7 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   --pack-tile-border: rgba(255, 255, 255, 0.22);
   --pack-tile-splitter: rgba(255, 255, 255, 0.18);
   --pack-tile-edit: rgba(255, 255, 255, 0.88);
+  --pack-tile-chip-bg: rgba(255, 255, 255, 0.12);
 }
 
 .pack-task-tile--cascade {
@@ -132,18 +133,24 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   top: 6px;
   left: 6px;
   z-index: 2;
-  max-width: calc(100% - 4.5rem);
+  max-width: calc(100% - 0.75rem);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.pack-task-tile__actions {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  z-index: 2;
+.pack-task-tile__body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  gap: 0;
+  flex-direction: row;
+}
+
+.pack-task-tile__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-top: 1px solid var(--pack-tile-splitter);
 }
 
 .pack-task-tile__edit-btn {
@@ -152,11 +159,13 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
 
 .pack-task-tile__question {
   flex: 1 1 50%;
+  min-width: 0;
   min-height: 0;
-  padding: 1.85rem 0.65rem 0.55rem;
+  overflow-y: auto;
+  padding: 1.75rem 0.5rem 0.55rem;
   font-weight: 600;
-  font-size: 0.9rem;
-  line-height: 1.25;
+  font-size: 1.75rem;
+  line-height: 1.2;
   word-break: break-word;
   display: flex;
   align-items: center;
@@ -167,22 +176,31 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
 
 .pack-task-tile__slots {
   flex: 1 1 50%;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.45rem 0.65rem 0.55rem;
-  border-top: 1px solid var(--pack-tile-splitter);
-  font-size: 0.78rem;
-  line-height: 1.3;
+  padding: 1.75rem 0.5rem 0.55rem;
+  border-left: 1px solid var(--pack-tile-splitter);
+  font-size: 1.55rem;
+  line-height: 1.25;
   color: var(--pack-tile-muted);
+  display: flex;
+  align-items: center;
 }
 
 .pack-task-tile__slot-list {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-content: flex-start;
+  width: 100%;
 }
 
 .pack-task-tile__slot {
+  font-size: 1.1rem;
+  background: var(--pack-tile-chip-bg);
+  color: var(--pack-tile-fg);
   word-break: break-word;
 }
 </style>

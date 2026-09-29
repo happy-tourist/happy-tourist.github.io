@@ -200,10 +200,8 @@ export default {
     csvImportFailed: 'Не удалось импортировать CSV — черновик не изменён.',
     csvImportDisabled: 'Импорт недоступен — карточки только для чтения.',
     csvAnswersHint: 'Разделитель «;», без кавычек. Импорт добавляет карточки в конец.',
-    /** SC-PACK-218/221: import modal format hints (D6′). */
-    csvImportModalTitle: 'Импорт CSV',
+    /** SC-PACK-218/221: framed CSV format hints (D6″). */
     csvImportFormatLabel: 'Формат строки:',
-    csvImportChooseFile: 'Выбрать файл',
     csvAnswersFormatExample: 'ответ;абзац1;абзац2;…',
     csvTasksFormatExample: 'вопрос;сложность;слот1;слот2;…',
     /** SC-PACK-213…218: tasks CSV on add-task-set + tasks editor. */

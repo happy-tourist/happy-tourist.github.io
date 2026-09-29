@@ -39,12 +39,13 @@
     <div v-else-if="!filteredPacks.length" class="text-muted">
       {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
     </div>
-    <!-- SC-PACK-228 / D13: 100×200 cards — status top, star TL, Edit TR; no whole-card :to -->
+    <!-- SC-PACK-228 / D13′: 150×200 — status top, star TL, description, actions bottom text -->
     <div v-else class="pack-card-grid" data-testid="packs-card-grid">
       <PackListCardTile
         v-for="item in filteredPacks"
         :key="item.id"
         :title="item.title || $t('content.untitled')"
+        :description="item.description || ''"
         clickable
         :test-id="`packs-row-${item.id}`"
         @open="onRowClick(item)"
@@ -79,25 +80,23 @@
             {{ statusBadge(item) }}
           </q-badge>
         </template>
-        <template #trailing>
+        <template #actions>
           <q-btn
             v-if="shouldOpenPackEditFromList(item)"
             flat
             dense
-            round
-            size="sm"
-            icon="edit"
-            :aria-label="$t('content.edit')"
+            no-caps
+            class="full-width"
+            :label="$t('content.edit')"
             :data-test-id="`packs-edit-${item.id}`"
             @click.stop="onEditClick(item)"
           />
-        </template>
-        <template #actions>
           <q-btn
             v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
             flat
             dense
-            size="sm"
+            no-caps
+            class="full-width"
             color="warning"
             :label="$t('content.unpublish')"
             :loading="content.loading"
@@ -107,7 +106,8 @@
             v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
             flat
             dense
-            size="sm"
+            no-caps
+            class="full-width"
             color="primary"
             :label="$t('content.republish')"
             :loading="content.loading"

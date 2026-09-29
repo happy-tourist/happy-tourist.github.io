@@ -24,19 +24,11 @@ const stubs = {
     template:
       '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon" @click="$emit(\'click\', $event)"><slot />{{ label }}</button>',
   },
-  'q-tooltip': { template: '<span class="tooltip-stub"><slot /></span>' },
   'q-banner': {
     template: '<div class="banner-stub" data-testid="csv-import-error"><slot /></div>',
   },
-  'q-dialog': {
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    template:
-      '<div v-if="modelValue" class="dialog-stub" data-testid="csv-import-dialog"><slot /></div>',
-  },
-  'q-card': { template: '<div><slot /></div>' },
+  'q-card': { template: '<div data-testid="csv-controls-frame"><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
-  'q-card-actions': { template: '<div><slot /></div>' },
 };
 
 function mountControls(
@@ -60,15 +52,12 @@ function mountControls(
       ...props,
     },
     global: {
-      stubs: {
-        ...stubs,
-        PackCsvImportDialog: false,
-      },
+      stubs,
     },
   });
 }
 
-async function openImportAndPickFile(
+async function pickImportFile(
   wrapper: ReturnType<typeof mountControls>,
   file: File | { text: () => Promise<string> },
 ) {
@@ -79,7 +68,8 @@ async function openImportAndPickFile(
   await importBtn!.trigger('click');
   await flushPromises();
 
-  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+  expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
+  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
   expect(wrapper.text()).toContain('content.csvTasksFormatExample');
 
   const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
@@ -143,24 +133,29 @@ describe('PackTasksCsvControls (SC-PACK-213…221)', () => {
     expect(exportBtn!.attributes('disabled')).toBeDefined();
   });
 
-  it('SC-PACK-221: Import opens format modal before file pick', async () => {
+  it('SC-PACK-221: Import opens file picker directly; format hint stays in frame', async () => {
     const wrapper = mountControls();
+    const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
+    const clickSpy = vi.spyOn(fileInput.element as HTMLInputElement, 'click');
+
     const importBtn = wrapper
       .findAll('button')
       .find((b) => b.attributes('data-label') === 'content.importTasksCsv');
     await importBtn!.trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(clickSpy).toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvTasksFormatExample');
-    expect(wrapper.find('[data-testid="csv-import-choose-file"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="csv-import-file-input"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvTasksHint');
+    clickSpy.mockRestore();
   });
 
   it('SC-PACK-214: import appends tasks with resolved slots and difficulty default 1', async () => {
     const wrapper = mountControls();
     const file = new File(['Q1;;Paris\nQ2;9;Rome'], 'tasks.csv', { type: 'text/csv' });
-    await openImportAndPickFile(wrapper, file);
+    await pickImportFile(wrapper, file);
 
     const appendEvents = wrapper.emitted('append');
     expect(appendEvents).toBeTruthy();
@@ -178,28 +173,28 @@ describe('PackTasksCsvControls (SC-PACK-213…221)', () => {
       slots: [{ answerCardId: 'c2' }],
     });
     expect(appended[0]!.id).not.toBe('t1');
-    // Success closes modal (D6′)
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
+    // Success clears framed error (D6″)
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-215/218: missing slot texts keep modal error and emit nothing', async () => {
+  it('SC-PACK-215/218: missing slot texts keep framed error and emit nothing', async () => {
     const wrapper = mountControls();
     const file = new File(['Q1;1;Berlin\nQ2;2;Paris'], 'tasks.csv', { type: 'text/csv' });
-    await openImportAndPickFile(wrapper, file);
+    await pickImportFile(wrapper, file);
 
     expect(wrapper.emitted('append')).toBeUndefined();
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvTasksMissingAnswers');
   });
 
-  it('D6′: empty CSV keeps modal error and emit nothing', async () => {
+  it('D6″: empty CSV keeps framed error and emit nothing', async () => {
     const wrapper = mountControls();
     const file = new File(['\n'], 'empty.csv', { type: 'text/csv' });
-    await openImportAndPickFile(wrapper, file);
+    await pickImportFile(wrapper, file);
 
     expect(wrapper.emitted('append')).toBeUndefined();
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvImportFailed');
   });

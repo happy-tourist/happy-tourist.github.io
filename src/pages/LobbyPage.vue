@@ -163,7 +163,18 @@
               </q-item>
             </template>
             <template #selected-item="scope">
-              <span>{{ scope.opt?.label ?? '' }}</span>
+              <div
+                v-if="scope.opt"
+                class="row items-center no-wrap q-gutter-x-sm"
+                data-test-id="lobby-create-map-selected"
+              >
+                <MapGridPreview
+                  :grid="scope.opt.grid"
+                  :size="32"
+                  data-test-id="lobby-create-map-selected-preview"
+                />
+                <span data-test-id="lobby-create-map-selected-label">{{ scope.opt.label }}</span>
+              </div>
             </template>
             <template #no-option>
               <q-item>

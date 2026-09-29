@@ -99,33 +99,32 @@
             </button>
           </div>
 
-          <div class="row q-col-gutter-md q-mt-md" style="max-width: 360px">
-            <div class="col-6">
-              <q-select
-                v-model="local.players"
-                :options="seatOptions"
-                emit-value
-                map-options
-                outlined
-                dense
-                :disable="gateOpen"
-                :label="$t('maps.players')"
-                @update:model-value="onSeatsChange"
-              />
-            </div>
-            <div class="col-6">
-              <q-select
-                v-model="local.touristsPerPlayer"
-                :options="seatOptions"
-                emit-value
-                map-options
-                outlined
-                dense
-                :disable="gateOpen"
-                :label="$t('maps.tourists')"
-                @update:model-value="onSeatsChange"
-              />
-            </div>
+          <!-- SC-MAP-56 / D16′: usable-width selects matching field column (not tiny col-6 @ 360px) -->
+          <div class="map-editor-seats q-mt-md" data-test-id="map-editor-seats">
+            <q-select
+              v-model="local.players"
+              class="map-editor-seat-select"
+              :options="seatOptions"
+              emit-value
+              map-options
+              outlined
+              dense
+              :disable="gateOpen"
+              :label="$t('maps.players')"
+              @update:model-value="onSeatsChange"
+            />
+            <q-select
+              v-model="local.touristsPerPlayer"
+              class="map-editor-seat-select"
+              :options="seatOptions"
+              emit-value
+              map-options
+              outlined
+              dense
+              :disable="gateOpen"
+              :label="$t('maps.tourists')"
+              @update:model-value="onSeatsChange"
+            />
           </div>
 
           <div class="text-caption text-muted q-mt-sm q-mb-md">
@@ -743,11 +742,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-/* SC-MAP-54 / D16: large board-like field; palette under with label under each tile */
+/* SC-MAP-54 / D16 + SC-MAP-56 / D16′: board-like field; centered column; usable seats */
 .map-editor-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   max-width: 100%;
 }
 
@@ -763,10 +762,24 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 
+.map-editor-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: min(100%, calc(10 * 60px + 9 * 2px));
+  max-width: 100%;
+}
+
+.map-editor-seat-select {
+  flex: 1 1 140px;
+  min-width: 140px;
+}
+
 .map-paint-palette {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  justify-content: center;
 }
 
 .map-paint-tile {

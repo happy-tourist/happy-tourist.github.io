@@ -15,36 +15,35 @@
     @keydown.enter.prevent="onBodyClick"
     @keydown.space.prevent="onBodyClick"
   >
+    <div class="pack-answer-tile__body">
+      <div class="pack-answer-tile__content">
+        {{ content.trim() || $t('content.untitled') }}
+      </div>
+      <div v-if="hasDescription" class="pack-answer-tile__description">
+        {{ description }}
+      </div>
+    </div>
+
     <div v-if="editable" class="pack-answer-tile__actions" @click.stop>
       <q-btn
         flat
         dense
-        round
-        size="sm"
-        icon="edit"
-        class="pack-answer-tile__edit-btn"
-        :aria-label="$t('content.editCard')"
+        no-caps
+        class="full-width pack-answer-tile__edit-btn"
+        :label="$t('content.editCard')"
         data-testid="pack-answer-tile-edit"
         @click="emit('edit')"
       />
       <q-btn
         flat
         dense
-        round
-        size="sm"
-        icon="delete"
+        no-caps
+        class="full-width"
         color="negative"
-        :aria-label="$t('content.deleteCard')"
+        :label="$t('content.deleteCard')"
         data-testid="pack-answer-tile-delete"
         @click="emit('delete')"
       />
-    </div>
-
-    <div class="pack-answer-tile__content">
-      {{ content.trim() || $t('content.untitled') }}
-    </div>
-    <div v-if="hasDescription" class="pack-answer-tile__description">
-      {{ description }}
     </div>
   </div>
 </template>
@@ -56,7 +55,7 @@ const props = withDefaults(
   defineProps<{
     content: string;
     description?: string;
-    /** Show pencil + delete (editor surfaces). */
+    /** Show bottom text Edit/Delete (editor surfaces). */
     editable?: boolean;
     /** Body click selects this card (slot picker). */
     selectable?: boolean;
@@ -88,7 +87,7 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Fixed px sizes + explicit light/dark contrast (D12 / SC-PACK-225/227). */
+/* Fixed px sizes + vertical split + ×2 type (D12′ / SC-PACK-222/225/227). */
 .pack-answer-tile {
   --pack-tile-bg: #ffffff;
   --pack-tile-fg: rgba(0, 0, 0, 0.87);
@@ -99,7 +98,7 @@ function onBodyClick() {
 
   position: relative;
   box-sizing: border-box;
-  width: 200px;
+  width: 300px;
   height: 200px;
   display: flex;
   flex-direction: column;
@@ -121,7 +120,7 @@ function onBodyClick() {
 }
 
 .pack-answer-tile--short {
-  width: 100px;
+  width: 150px;
 }
 
 .pack-answer-tile--selectable {
@@ -139,13 +138,19 @@ function onBodyClick() {
   pointer-events: none;
 }
 
-.pack-answer-tile__actions {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  z-index: 2;
+.pack-answer-tile__body {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  gap: 0;
+  flex-direction: row;
+}
+
+.pack-answer-tile__actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-top: 1px solid var(--pack-tile-splitter);
 }
 
 .pack-answer-tile__edit-btn {
@@ -154,11 +159,13 @@ function onBodyClick() {
 
 .pack-answer-tile__content {
   flex: 1 1 50%;
+  min-width: 0;
   min-height: 0;
-  padding: 1.75rem 0.65rem 0.55rem;
+  overflow-y: auto;
+  padding: 0.55rem 0.5rem;
   font-weight: 600;
-  font-size: 0.92rem;
-  line-height: 1.25;
+  font-size: 1.75rem;
+  line-height: 1.2;
   word-break: break-word;
   display: flex;
   align-items: center;
@@ -169,18 +176,17 @@ function onBodyClick() {
 
 .pack-answer-tile--short .pack-answer-tile__content {
   flex: 1 1 auto;
-  padding-top: 1.5rem;
-  padding-bottom: 0.75rem;
 }
 
 .pack-answer-tile__description {
   flex: 1 1 50%;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.45rem 0.65rem 0.55rem;
-  border-top: 1px solid var(--pack-tile-splitter);
-  font-size: 0.78rem;
-  line-height: 1.3;
+  padding: 0.55rem 0.5rem;
+  border-left: 1px solid var(--pack-tile-splitter);
+  font-size: 1.55rem;
+  line-height: 1.25;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--pack-tile-muted);

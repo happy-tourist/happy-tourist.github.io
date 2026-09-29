@@ -113,7 +113,6 @@ const stubs = {
   'q-input': { template: '<input />' },
   'q-space': true,
   'q-dialog': { template: '<div><slot /></div>' },
-  PackCsvImportDialog: { template: '<div data-testid="csv-dialog-stub" />' },
   PackAnswerCardTile: {
     props: ['content', 'description', 'editable'],
     emits: ['edit', 'delete'],

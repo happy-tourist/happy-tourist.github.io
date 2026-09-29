@@ -33,108 +33,101 @@
       />
     </div>
 
-    <q-list bordered separator class="rounded-borders">
-      <template v-if="maps.loading && !maps.list.length">
-        <q-item>
-          <q-item-section class="text-muted">{{ $t('maps.loading') }}</q-item-section>
-        </q-item>
-      </template>
-      <template v-else-if="!filteredMaps.length">
-        <q-item>
-          <q-item-section class="text-muted">
-            {{ listFilter === 'all' ? $t('maps.empty') : $t('maps.emptyFiltered') }}
-          </q-item-section>
-        </q-item>
-      </template>
-      <template v-else>
-        <q-item
-          v-for="item in filteredMaps"
-          :key="item.id"
-          clickable
-          v-ripple
-          :data-test-id="`maps-row-${item.id}`"
-          @click="onRowClick(item)"
-        >
-          <q-item-section avatar>
-            <MapGridPreview :grid="item.grid" :size="56" :aria-label="$t('maps.previewAria')" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>
-              {{ item.authorDisplayName || $t('content.authorUser') }}
-              <q-badge
-                v-if="statusBadge(item)"
-                :color="statusBadgeColor(item)"
-                class="q-ml-sm"
-                :data-test-id="`maps-status-${item.id}`"
-              >
-                {{ statusBadge(item) }}
-              </q-badge>
-            </q-item-label>
-            <q-item-label caption>
-              {{
-                $t('maps.seatConfig', {
-                  players: item.players,
-                  tourists: item.touristsPerPlayer,
-                })
-              }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <div class="row items-center no-wrap q-gutter-xs" @click.stop>
-              <q-btn
-                v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
-                flat
-                dense
-                color="warning"
-                :label="$t('maps.unpublish')"
-                :loading="maps.loading"
-                @click.stop="confirmUnpublish(item.id)"
-              />
-              <q-btn
-                v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
-                flat
-                dense
-                color="primary"
-                :label="$t('maps.republish')"
-                :loading="maps.loading"
-                @click.stop="onRepublish(item.id)"
-              />
-              <q-btn
-                v-if="showStaffEdit(item)"
-                flat
-                dense
-                color="secondary"
-                :label="$t('maps.staffEdit')"
-                data-test-id="maps-staff-edit"
-                @click.stop="onStaffEdit(item.id)"
-              />
-              <q-btn
-                v-else-if="showStaffEditBlocked(item)"
-                flat
-                dense
-                color="secondary"
-                :label="$t('maps.staffEdit')"
-                disable
-                data-test-id="maps-staff-edit-blocked"
-              >
-                <q-tooltip>{{ $t('maps.staffEditBlockedAuthorRequest') }}</q-tooltip>
-              </q-btn>
-              <q-btn
-                v-if="showAuthorEdit(item)"
-                flat
-                dense
-                color="primary"
-                icon="edit"
-                :aria-label="$t('content.edit')"
-                data-test-id="maps-author-edit"
-                @click.stop="onAuthorEdit(item.id)"
-              />
-              <q-icon name="chevron_right" />
-            </div>
-          </q-item-section>
-        </q-item>
-      </template>
-    </q-list>
+    <div v-if="maps.loading && !maps.list.length" class="text-muted">
+      {{ $t('maps.loading') }}
+    </div>
+    <div v-else-if="!filteredMaps.length" class="text-muted">
+      {{ listFilter === 'all' ? $t('maps.empty') : $t('maps.emptyFiltered') }}
+    </div>
+    <!-- SC-MAP-55 / D20: card grid — mini preview, players×tourists, bottom text actions -->
+    <div v-else class="pack-card-grid" data-testid="maps-card-grid" data-test-id="maps-card-grid">
+      <MapListCardTile
+        v-for="item in filteredMaps"
+        :key="item.id"
+        :grid="item.grid"
+        :author="item.authorDisplayName || $t('content.authorUser')"
+        :capacity="
+          $t('maps.seatConfig', {
+            players: item.players,
+            tourists: item.touristsPerPlayer,
+          })
+        "
+        :preview-aria="$t('maps.previewAria')"
+        clickable
+        :test-id="`maps-row-${item.id}`"
+        @open="onRowClick(item)"
+      >
+        <template #status>
+          <q-badge
+            v-if="statusBadge(item)"
+            :color="statusBadgeColor(item)"
+            dense
+            :data-test-id="`maps-status-${item.id}`"
+          >
+            {{ statusBadge(item) }}
+          </q-badge>
+        </template>
+        <template #actions>
+          <q-btn
+            v-if="showAuthorEdit(item)"
+            flat
+            dense
+            no-caps
+            class="full-width"
+            color="primary"
+            :label="$t('content.edit')"
+            data-test-id="maps-author-edit"
+            @click.stop="onAuthorEdit(item.id)"
+          />
+          <q-btn
+            v-if="showStaffEdit(item)"
+            flat
+            dense
+            no-caps
+            class="full-width"
+            color="secondary"
+            :label="$t('maps.staffEdit')"
+            data-test-id="maps-staff-edit"
+            @click.stop="onStaffEdit(item.id)"
+          />
+          <q-btn
+            v-else-if="showStaffEditBlocked(item)"
+            flat
+            dense
+            no-caps
+            class="full-width"
+            color="secondary"
+            :label="$t('maps.staffEdit')"
+            disable
+            data-test-id="maps-staff-edit-blocked"
+          >
+            <q-tooltip>{{ $t('maps.staffEditBlockedAuthorRequest') }}</q-tooltip>
+          </q-btn>
+          <q-btn
+            v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
+            flat
+            dense
+            no-caps
+            class="full-width"
+            color="warning"
+            :label="$t('maps.unpublish')"
+            :loading="maps.loading"
+            @click.stop="confirmUnpublish(item.id)"
+          />
+          <q-btn
+            v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
+            flat
+            dense
+            no-caps
+            class="full-width"
+            color="primary"
+            :label="$t('maps.republish')"
+            :loading="maps.loading"
+            @click.stop="onRepublish(item.id)"
+          />
+        </template>
+      </MapListCardTile>
+    </div>
 
     <q-dialog v-model="gateOpen">
       <q-card style="min-width: 280px">
@@ -180,7 +173,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
-import MapGridPreview from '@/components/MapGridPreview.vue';
+import MapListCardTile from '@/components/MapListCardTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import { mapsErrorI18nKey, useMapsStore, type MapSummary } from '@/stores/maps';
 

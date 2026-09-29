@@ -21,13 +21,14 @@
       <div class="pack-list-tile__status">
         <slot name="status" />
       </div>
-      <div class="pack-list-tile__trailing" @click.stop>
-        <slot name="trailing" />
-      </div>
+      <!-- Top-right empty (D13′): actions live in #actions bottom. -->
     </div>
 
     <div class="pack-list-tile__body">
       <div class="pack-list-tile__title">{{ title }}</div>
+      <div v-if="hasDescription" class="pack-list-tile__description">
+        {{ description }}
+      </div>
       <div v-if="$slots.caption" class="pack-list-tile__caption">
         <slot name="caption" />
       </div>
@@ -40,10 +41,14 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue';
+
+const props = withDefaults(
   defineProps<{
     /** Truncated primary label (pack title or task-set label). */
     title: string;
+    /** Catalog pack description (truncated); omit on task-set cards. */
+    description?: string;
     clickable?: boolean;
     /** Soft-unpublished / gray row chrome. */
     muted?: boolean;
@@ -52,6 +57,7 @@ withDefaults(
     testId?: string;
   }>(),
   {
+    description: '',
     clickable: false,
     muted: false,
     cascadeGap: false,
@@ -62,22 +68,25 @@ const emit = defineEmits<{
   open: [];
 }>();
 
+const hasDescription = computed(() => Boolean(props.description?.trim()));
+
 function onBodyClick() {
   emit('open');
 }
 </script>
 
 <style scoped>
-/* Fixed 100×200 catalog / task-set cards (D13 / SC-PACK-228/229). */
+/* Fixed 150×200 catalog / task-set cards (D13′ / SC-PACK-228/229). */
 .pack-list-tile {
   --pack-list-bg: #ffffff;
   --pack-list-fg: rgba(0, 0, 0, 0.87);
   --pack-list-muted: rgba(0, 0, 0, 0.7);
   --pack-list-border: rgba(0, 0, 0, 0.14);
+  --pack-list-splitter: rgba(0, 0, 0, 0.12);
 
   position: relative;
   box-sizing: border-box;
-  width: 100px;
+  width: 150px;
   height: 200px;
   display: flex;
   flex-direction: column;
@@ -94,6 +103,7 @@ function onBodyClick() {
   --pack-list-fg: rgba(255, 255, 255, 0.92);
   --pack-list-muted: rgba(255, 255, 255, 0.78);
   --pack-list-border: rgba(255, 255, 255, 0.22);
+  --pack-list-splitter: rgba(255, 255, 255, 0.18);
 }
 
 .pack-list-tile--clickable {
@@ -124,13 +134,6 @@ function onBodyClick() {
   z-index: 2;
 }
 
-.pack-list-tile__trailing {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 2;
-}
-
 .pack-list-tile__status {
   display: flex;
   justify-content: center;
@@ -146,7 +149,7 @@ function onBodyClick() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 0.35rem 0.45rem;
+  padding: 0.25rem 0.4rem;
   text-align: center;
 }
 
@@ -158,14 +161,27 @@ function onBodyClick() {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 5;
-  line-clamp: 5;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   color: var(--pack-list-fg);
 }
 
+.pack-list-tile__description {
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  color: var(--pack-list-muted);
+}
+
 .pack-list-tile__caption {
-  margin-top: 0.25rem;
-  font-size: 0.68rem;
+  margin-top: 0.2rem;
+  font-size: 0.65rem;
   line-height: 1.2;
   color: var(--pack-list-muted);
   overflow: hidden;
@@ -178,9 +194,13 @@ function onBodyClick() {
 .pack-list-tile__actions {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.1rem;
-  padding: 0.15rem 0.2rem 0.35rem;
+  flex-direction: column;
+  width: 100%;
+  border-top: 1px solid var(--pack-list-splitter);
+}
+
+.pack-list-tile__actions :deep(.q-btn) {
+  width: 100%;
+  border-radius: 0;
 }
 </style>

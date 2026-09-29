@@ -1,38 +1,61 @@
 <template>
   <div>
-    <div class="row items-center justify-between q-mb-sm">
-      <div class="text-h6">{{ $t('content.questionsList') }}</div>
-      <div class="q-gutter-sm">
-        <q-btn
-          flat
-          dense
-          icon="download"
-          :label="$t('content.exportTasksCsv')"
-          :disable="exportDisabled"
-          data-testid="export-tasks-csv"
-          @click="onExport"
-        />
-        <q-btn
-          flat
-          dense
-          icon="upload"
-          :label="$t('content.importTasksCsv')"
-          :disable="importDisabled"
-          data-testid="import-tasks-csv"
-          @click="openImportModal"
-        >
-          <q-tooltip>{{ importTooltip }}</q-tooltip>
-        </q-btn>
-      </div>
-    </div>
+    <div class="text-h6 q-mb-sm">{{ $t('content.questionsList') }}</div>
 
-    <PackCsvImportDialog
-      v-model="importOpen"
-      v-model:error="importError"
-      :format-example="$t('content.csvTasksFormatExample')"
-      :format-hint="$t('content.csvTasksHint')"
-      @file="onImportFile"
-    />
+    <q-card flat bordered class="q-mb-md" data-testid="csv-controls-frame">
+      <q-card-section class="q-pa-sm">
+        <div class="row q-gutter-sm items-center">
+          <q-btn
+            flat
+            dense
+            icon="download"
+            :label="$t('content.exportTasksCsv')"
+            :disable="exportDisabled"
+            data-testid="export-tasks-csv"
+            @click="onExport"
+          />
+          <q-btn
+            flat
+            dense
+            icon="upload"
+            :label="$t('content.importTasksCsv')"
+            :disable="importDisabled"
+            data-testid="import-tasks-csv"
+            @click="triggerPicker"
+          />
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".csv,text/csv,text/plain"
+            class="hidden"
+            style="display: none"
+            data-testid="csv-import-file-input"
+            @change="onFileSelected"
+          />
+        </div>
+
+        <div class="q-mt-sm text-caption">
+          <div class="text-muted">{{ $t('content.csvImportFormatLabel') }}</div>
+          <code class="csv-format-example block q-mt-xs">{{
+            $t('content.csvTasksFormatExample')
+          }}</code>
+          <div class="q-mt-xs">{{ $t('content.csvTasksHint') }}</div>
+          <div v-if="importGateMessage" class="q-mt-xs text-warning">
+            {{ importGateMessage }}
+          </div>
+        </div>
+
+        <q-banner
+          v-if="importError"
+          dense
+          rounded
+          class="bg-negative text-white q-mt-sm"
+          data-testid="csv-import-error"
+        >
+          {{ importError }}
+        </q-banner>
+      </q-card-section>
+    </q-card>
   </div>
 </template>
 
@@ -40,7 +63,6 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-import PackCsvImportDialog from '@/components/PackCsvImportDialog.vue';
 import {
   collectMissingSlotTexts,
   downloadCsvText,
@@ -70,8 +92,8 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const importOpen = ref(false);
 const importError = ref<string | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const ready = computed(() => props.ready !== false);
 
@@ -82,10 +104,11 @@ const importDisabled = computed(() => !ready.value || props.readOnly || noAnswer
 /** SC-PACK-220: Export disabled when current set has zero tasks. */
 const exportDisabled = computed(() => !ready.value || props.tasks.length === 0);
 
-const importTooltip = computed(() => {
+/** Gate reason when Import is disabled (visible in frame — no tooltip). */
+const importGateMessage = computed(() => {
   if (noAnswerContext.value) return t('content.csvTasksNeedAnswers');
   if (props.readOnly) return t('content.csvTasksImportDisabled');
-  return t('content.csvTasksHint');
+  return null;
 });
 
 function onExport() {
@@ -96,10 +119,18 @@ function onExport() {
   downloadCsvText(`${base}-tasks-${n}.csv`, csv);
 }
 
-function openImportModal() {
+function triggerPicker() {
   if (importDisabled.value) return;
   importError.value = null;
-  importOpen.value = true;
+  fileInput.value?.click();
+}
+
+function onFileSelected(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0] ?? null;
+  input.value = '';
+  if (!file) return;
+  void onImportFile(file);
 }
 
 async function onImportFile(file: File) {
@@ -114,7 +145,7 @@ async function onImportFile(file: File) {
     return;
   }
 
-  // D6′: empty file → in-modal error, draft unchanged, modal stays open.
+  // D6″: empty file → framed error, draft unchanged.
   if (rows.length === 0) {
     importError.value = t('content.csvImportFailed');
     return;
@@ -150,6 +181,14 @@ async function onImportFile(file: File) {
 
   importError.value = null;
   emit('append', appended);
-  importOpen.value = false;
 }
 </script>
+
+<style scoped>
+.csv-format-example {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+</style>

@@ -9,14 +9,18 @@ import PackTaskTile from '@/components/PackTaskTile.vue';
 
 const stubs = {
   'q-btn': {
+    props: ['label'],
     emits: ['click'],
     template:
-      '<button type="button" v-bind="$attrs" :class="$attrs.class" @click="$emit(\'click\')"><slot /></button>',
+      '<button type="button" v-bind="$attrs" :class="$attrs.class" @click="$emit(\'click\')">{{ label }}<slot /></button>',
   },
   'q-badge': {
     template: '<span class="q-badge-stub" v-bind="$attrs"><slot /></span>',
   },
   'q-tooltip': { template: '<span><slot /></span>' },
+  'q-chip': {
+    template: '<span class="q-chip-stub pack-task-tile__slot" v-bind="$attrs"><slot /></span>',
+  },
 };
 
 const vueSrc = readFileSync(
@@ -25,7 +29,7 @@ const vueSrc = readFileSync(
 );
 
 describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
-  it('shows question, difficulty top-left, and slot labels below', () => {
+  it('shows question, difficulty top-left, and slot chips in a row', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Capital of France?',
@@ -40,9 +44,13 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(wrapper.find('[data-testid="pack-task-tile-difficulty"]').text()).toContain('2');
     expect(wrapper.find('.pack-task-tile__slots').text()).toContain('Paris');
     expect(wrapper.find('.pack-task-tile__slots').text()).toContain('Lyon');
+    expect(wrapper.find('.pack-task-tile__body').exists()).toBe(true);
+    expect(wrapper.findAll('.pack-task-tile__slot')).toHaveLength(2);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slot-list\s*\{[^}]*flex-direction:\s*row/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*border-left:/s);
   });
 
-  it('editable shows pencil and delete; body has no edit-on-click', async () => {
+  it('editable shows bottom full-width text Edit/Delete; body has no edit-on-click', async () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -53,13 +61,21 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
       global: { stubs },
     });
 
-    expect(wrapper.find('[data-testid="pack-task-tile-edit"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pack-task-tile-delete"]').exists()).toBe(true);
+    const editBtn = wrapper.find('[data-testid="pack-task-tile-edit"]');
+    const deleteBtn = wrapper.find('[data-testid="pack-task-tile-delete"]');
+    expect(editBtn.exists()).toBe(true);
+    expect(deleteBtn.exists()).toBe(true);
+    expect(editBtn.classes()).toContain('full-width');
+    expect(deleteBtn.classes()).toContain('full-width');
+    expect(editBtn.text().length).toBeGreaterThan(0);
+    expect(wrapper.find('.pack-task-tile__actions').exists()).toBe(true);
+    expect(vueSrc).not.toMatch(/icon=["']edit["']/);
+    expect(vueSrc).not.toMatch(/icon=["']delete["']/);
 
     await wrapper.trigger('click');
     expect(wrapper.emitted('edit')).toBeUndefined();
 
-    await wrapper.find('[data-testid="pack-task-tile-edit"]').trigger('click');
+    await editBtn.trigger('click');
     expect(wrapper.emitted('edit')).toHaveLength(1);
   });
 
@@ -79,7 +95,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(wrapper.text()).toContain('content.slotEmpty');
   });
 
-  it('uses fixed 200×200 size (SC-PACK-226)', () => {
+  it('uses fixed 300×200 size (SC-PACK-226)', () => {
     mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -89,11 +105,12 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
       global: { stubs },
     });
 
-    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*width:\s*200px/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*width:\s*300px/s);
     expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*height:\s*200px/s);
+    expect(vueSrc).toMatch(/font-size:\s*1\.75rem/);
   });
 
-  it('sets explicit light/dark bg, text, and edit icon colors (SC-PACK-227)', () => {
+  it('sets explicit light/dark bg, text, and edit control colors (SC-PACK-227)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',

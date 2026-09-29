@@ -109,7 +109,6 @@ const stubs = {
   'q-space': true,
   'q-icon': true,
   PackAnswerCardTile: { template: '<div class="pack-answer-tile-stub" />' },
-  PackCsvImportDialog: { template: '<div />' },
   PackListCardTile: false,
 };
 
@@ -183,7 +182,34 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-228: catalog packs render as 100×200 cards with star TL and Edit TR', async () => {
+  it('SC-PACK-228: catalog packs render as 150×200 cards with star TL, description, Edit bottom', async () => {
+    contentState.catalog = [
+      {
+        id: 'pub1',
+        title: 'Published Pack',
+        description: 'Published pack description text',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'other',
+        moderationStatus: 'in_catalog',
+        isMine: false,
+        isContributor: false,
+        isFavorite: false,
+      },
+      {
+        id: 'draft1',
+        title: 'My draft pack with a long title',
+        description: 'Draft description for catalog card',
+        blocked: false,
+        hasLive: false,
+        createdBy: 'u1',
+        moderationStatus: 'draft',
+        isMine: true,
+        isFavorite: false,
+      },
+    ];
+
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();
 
@@ -194,14 +220,23 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
 
     expect(wrapper.find('[data-test-id="packs-star-pub1"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="packs-edit-draft1"]').exists()).toBe(true);
+    expect(
+      wrapper.find('.pack-list-tile__trailing [data-test-id="packs-edit-draft1"]').exists(),
+    ).toBe(false);
+    expect(
+      wrapper.find('.pack-list-tile__actions [data-test-id="packs-edit-draft1"]').exists(),
+    ).toBe(true);
     expect(wrapper.find('[data-test-id="packs-edit-pub1"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-status-draft1"]').exists()).toBe(true);
     expect(
       wrapper.find('[data-test-id="packs-row-draft1"] .pack-list-tile__title').text(),
     ).toContain('My draft pack');
+    expect(
+      wrapper.find('[data-test-id="packs-row-draft1"] .pack-list-tile__description').text(),
+    ).toContain('Draft description');
   });
 
-  it('SC-PACK-229: live task-set list uses 100×200 cards with status and Edit', async () => {
+  it('SC-PACK-229: live task-set list uses 150×200 cards with status and bottom Edit', async () => {
     // Set author (not pack creator) gets Edit on the card (SC-PACK-158).
     authState.user = { id: 'contrib', anonymous: false };
     contentState.pack = { ...contentState.pack!, createdBy: 'owner' };
@@ -228,10 +263,16 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(card.classes()).toContain('pack-list-tile');
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="pack-task-set-author-edit"]').exists()).toBe(true);
+    expect(
+      card.find('.pack-list-tile__trailing [data-test-id="pack-task-set-author-edit"]').exists(),
+    ).toBe(false);
+    expect(
+      card.find('.pack-list-tile__actions [data-test-id="pack-task-set-author-edit"]').exists(),
+    ).toBe(true);
     expect(card.find('.pack-list-tile__title').text()).toContain('content.taskSetLabelFrom');
   });
 
-  it('SC-PACK-229: editor task-set list uses same 100×200 card chrome', async () => {
+  it('SC-PACK-229: editor task-set list uses same 150×200 card chrome with bottom Edit', async () => {
     const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
     await flushPromises();
 
@@ -240,6 +281,9 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(card.exists()).toBe(true);
     expect(card.classes()).toContain('pack-list-tile');
     expect(wrapper.find('[data-test-id="editor-task-set-edit-ts1"]').exists()).toBe(true);
+    expect(
+      card.find('.pack-list-tile__actions [data-test-id="editor-task-set-edit-ts1"]').exists(),
+    ).toBe(true);
     expect(card.find('.pack-list-tile__title').text()).toContain('content.taskSetLabelFrom');
   });
 });

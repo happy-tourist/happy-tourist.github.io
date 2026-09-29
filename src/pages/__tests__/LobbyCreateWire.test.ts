@@ -206,11 +206,11 @@ const stubs = {
   'q-space': true,
   MapGridPreview: {
     props: ['grid', 'size'],
-    template: '<div class="map-grid-preview-stub" :data-grid="grid" />',
+    template: '<div class="map-grid-preview-stub" v-bind="$attrs" :data-grid="grid" />',
   },
 };
 
-describe('lobby create & listing wire (SC-LOBBY-21…30)', () => {
+describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
   let wrapper: ReturnType<typeof mount> | null = null;
 
   beforeEach(() => {
@@ -314,6 +314,23 @@ describe('lobby create & listing wire (SC-LOBBY-21…30)', () => {
     await flushPromises();
     // SC-LOBBY-29: no second capacity caption under closed map select.
     expect(wrapper!.find('[data-test-id="lobby-create-map-capacity"]').exists()).toBe(false);
+  });
+
+  it('SC-LOBBY-31: selected map shows mini preview + label in closed select', async () => {
+    await openCreate();
+    expect(wrapper!.find('[data-test-id="lobby-create-map-selected"]').exists()).toBe(false);
+
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+
+    const selected = wrapper!.find('[data-test-id="lobby-create-map-selected"]');
+    expect(selected.exists()).toBe(true);
+    expect(
+      selected.find('[data-test-id="lobby-create-map-selected-preview"]').attributes('data-grid'),
+    ).toBe('1'.repeat(100));
+    expect(wrapper!.get('[data-test-id="lobby-create-map-selected-label"]').text()).toBe(
+      'Автор карты',
+    );
   });
 
   it('SC-LOBBY-28: seats picker 1…map.players; default min(2, players)', async () => {

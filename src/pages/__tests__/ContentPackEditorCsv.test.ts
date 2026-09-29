@@ -105,13 +105,14 @@ const stubs = {
     template:
       '<button type="button" :disabled="disable" :data-label="label" :data-icon="icon" @click="$emit(\'click\', $event)"><slot />{{ label }}</button>',
   },
-  'q-tooltip': { template: '<span class="tooltip-stub"><slot /></span>' },
   'q-banner': {
     template:
       '<div class="banner-stub" data-testid="csv-import-error"><slot /><slot name="action" /></div>',
   },
   'q-badge': true,
-  'q-card': { template: '<div><slot /></div>' },
+  'q-card': {
+    template: '<div data-testid="csv-controls-frame"><slot /></div>',
+  },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-form': { template: '<form @submit.prevent><slot /></form>' },
@@ -122,12 +123,6 @@ const stubs = {
       '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   'q-space': true,
-  'q-dialog': {
-    props: ['modelValue'],
-    emits: ['update:modelValue'],
-    template:
-      '<div v-if="modelValue" class="dialog-stub" data-testid="csv-import-dialog"><slot /></div>',
-  },
 };
 
 function mountEditor() {
@@ -135,14 +130,13 @@ function mountEditor() {
     global: {
       stubs: {
         ...stubs,
-        PackCsvImportDialog: false,
         PackListCardTile: false,
       },
     },
   });
 }
 
-async function openImportAndPickFile(
+async function pickImportFile(
   wrapper: ReturnType<typeof mountEditor>,
   file: File | { text: () => Promise<string> },
 ) {
@@ -153,7 +147,7 @@ async function openImportAndPickFile(
   await importBtn!.trigger('click');
   await flushPromises();
 
-  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+  expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
   expect(wrapper.text()).toContain('content.csvAnswersFormatExample');
 
   const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
@@ -242,9 +236,12 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () =
     expect(exportBtn!.attributes('disabled')).toBeDefined();
   });
 
-  it('SC-PACK-221: Import opens format modal before file pick', async () => {
+  it('SC-PACK-221: Import opens file picker directly; format hint stays in frame', async () => {
     const wrapper = mountEditor();
     await flushPromises();
+
+    const fileInput = wrapper.find('[data-testid="csv-import-file-input"]');
+    const clickSpy = vi.spyOn(fileInput.element as HTMLInputElement, 'click');
 
     const importBtn = wrapper
       .findAll('button')
@@ -252,9 +249,12 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () =
     await importBtn!.trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(clickSpy).toHaveBeenCalled();
+    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvAnswersFormatExample');
-    expect(wrapper.find('[data-testid="csv-import-choose-file"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.csvAnswersHint');
+    clickSpy.mockRestore();
   });
 
   it('SC-PACK-211: import appends parsed cards with new ids', async () => {
@@ -262,7 +262,7 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () =
     await flushPromises();
 
     const file = new File(['Berlin;City\nMadrid'], 'answers.csv', { type: 'text/csv' });
-    await openImportAndPickFile(wrapper, file);
+    await pickImportFile(wrapper, file);
 
     expect(saveDraft).toHaveBeenCalled();
     const saved = saveDraft.mock.calls[0]![1] as PackContent;
@@ -273,7 +273,7 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () =
     expect(saved.answerCards[3]).toMatchObject({ content: 'Madrid', description: '' });
     expect(saved.answerCards[2]!.id).not.toBe('c1');
     expect(saved.answerCards[2]!.id).not.toBe('c2');
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(false);
   });
 
   it('SC-PACK-212: import disabled when cardsReadOnly (task_set_author)', async () => {
@@ -297,29 +297,29 @@ describe('ContentPackEditorPage answers CSV (SC-PACK-210/211/212/219/221)', () =
     expect(importBtn!.attributes('disabled')).toBeDefined();
   });
 
-  it('SC-PACK-218-ish: failed file read shows in-modal error and does not append', async () => {
+  it('SC-PACK-218-ish: failed file read shows framed error and does not append', async () => {
     const wrapper = mountEditor();
     await flushPromises();
 
     const badFile = {
       text: () => Promise.reject(new Error('unreadable')),
     } as unknown as File;
-    await openImportAndPickFile(wrapper, badFile);
+    await pickImportFile(wrapper, badFile);
 
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvImportFailed');
     expect(saveDraft).not.toHaveBeenCalled();
   });
 
-  it('D6′: empty CSV keeps modal error and does not append', async () => {
+  it('D6″: empty CSV keeps framed error and does not append', async () => {
     const wrapper = mountEditor();
     await flushPromises();
 
     const file = new File(['\n\n'], 'empty.csv', { type: 'text/csv' });
-    await openImportAndPickFile(wrapper, file);
+    await pickImportFile(wrapper, file);
 
-    expect(wrapper.find('[data-testid="csv-import-dialog"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="csv-controls-frame"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="csv-import-error"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('content.csvImportFailed');
     expect(saveDraft).not.toHaveBeenCalled();
