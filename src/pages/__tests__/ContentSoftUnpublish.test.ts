@@ -122,6 +122,8 @@ const stubs = {
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-icon': true,
+  PackListCardTile: false,
+  PackAnswerCardTile: true,
 };
 
 const softPack: ContentPackSummary = {

@@ -264,6 +264,7 @@ const stubs = {
     template:
       '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
   },
+  PackListCardTile: false,
 };
 
 describe('content follow-up 5 (SC-PACK-134…136)', () => {
@@ -305,7 +306,7 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     expect(liveText).toContain('content.taskSetLabelFrom');
     // Two separate rows (not collapsed) — both rendered
     const liveRows = live
-      .findAll('.q-item-stub')
+      .findAll('.pack-list-tile')
       .filter((n) => n.text().includes('content.taskSetLabelFrom'));
     expect(liveRows.length).toBe(2);
 
@@ -314,7 +315,7 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     const editor = shallowMount(ContentPackEditorPage, { global: { stubs } });
     await flushPromises();
     const editorRows = editor
-      .findAll('.q-item-stub')
+      .findAll('.pack-list-tile')
       .filter((n) => n.text().includes('content.taskSetLabelFrom'));
     expect(editorRows.length).toBe(2);
     expect(editor.text()).toContain('соавтор');

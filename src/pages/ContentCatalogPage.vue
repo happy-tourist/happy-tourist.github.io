@@ -33,88 +33,89 @@
       />
     </div>
 
-    <q-list bordered separator class="rounded-borders">
-      <template v-if="content.loading && !content.catalog.length">
-        <q-item>
-          <q-item-section class="text-muted">{{ $t('content.loading') }}</q-item-section>
-        </q-item>
-      </template>
-      <template v-else-if="!filteredPacks.length">
-        <q-item>
-          <q-item-section class="text-muted">
-            {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
-          </q-item-section>
-        </q-item>
-      </template>
-      <template v-else>
-        <!-- No row :to — star / staff actions must not race with navigation -->
-        <q-item
-          v-for="item in filteredPacks"
-          :key="item.id"
-          clickable
-          v-ripple
-          :data-test-id="`packs-row-${item.id}`"
-          @click="onRowClick(item)"
-        >
-          <q-item-section>
-            <q-item-label>
-              {{ item.title || $t('content.untitled') }}
-              <q-badge v-if="item.blocked" color="negative" class="q-ml-sm">
-                {{ $t('content.blocked') }}
-              </q-badge>
-              <q-badge
-                v-else-if="statusBadge(item)"
-                :color="statusBadgeColor(item)"
-                class="q-ml-sm"
-                :data-test-id="`packs-status-${item.id}`"
-              >
-                {{ statusBadge(item) }}
-              </q-badge>
-            </q-item-label>
-            <q-item-label v-if="item.description" caption>
-              {{ item.description }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <div class="row items-center no-wrap q-gutter-xs" @click.stop>
-              <q-btn
-                v-if="canStar(item)"
-                flat
-                dense
-                round
-                :icon="item.isFavorite ? 'star' : 'star_border'"
-                :color="item.isFavorite ? 'amber' : undefined"
-                :aria-label="
-                  item.isFavorite ? $t('content.favoriteUnstar') : $t('content.favoriteStar')
-                "
-                :data-test-id="`packs-star-${item.id}`"
-                :loading="content.loading"
-                @click.stop="onToggleFavorite(item)"
-              />
-              <q-btn
-                v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
-                flat
-                dense
-                color="warning"
-                :label="$t('content.unpublish')"
-                :loading="content.loading"
-                @click.stop="confirmUnpublish(item.id)"
-              />
-              <q-btn
-                v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
-                flat
-                dense
-                color="primary"
-                :label="$t('content.republish')"
-                :loading="content.loading"
-                @click.stop="onRepublish(item.id)"
-              />
-              <q-icon name="chevron_right" />
-            </div>
-          </q-item-section>
-        </q-item>
-      </template>
-    </q-list>
+    <div v-if="content.loading && !content.catalog.length" class="text-muted">
+      {{ $t('content.loading') }}
+    </div>
+    <div v-else-if="!filteredPacks.length" class="text-muted">
+      {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
+    </div>
+    <!-- SC-PACK-228 / D13: 100×200 cards — status top, star TL, Edit TR; no whole-card :to -->
+    <div v-else class="pack-card-grid" data-testid="packs-card-grid">
+      <PackListCardTile
+        v-for="item in filteredPacks"
+        :key="item.id"
+        :title="item.title || $t('content.untitled')"
+        clickable
+        :test-id="`packs-row-${item.id}`"
+        @open="onRowClick(item)"
+      >
+        <template #leading>
+          <q-btn
+            v-if="canStar(item)"
+            flat
+            dense
+            round
+            size="sm"
+            :icon="item.isFavorite ? 'star' : 'star_border'"
+            :color="item.isFavorite ? 'amber' : undefined"
+            :aria-label="
+              item.isFavorite ? $t('content.favoriteUnstar') : $t('content.favoriteStar')
+            "
+            :data-test-id="`packs-star-${item.id}`"
+            :loading="content.loading"
+            @click.stop="onToggleFavorite(item)"
+          />
+        </template>
+        <template #status>
+          <q-badge v-if="item.blocked" color="negative" dense>
+            {{ $t('content.blocked') }}
+          </q-badge>
+          <q-badge
+            v-else-if="statusBadge(item)"
+            :color="statusBadgeColor(item)"
+            dense
+            :data-test-id="`packs-status-${item.id}`"
+          >
+            {{ statusBadge(item) }}
+          </q-badge>
+        </template>
+        <template #trailing>
+          <q-btn
+            v-if="shouldOpenPackEditFromList(item)"
+            flat
+            dense
+            round
+            size="sm"
+            icon="edit"
+            :aria-label="$t('content.edit')"
+            :data-test-id="`packs-edit-${item.id}`"
+            @click.stop="onEditClick(item)"
+          />
+        </template>
+        <template #actions>
+          <q-btn
+            v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
+            flat
+            dense
+            size="sm"
+            color="warning"
+            :label="$t('content.unpublish')"
+            :loading="content.loading"
+            @click.stop="confirmUnpublish(item.id)"
+          />
+          <q-btn
+            v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
+            flat
+            dense
+            size="sm"
+            color="primary"
+            :label="$t('content.republish')"
+            :loading="content.loading"
+            @click.stop="onRepublish(item.id)"
+          />
+        </template>
+      </PackListCardTile>
+    </div>
 
     <q-dialog v-model="gateOpen">
       <q-card style="min-width: 280px">
@@ -165,6 +166,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
+import PackListCardTile from '@/components/PackListCardTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore, type ContentPackSummary } from '@/stores/content';
 
@@ -281,11 +283,15 @@ async function onToggleFavorite(item: ContentPackSummary) {
   }
 }
 
+function onEditClick(item: ContentPackSummary) {
+  void router.push({ name: 'content-pack-edit', params: { id: item.id } });
+}
+
 function onRowClick(item: ContentPackSummary) {
   // SC-PACK-186/191/192: never-published or pack-level author work → Edit;
   // add-task-set-only open work → live first; clean in-catalog → live.
   if (shouldOpenPackEditFromList(item)) {
-    void router.push({ name: 'content-pack-edit', params: { id: item.id } });
+    onEditClick(item);
     return;
   }
   void router.push({ name: 'content-pack', params: { id: item.id } });

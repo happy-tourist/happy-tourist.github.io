@@ -22,6 +22,7 @@
         round
         size="sm"
         icon="edit"
+        class="pack-task-tile__edit-btn"
         :aria-label="$t('content.editTask')"
         data-testid="pack-task-tile-edit"
         @click="emit('edit')"
@@ -89,22 +90,36 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
 </script>
 
 <style scoped>
+/* Fixed 200×200 + explicit light/dark contrast (D12 / SC-PACK-226/227). */
 .pack-task-tile {
+  --pack-tile-bg: #ffffff;
+  --pack-tile-fg: rgba(0, 0, 0, 0.87);
+  --pack-tile-muted: rgba(0, 0, 0, 0.7);
+  --pack-tile-border: rgba(0, 0, 0, 0.14);
+  --pack-tile-splitter: rgba(0, 0, 0, 0.12);
+  --pack-tile-edit: rgba(0, 0, 0, 0.72);
+
   position: relative;
   box-sizing: border-box;
-  width: 11rem;
-  min-height: 12rem;
+  width: 200px;
+  height: 200px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: var(--q-card-background, #fff);
+  border: 1px solid var(--pack-tile-border);
+  background: var(--pack-tile-bg);
+  color: var(--pack-tile-fg);
   overflow: hidden;
   flex: 0 0 auto;
 }
 
 .body--dark .pack-task-tile {
-  border-color: rgba(255, 255, 255, 0.18);
+  --pack-tile-bg: #2a2a2a;
+  --pack-tile-fg: rgba(255, 255, 255, 0.92);
+  --pack-tile-muted: rgba(255, 255, 255, 0.78);
+  --pack-tile-border: rgba(255, 255, 255, 0.22);
+  --pack-tile-splitter: rgba(255, 255, 255, 0.18);
+  --pack-tile-edit: rgba(255, 255, 255, 0.88);
 }
 
 .pack-task-tile--cascade {
@@ -131,8 +146,13 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   gap: 0;
 }
 
+.pack-task-tile__edit-btn {
+  color: var(--pack-tile-edit);
+}
+
 .pack-task-tile__question {
   flex: 1 1 50%;
+  min-height: 0;
   padding: 1.85rem 0.65rem 0.55rem;
   font-weight: 600;
   font-size: 0.9rem;
@@ -142,20 +162,18 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   align-items: center;
   justify-content: center;
   text-align: center;
+  color: var(--pack-tile-fg);
 }
 
 .pack-task-tile__slots {
-  flex: 0 1 50%;
-  max-height: 5.5rem;
+  flex: 1 1 50%;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.45rem 0.65rem 0.55rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: 1px solid var(--pack-tile-splitter);
   font-size: 0.78rem;
   line-height: 1.3;
-}
-
-.body--dark .pack-task-tile__slots {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  color: var(--pack-tile-muted);
 }
 
 .pack-task-tile__slot-list {

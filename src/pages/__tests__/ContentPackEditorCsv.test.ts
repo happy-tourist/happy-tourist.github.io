@@ -136,6 +136,7 @@ function mountEditor() {
       stubs: {
         ...stubs,
         PackCsvImportDialog: false,
+        PackListCardTile: false,
       },
     },
   });

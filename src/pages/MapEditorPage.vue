@@ -47,106 +47,118 @@
     <div v-if="maps.loading && !local" class="text-muted">{{ $t('maps.loading') }}</div>
 
     <template v-else-if="local">
-      <div class="row q-col-gutter-md q-mb-md items-start">
-        <div class="col-12 col-md-auto">
+      <!-- SC-MAP-54 / D16: board-sized field; palette tiles under map with labels under tiles -->
+      <div class="map-editor-body q-mb-md">
+        <div class="map-editor-field" data-test-id="map-editor-field">
           <MapGridPreview
             :grid="local.grid"
             :size="editorSize"
-            :interactive="!viewOnly && !gateOpen"
+            :interactive="canPaint"
             :aria-label="$t('maps.editorGridAria')"
+            data-test-id="map-editor-grid"
             @cell-click="onCellClick"
           />
         </div>
-        <div class="col">
-          <!-- SC-MAP-46/47: View shows author + seats; no paint tools / edit chrome -->
-          <template v-if="viewOnly">
-            <div class="q-mb-md" data-test-id="map-view-meta">
-              <div class="text-body1">
-                {{ maps.map?.authorDisplayName || $t('content.authorUser') }}
-              </div>
-              <div class="text-subtitle2 text-muted">
-                {{
-                  $t('maps.seatConfig', {
-                    players: local.players,
-                    tourists: local.touristsPerPlayer,
-                  })
-                }}
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="text-subtitle2 q-mb-sm">{{ $t('maps.palette') }}</div>
-            <div class="row q-gutter-sm q-mb-md" data-test-id="map-paint-tools">
-              <q-btn
-                v-for="tool in paintTools"
-                :key="tool"
-                :outline="selectedTool !== tool"
-                :color="toolColor(tool)"
-                :disable="gateOpen"
-                :label="$t(`maps.tools.${tool}`)"
-                @click="selectedTool = tool"
-              />
-            </div>
 
-            <div class="row q-col-gutter-md q-mb-md" style="max-width: 360px">
-              <div class="col-6">
-                <q-select
-                  v-model="local.players"
-                  :options="seatOptions"
-                  emit-value
-                  map-options
-                  outlined
-                  dense
-                  :disable="gateOpen"
-                  :label="$t('maps.players')"
-                  @update:model-value="onSeatsChange"
-                />
-              </div>
-              <div class="col-6">
-                <q-select
-                  v-model="local.touristsPerPlayer"
-                  :options="seatOptions"
-                  emit-value
-                  map-options
-                  outlined
-                  dense
-                  :disable="gateOpen"
-                  :label="$t('maps.tourists')"
-                  @update:model-value="onSeatsChange"
-                />
-              </div>
+        <!-- SC-MAP-46/47: View shows author + seats; no paint tools / edit chrome -->
+        <template v-if="viewOnly">
+          <div class="q-mt-md" data-test-id="map-view-meta">
+            <div class="text-body1">
+              {{ maps.map?.authorDisplayName || $t('content.authorUser') }}
             </div>
-
-            <div class="text-caption text-muted q-mb-md">
+            <div class="text-subtitle2 text-muted">
               {{
-                $t('maps.startsHint', {
-                  starts: startCount,
-                  min: minStarts,
+                $t('maps.seatConfig', {
+                  players: local.players,
+                  tourists: local.touristsPerPlayer,
                 })
               }}
-              <span v-if="maps.saving" class="q-ml-sm">{{ $t('maps.autosaving') }}</span>
             </div>
+          </div>
+        </template>
+        <template v-else>
+          <div
+            class="map-paint-palette q-mt-md"
+            data-test-id="map-paint-tools"
+            role="toolbar"
+            :aria-label="$t('maps.palette')"
+          >
+            <button
+              v-for="tool in paintTools"
+              :key="tool"
+              type="button"
+              class="map-paint-tile"
+              :class="[`is-${tool}`, { 'is-selected': selectedTool === tool }]"
+              :disabled="gateOpen || saveInFlight"
+              :data-test-id="`map-paint-tool-${tool}`"
+              :aria-pressed="selectedTool === tool"
+              @click="selectedTool = tool"
+            >
+              <span class="map-paint-tile__swatch" aria-hidden="true" />
+              <span class="map-paint-tile__label">{{ $t(`maps.tools.${tool}`) }}</span>
+            </button>
+          </div>
 
-            <div v-if="!staffMode" class="q-gutter-sm">
-              <q-btn
-                color="primary"
-                :label="$t('maps.submitModeration')"
-                :loading="maps.loading"
-                :disable="!canSubmit"
-                @click="onSubmit"
+          <div class="row q-col-gutter-md q-mt-md" style="max-width: 360px">
+            <div class="col-6">
+              <q-select
+                v-model="local.players"
+                :options="seatOptions"
+                emit-value
+                map-options
+                outlined
+                dense
+                :disable="gateOpen"
+                :label="$t('maps.players')"
+                @update:model-value="onSeatsChange"
               />
-              <q-btn
-                v-if="canCancelRequest"
-                color="grey"
-                outline
-                :label="$t('content.cancelPending')"
-                :loading="maps.loading"
-                @click="onCancelRequest"
-              />
-              <div v-if="!canSubmit" class="text-caption text-muted">{{ submitHint }}</div>
             </div>
-          </template>
-        </div>
+            <div class="col-6">
+              <q-select
+                v-model="local.touristsPerPlayer"
+                :options="seatOptions"
+                emit-value
+                map-options
+                outlined
+                dense
+                :disable="gateOpen"
+                :label="$t('maps.tourists')"
+                @update:model-value="onSeatsChange"
+              />
+            </div>
+          </div>
+
+          <div class="text-caption text-muted q-mt-sm q-mb-md">
+            {{
+              $t('maps.startsHint', {
+                starts: startCount,
+                min: minStarts,
+              })
+            }}
+            <span v-if="maps.saving || saveInFlight" class="q-ml-sm">{{
+              $t('maps.autosaving')
+            }}</span>
+          </div>
+
+          <div v-if="!staffMode" class="q-gutter-sm">
+            <q-btn
+              color="primary"
+              :label="$t('maps.submitModeration')"
+              :loading="maps.loading"
+              :disable="!canSubmit"
+              @click="onSubmit"
+            />
+            <q-btn
+              v-if="canCancelRequest"
+              color="grey"
+              outline
+              :label="$t('content.cancelPending')"
+              :loading="maps.loading"
+              @click="onCancelRequest"
+            />
+            <div v-if="!canSubmit" class="text-caption text-muted">{{ submitHint }}</div>
+          </div>
+        </template>
       </div>
 
       <template v-if="showThread">
@@ -276,10 +288,21 @@ const threadMessages = ref<ModerationMessage[]>([]);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lockHeartbeat: ReturnType<typeof setInterval> | null = null;
 let suppressAutosave = false;
+/** D15 / SC-MAP-53: bumps on each local paint/seat edit; skip applying older save responses. */
+let localRevision = 0;
 
 const uid = computed(() => String(auth.user?.id ?? ''));
 
-const editorSize = computed(() => ($q.screen.lt.sm ? 280 : 360));
+/** SC-MAP-54 / D16: board-comparable (~game board 10×60 + gaps), not tiny 280/360 side panel. */
+const editorSize = computed(() => {
+  if ($q.screen.lt.sm) return 300;
+  if ($q.screen.lt.md) return 480;
+  return 600;
+});
+
+/** D15: block cell paint while quiet/staff save in flight. */
+const saveInFlight = ref(false);
+const canPaint = computed(() => !viewOnly.value && !gateOpen.value && !saveInFlight.value);
 
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('maps.gateLoginTitle') : t('maps.gateVerifyTitle'),
@@ -381,12 +404,6 @@ const canEnterEditFromView = computed(() => {
   return Boolean(uid.value) && maps.map.createdBy === uid.value;
 });
 
-function toolColor(tool: MapPaintTool) {
-  if (tool === 'start') return 'positive';
-  if (tool === 'finish') return 'warning';
-  return 'brown';
-}
-
 function messageAuthorLabel(msg: ModerationMessage) {
   if (msg.authorKind === 'staff') return t('content.authorStaff');
   if (msg.authorUserId === uid.value) return t('content.authorYou');
@@ -455,19 +472,37 @@ function scheduleAutosave() {
 async function flushAutosave() {
   clearAutosaveTimer();
   if (!local.value || viewOnly.value || gateOpen.value || !mapId.value) return;
+  // Submit/Cancel must wait out an in-flight quiet save (do not no-op and race).
+  while (saveInFlight.value) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 20);
+    });
+  }
+  if (!local.value || viewOnly.value || gateOpen.value || !mapId.value) return;
+  const requestRevision = localRevision;
+  const body: MapRevision = { ...local.value };
+  saveInFlight.value = true;
   try {
-    const saved = await persist(local.value, { quiet: true });
+    const saved = await persist(body, { quiet: true });
+    // D15 / SC-MAP-53: do not replace newer local paints with an older save echo.
+    if (requestRevision !== localRevision) {
+      scheduleAutosave();
+      return;
+    }
     suppressAutosave = true;
     local.value = { ...saved };
     suppressAutosave = false;
   } catch {
     suppressAutosave = false;
+  } finally {
+    saveInFlight.value = false;
   }
 }
 
 function onCellClick(index: number) {
-  if (viewOnly.value || gateOpen.value || !local.value) return;
+  if (!canPaint.value || !local.value) return;
   if (!staffMode.value && !checkGate()) return;
+  localRevision += 1;
   local.value = {
     ...local.value,
     grid: paintCell(local.value.grid, index, selectedTool.value),
@@ -477,6 +512,7 @@ function onCellClick(index: number) {
 
 function onSeatsChange() {
   if (!local.value || viewOnly.value || gateOpen.value) return;
+  localRevision += 1;
   local.value = {
     ...local.value,
     players: clampSeatCount(Number(local.value.players)),
@@ -705,3 +741,84 @@ onBeforeUnmount(() => {
   }
 });
 </script>
+
+<style scoped lang="scss">
+/* SC-MAP-54 / D16: large board-like field; palette under with label under each tile */
+.map-editor-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.map-editor-field {
+  width: min(100%, calc(10 * 60px + 9 * 2px));
+  max-width: 100%;
+}
+
+.map-editor-field :deep(.map-grid-preview) {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  max-width: 100%;
+}
+
+.map-paint-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.map-paint-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.map-paint-tile:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.map-paint-tile.is-selected {
+  border-color: var(--q-primary);
+}
+
+.map-paint-tile__swatch {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.map-paint-tile.is-start .map-paint-tile__swatch {
+  background: #4caf50;
+}
+
+.map-paint-tile.is-task .map-paint-tile__swatch {
+  background: #8d6e63;
+}
+
+.map-paint-tile.is-finish .map-paint-tile__swatch {
+  background: #fdd835;
+}
+
+.map-paint-tile__label {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.body--light .map-paint-tile__swatch {
+  border-color: rgba(0, 0, 0, 0.18);
+}
+</style>

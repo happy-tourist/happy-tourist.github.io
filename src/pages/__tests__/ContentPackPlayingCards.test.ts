@@ -120,6 +120,7 @@ const stubs = {
     template:
       '<div class="pack-answer-tile-stub" :data-editable="editable" :data-content="content" :data-description="description"></div>',
   },
+  PackListCardTile: false,
 };
 
 describe('ContentPackEditorPage playing-card chrome (SC-PACK-222/224)', () => {

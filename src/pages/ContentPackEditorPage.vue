@@ -160,83 +160,90 @@
           <q-tooltip v-if="!canOpenTasks">{{ $t('content.tasksNeedCards') }}</q-tooltip>
         </q-btn>
       </div>
-      <q-list bordered separator class="rounded-borders q-mb-lg">
-        <q-item
+      <!-- SC-PACK-229 / D13: 100×200 task-set cards; soft-unpublish preserved -->
+      <div
+        v-if="local.taskSets.length"
+        class="pack-card-grid q-mb-lg"
+        data-testid="editor-task-set-grid"
+      >
+        <PackListCardTile
           v-for="(ts, si) in local.taskSets"
           :key="ts.id"
+          :title="
+            $t('content.taskSetLabelFrom', {
+              n: si + 1,
+              name: ts.authorDisplayName || $t('content.authorUser'),
+            })
+          "
           :clickable="canOpenTasks && canEnterEditorSet(ts)"
-          :disable="!canOpenTasks"
-          v-ripple="canOpenTasks && canEnterEditorSet(ts)"
-          :class="{
-            'cascade-gap-outline': content.taskSetHasCascadeGap(ts),
-            'text-grey-6': isSetSoftUnpublished(ts),
-          }"
-          @click="canOpenTasks && canEnterEditorSet(ts) && openTaskSet(ts.id)"
+          :muted="isSetSoftUnpublished(ts)"
+          :cascade-gap="content.taskSetHasCascadeGap(ts)"
+          :test-id="`editor-task-set-row-${ts.id}`"
+          @open="canOpenTasks && canEnterEditorSet(ts) && openTaskSet(ts.id)"
         >
-          <q-item-section>
-            <q-item-label>
-              {{
-                $t('content.taskSetLabelFrom', {
-                  n: si + 1,
-                  name: ts.authorDisplayName || $t('content.authorUser'),
-                })
-              }}
-              <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
-                {{ $t('content.unpublishedByStaff') }}
-              </q-badge>
-              <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
-                {{ ts.coauthorLabels.join(', ') }}
-              </span>
-            </q-item-label>
-            <q-item-label caption>
-              {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <div class="q-gutter-xs" @click.stop>
-              <q-btn
-                v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
-                flat
-                dense
-                color="primary"
-                :label="$t('content.republish')"
-                :loading="content.loading"
-                @click.stop="onRepublishSet(ts.id)"
-              />
-              <q-btn
-                v-if="
-                  staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && canUnpublishSet
-                "
-                flat
-                dense
-                color="warning"
-                :label="$t('content.unpublish')"
-                :loading="content.loading"
-                @click.stop="confirmUnpublishSet(ts.id)"
-              />
-              <q-btn
-                v-if="
-                  staffMode &&
-                  content.pack?.hasLive &&
-                  !isSetSoftUnpublished(ts) &&
-                  !canUnpublishSet
-                "
-                flat
-                dense
-                color="warning"
-                :label="$t('content.unpublish')"
-                disable
-              >
-                <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
-              </q-btn>
-              <q-icon v-if="canEnterEditorSet(ts)" name="chevron_right" />
-            </div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!local.taskSets.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyTaskSets') }}</q-item-section>
-        </q-item>
-      </q-list>
+          <template #status>
+            <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
+              {{ $t('content.unpublishedByStaff') }}
+            </q-badge>
+          </template>
+          <template #trailing>
+            <q-btn
+              v-if="canOpenTasks && canEnterEditorSet(ts)"
+              flat
+              dense
+              round
+              size="sm"
+              icon="edit"
+              :aria-label="$t('content.edit')"
+              :data-test-id="`editor-task-set-edit-${ts.id}`"
+              :disable="!canOpenTasks"
+              @click.stop="openTaskSet(ts.id)"
+            />
+          </template>
+          <template #caption>
+            {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
+            <span v-if="ts.coauthorLabels?.length"> · {{ ts.coauthorLabels.join(', ') }}</span>
+          </template>
+          <template #actions>
+            <q-btn
+              v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
+              flat
+              dense
+              size="sm"
+              color="primary"
+              :label="$t('content.republish')"
+              :loading="content.loading"
+              @click.stop="onRepublishSet(ts.id)"
+            />
+            <q-btn
+              v-if="
+                staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && canUnpublishSet
+              "
+              flat
+              dense
+              size="sm"
+              color="warning"
+              :label="$t('content.unpublish')"
+              :loading="content.loading"
+              @click.stop="confirmUnpublishSet(ts.id)"
+            />
+            <q-btn
+              v-if="
+                staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && !canUnpublishSet
+              "
+              flat
+              dense
+              size="sm"
+              color="warning"
+              :label="$t('content.unpublish')"
+              disable
+            >
+              <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
+            </q-btn>
+          </template>
+        </PackListCardTile>
+      </div>
+      <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyTaskSets') }}</div>
 
       <div class="row q-gutter-sm">
         <!-- SC-PACK-111: no Submit for staff edits. -->
@@ -389,6 +396,7 @@ import type { QForm } from 'quasar';
 
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackCsvImportDialog from '@/components/PackCsvImportDialog.vue';
+import PackListCardTile from '@/components/PackListCardTile.vue';
 import {
   downloadCsvText,
   parseAnswers,

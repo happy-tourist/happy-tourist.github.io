@@ -157,7 +157,7 @@ const stubs = {
   'q-breadcrumbs-el': {
     props: ['label', 'to'],
     template:
-      '<span class="crumb" :data-to="to ? JSON.stringify(to) : undefined">{{ label }}</span>',
+      '<span class="crumb" v-bind="$attrs" :data-to="to ? JSON.stringify(to) : undefined" @click="$emit(\'click\', $event)">{{ label }}</span>',
   },
   'q-dialog': { template: '<div><slot /></div>' },
   'q-card': { template: '<div><slot /></div>' },
@@ -404,6 +404,48 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(crumbs).toContain('header.maps');
     expect(crumbs).toContain('Картограф');
   });
+
+  it.each([
+    {
+      name: 'content-pack',
+      params: { id: 'p1' },
+      path: '/content/packs/p1',
+      staff: false,
+    },
+    {
+      name: 'content-maps',
+      params: {},
+      path: '/content/maps',
+      staff: false,
+    },
+    {
+      name: 'content-staff',
+      params: {},
+      path: '/content/staff',
+      staff: true,
+    },
+    {
+      name: 'content-my-moderation',
+      params: {},
+      path: '/content/my-moderation',
+      staff: false,
+    },
+  ] as const)(
+    'SC-BRAND-20: Lobby crumb navigates to lobby from $name',
+    async ({ name, params, path, staff }) => {
+      authState.isStaff = staff;
+      routeState.name = name;
+      routeState.params = { ...params };
+      routeState.path = path;
+      wrapper = mountApp();
+      await flushPromises();
+      const lobbyCrumb = wrapper.find('[data-test-id="breadcrumb-lobby"]');
+      expect(lobbyCrumb.exists()).toBe(true);
+      expect(lobbyCrumb.attributes('data-to') ?? '').toContain('"name":"lobby"');
+      await lobbyCrumb.trigger('click');
+      expect(routerPush).toHaveBeenCalledWith({ name: 'lobby' });
+    },
+  );
 
   it('SC-LEAVE-09/10/11/12: Game leave right; logo leave; no logout; no sections', async () => {
     routeState.name = 'game';

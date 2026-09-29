@@ -155,6 +155,8 @@ const stubs = {
   'q-input': { template: '<input />' },
   'q-chip': { template: '<span><slot /></span>' },
   MapGridPreview: { template: '<div class="map-preview-stub" />' },
+  PackListCardTile: false,
+  PackAnswerCardTile: true,
 };
 
 describe('moderationTakeHeldBy helper', () => {

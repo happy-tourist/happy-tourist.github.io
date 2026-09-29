@@ -225,6 +225,7 @@ const stubs = {
     props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
     template: '<div class="pack-task-tile-stub">{{ question }}</div>',
   },
+  PackListCardTile: false,
 };
 
 describe('follow-up 4 UI (SC-PACK-129…133)', () => {
@@ -458,13 +459,11 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('content.unpublishedByStaff');
-    expect(wrapper.find('.text-grey-6').exists()).toBe(true);
+    expect(wrapper.find('.pack-list-tile--muted').exists()).toBe(true);
 
-    const softRow = wrapper
-      .findAll('.q-item-stub')
-      .find((n) => n.classes().includes('text-grey-6'));
-    expect(softRow).toBeTruthy();
-    await softRow!.trigger('click');
+    const softRow = wrapper.find('.pack-list-tile--muted');
+    expect(softRow.exists()).toBe(true);
+    await softRow.trigger('click');
     await flushPromises();
     expect(routerPush).not.toHaveBeenCalled();
   });
@@ -478,9 +477,9 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
       true,
     );
 
-    // Click first task-set row (published ts1) — answer cards list has items too.
+    // Click first task-set card (published ts1).
     const setRows = wrapper
-      .findAll('.q-item-stub')
+      .findAll('.pack-list-tile')
       .filter((n) => n.text().includes('content.taskSetLabelFrom'));
     expect(setRows.length).toBeGreaterThanOrEqual(1);
     await setRows[0]!.trigger('click');

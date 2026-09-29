@@ -144,7 +144,7 @@ vi.mock('quasar', async (importOriginal) => {
   return {
     ...actual,
     useQuasar: () => ({
-      screen: { lt: { sm: false } },
+      screen: { lt: { sm: false, md: false } },
     }),
   };
 });
@@ -263,7 +263,7 @@ const stubs = {
     props: ['grid', 'size', 'interactive', 'ariaLabel'],
     emits: ['cellClick'],
     template:
-      '<div class="map-preview-stub" :data-interactive="interactive" :data-grid-len="(grid || \'\').length" @click="$emit(\'cellClick\', 0)" />',
+      '<div class="map-preview-stub" :data-interactive="interactive" :data-size="size" :data-grid-len="(grid || \'\').length" @click="$emit(\'cellClick\', 0)" />',
   },
 };
 
@@ -693,6 +693,7 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
     authState.needsEmailVerification = false;
     loadDraft.mockReset();
     loadLiveMap.mockReset();
+    saveDraft.mockReset().mockResolvedValue(draftRevision);
     acquireEditLock.mockClear().mockResolvedValue(undefined);
     loadStaffEdit.mockClear().mockResolvedValue(undefined);
     routerPush.mockClear();
@@ -706,6 +707,7 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
   afterEach(() => {
     wrapper?.unmount();
     wrapper = null;
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -869,5 +871,147 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
     expect(wrapper.html().indexOf('map-view-edit')).toBeLessThan(
       wrapper.html().indexOf('map-view-meta'),
     );
+  });
+
+  it('SC-MAP-53: second paint survives first quiet-save round-trip (block + anti-stale)', async () => {
+    vi.useFakeTimers();
+    mapsState.map = { ...draftMap };
+    mapsState.draft = { grid: emptyGrid, players: 1, touristsPerPlayer: 1 };
+    loadDraft.mockImplementation(async () => {
+      /* state already set */
+    });
+
+    let resolveSave: ((v: MapRevision) => void) | null = null;
+    saveDraft.mockImplementation(
+      () =>
+        new Promise<MapRevision>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    const preview = wrapper.findComponent({ name: 'MapGridPreview' });
+    expect(preview.props('interactive')).toBe(true);
+
+    // Paint cell A (index 0)
+    await preview.vm.$emit('cellClick', 0);
+    await flushPromises();
+    const gridAfterA = String(preview.props('grid'));
+    expect(gridAfterA[0]).toBe('1');
+
+    // Quiet save starts after debounce
+    await vi.advanceTimersByTimeAsync(800);
+    await flushPromises();
+    expect(saveDraft).toHaveBeenCalled();
+    expect(preview.props('interactive')).toBe(false);
+
+    // Paint cell B while save in flight — blocked (D15)
+    await preview.vm.$emit('cellClick', 1);
+    await flushPromises();
+    expect(String(preview.props('grid'))[1]).toBe('.');
+
+    // Stale-ish echo of request (only A); apply allowed because revision unchanged
+    resolveSave!({
+      grid: gridAfterA,
+      players: 1,
+      touristsPerPlayer: 1,
+    });
+    await flushPromises();
+    expect(preview.props('interactive')).toBe(true);
+    expect(String(preview.props('grid'))[0]).toBe('1');
+
+    // Second paint after settle remains
+    await preview.vm.$emit('cellClick', 1);
+    await flushPromises();
+    const gridFinal = String(preview.props('grid'));
+    expect(gridFinal[0]).toBe('1');
+    expect(gridFinal[1]).toBe('1');
+
+    vi.useRealTimers();
+  });
+
+  it('SC-MAP-53: anti-stale skips save apply when local revision advanced', async () => {
+    vi.useFakeTimers();
+    mapsState.map = { ...draftMap };
+    mapsState.draft = { grid: emptyGrid, players: 1, touristsPerPlayer: 1 };
+    loadDraft.mockImplementation(async () => {
+      /* state already set */
+    });
+
+    let resolveSave: ((v: MapRevision) => void) | null = null;
+    saveDraft.mockImplementation(
+      () =>
+        new Promise<MapRevision>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    const preview = wrapper.findComponent({ name: 'MapGridPreview' });
+    await preview.vm.$emit('cellClick', 0);
+    await flushPromises();
+    const gridWithA = String(preview.props('grid'));
+
+    await vi.advanceTimersByTimeAsync(800);
+    await flushPromises();
+
+    // Seat change during in-flight save bumps local revision (anti-stale path)
+    const setupState = (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$
+      .setupState;
+    const localRef = setupState.local as { value: MapRevision };
+    localRef.value = { ...localRef.value, players: 2 };
+    (setupState.onSeatsChange as () => void)();
+    await flushPromises();
+
+    // Server returns older snapshot without seat bump — must not wipe local
+    resolveSave!({
+      grid: gridWithA,
+      players: 1,
+      touristsPerPlayer: 1,
+    });
+    await flushPromises();
+
+    expect(localRef.value.players).toBe(2);
+    expect(String(preview.props('grid'))[0]).toBe('1');
+
+    vi.useRealTimers();
+  });
+
+  it('SC-MAP-54: board-comparable field; palette tiles under map with labels under tiles', async () => {
+    mapsState.map = { ...draftMap };
+    mapsState.draft = { ...draftRevision, players: 1, touristsPerPlayer: 1 };
+    loadDraft.mockImplementation(async () => {
+      /* state already set */
+    });
+
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    const field = wrapper.find('[data-test-id="map-editor-field"]');
+    const tools = wrapper.find('[data-test-id="map-paint-tools"]');
+    expect(field.exists()).toBe(true);
+    expect(tools.exists()).toBe(true);
+    // Palette is below the field in DOM order
+    expect(wrapper.html().indexOf('map-editor-field')).toBeLessThan(
+      wrapper.html().indexOf('map-paint-tools'),
+    );
+
+    const preview = wrapper.findComponent({ name: 'MapGridPreview' });
+    expect(Number(preview.props('size'))).toBeGreaterThanOrEqual(480);
+
+    for (const tool of ['start', 'task', 'finish'] as const) {
+      const tile = wrapper.find(`[data-test-id="map-paint-tool-${tool}"]`);
+      expect(tile.exists()).toBe(true);
+      expect(tile.find('.map-paint-tile__swatch').exists()).toBe(true);
+      expect(tile.find('.map-paint-tile__label').text()).toBe(`maps.tools.${tool}`);
+      // Label under swatch in DOM
+      expect(tile.html().indexOf('map-paint-tile__swatch')).toBeLessThan(
+        tile.html().indexOf('map-paint-tile__label'),
+      );
+    }
   });
 });

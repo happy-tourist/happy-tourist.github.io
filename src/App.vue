@@ -205,6 +205,8 @@
             :key="`${crumb.label}-${idx}`"
             :label="crumb.label"
             :to="crumb.to"
+            :data-test-id="crumb.testId"
+            @click="onBreadcrumbClick(crumb, $event)"
           />
         </q-breadcrumbs>
       </div>
@@ -223,7 +225,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 
 import brandLogoUrl from '@/assets/brand/logo.png';
 import { useAuthStore } from '@/stores/auth';
@@ -314,7 +316,32 @@ const showSessionLogout = computed(
   () => auth.isAuthenticated && !isGameRoute.value && !isLoginRoute.value,
 );
 
-type Crumb = { label: string; to?: { name: string; params?: Record<string, string> } };
+type Crumb = {
+  label: string;
+  to?: RouteLocationRaw;
+  testId?: string;
+};
+
+/** Lobby root crumb — always navigable (SC-BRAND-20 / D17). */
+const lobbyCrumb = (): Crumb => ({
+  label: t('header.lobby'),
+  to: { name: 'lobby' },
+  testId: 'breadcrumb-lobby',
+});
+
+/** D17: explicit push so Lobby (and other linked crumbs) are never dead labels. */
+function onBreadcrumbClick(crumb: Crumb, e: Event) {
+  if (!crumb.to) {
+    return;
+  }
+  // Let modified / middle-clicks keep native `<a :to>` behavior (new tab, etc.).
+  const me = e as MouseEvent;
+  if (me.metaKey || me.ctrlKey || me.shiftKey || me.altKey || me.button === 1) {
+    return;
+  }
+  e.preventDefault();
+  void router.push(crumb.to);
+}
 
 const breadcrumbItems = computed((): Crumb[] => {
   const name = String(route.name ?? '');
@@ -323,7 +350,7 @@ const breadcrumbItems = computed((): Crumb[] => {
   }
   if (PACKS_BREADCRUMB_ROUTES.has(name)) {
     const crumbs: Crumb[] = [
-      { label: t('header.lobby'), to: { name: 'lobby' } },
+      lobbyCrumb(),
       { label: t('header.packs'), to: { name: 'content-catalog' } },
     ];
     if (name === 'content-catalog' || name === 'content-pack-new') {
@@ -355,7 +382,7 @@ const breadcrumbItems = computed((): Crumb[] => {
   }
   if (MAPS_BREADCRUMB_ROUTES.has(name)) {
     const crumbs: Crumb[] = [
-      { label: t('header.lobby'), to: { name: 'lobby' } },
+      lobbyCrumb(),
       { label: t('header.maps'), to: { name: 'content-maps' } },
     ];
     if (name === 'content-map-edit') {
@@ -380,7 +407,7 @@ const breadcrumbItems = computed((): Crumb[] => {
   }
   // SC-BRAND-18 / D20: staff + author moderation crumbs (Lobby / Модерация [/ …])
   if (MODERATION_BREADCRUMB_ROUTES.has(name)) {
-    const crumbs: Crumb[] = [{ label: t('header.lobby'), to: { name: 'lobby' } }];
+    const crumbs: Crumb[] = [lobbyCrumb()];
     if (name === 'content-my-moderation') {
       crumbs.push({ label: t('header.moderation') });
       return crumbs;

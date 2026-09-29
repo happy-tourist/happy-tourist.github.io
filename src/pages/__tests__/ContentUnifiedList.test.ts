@@ -71,12 +71,14 @@ const stubs = {
       '<button type="button" v-bind="$attrs" :disabled="disable" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
   },
   'q-banner': true,
-  'q-badge': { template: '<span><slot /></span>' },
+  'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
   'q-dialog': { template: '<div><slot /></div>' },
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-icon': true,
+  // Render real 100×200 cards so packs-row / packs-star test ids stay queryable (SC-PACK-228).
+  PackListCardTile: false,
 };
 
 function sampleCatalog(): ContentPackSummary[] {

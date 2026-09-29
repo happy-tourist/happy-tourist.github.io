@@ -91,6 +91,8 @@ const stubs = {
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
+  PackListCardTile: false,
+  PackAnswerCardTile: true,
 };
 
 describe('live pack ACL (SC-PACK-53/106/108/112/154/164/165)', () => {

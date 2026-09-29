@@ -22,6 +22,7 @@
         round
         size="sm"
         icon="edit"
+        class="pack-answer-tile__edit-btn"
         :aria-label="$t('content.editCard')"
         data-testid="pack-answer-tile-edit"
         @click="emit('edit')"
@@ -87,26 +88,40 @@ function onBodyClick() {
 </script>
 
 <style scoped>
+/* Fixed px sizes + explicit light/dark contrast (D12 / SC-PACK-225/227). */
 .pack-answer-tile {
+  --pack-tile-bg: #ffffff;
+  --pack-tile-fg: rgba(0, 0, 0, 0.87);
+  --pack-tile-muted: rgba(0, 0, 0, 0.7);
+  --pack-tile-border: rgba(0, 0, 0, 0.14);
+  --pack-tile-splitter: rgba(0, 0, 0, 0.12);
+  --pack-tile-edit: rgba(0, 0, 0, 0.72);
+
   position: relative;
   box-sizing: border-box;
-  width: 9.5rem;
-  min-height: 12rem;
+  width: 200px;
+  height: 200px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  background: var(--q-card-background, #fff);
+  border: 1px solid var(--pack-tile-border);
+  background: var(--pack-tile-bg);
+  color: var(--pack-tile-fg);
   overflow: hidden;
   flex: 0 0 auto;
 }
 
 .body--dark .pack-answer-tile {
-  border-color: rgba(255, 255, 255, 0.18);
+  --pack-tile-bg: #2a2a2a;
+  --pack-tile-fg: rgba(255, 255, 255, 0.92);
+  --pack-tile-muted: rgba(255, 255, 255, 0.78);
+  --pack-tile-border: rgba(255, 255, 255, 0.22);
+  --pack-tile-splitter: rgba(255, 255, 255, 0.18);
+  --pack-tile-edit: rgba(255, 255, 255, 0.88);
 }
 
 .pack-answer-tile--short {
-  min-height: 6rem;
+  width: 100px;
 }
 
 .pack-answer-tile--selectable {
@@ -133,8 +148,13 @@ function onBodyClick() {
   gap: 0;
 }
 
+.pack-answer-tile__edit-btn {
+  color: var(--pack-tile-edit);
+}
+
 .pack-answer-tile__content {
   flex: 1 1 50%;
+  min-height: 0;
   padding: 1.75rem 0.65rem 0.55rem;
   font-weight: 600;
   font-size: 0.92rem;
@@ -144,6 +164,7 @@ function onBodyClick() {
   align-items: center;
   justify-content: center;
   text-align: center;
+  color: var(--pack-tile-fg);
 }
 
 .pack-answer-tile--short .pack-answer-tile__content {
@@ -153,20 +174,15 @@ function onBodyClick() {
 }
 
 .pack-answer-tile__description {
-  flex: 0 1 50%;
-  max-height: 5.5rem;
+  flex: 1 1 50%;
+  min-height: 0;
   overflow-y: auto;
   padding: 0.45rem 0.65rem 0.55rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-top: 1px solid var(--pack-tile-splitter);
   font-size: 0.78rem;
   line-height: 1.3;
   white-space: pre-wrap;
   word-break: break-word;
-  color: inherit;
-  opacity: 0.85;
-}
-
-.body--dark .pack-answer-tile__description {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  color: var(--pack-tile-muted);
 }
 </style>

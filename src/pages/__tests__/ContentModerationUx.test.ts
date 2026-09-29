@@ -259,6 +259,7 @@ const stubs = {
       '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
   },
   PackTasksCsvControls: { template: '<div data-testid="tasks-csv-stub" />' },
+  PackListCardTile: false,
 };
 
 describe('moderation UX follow-up (SC-PACK-126…128)', () => {

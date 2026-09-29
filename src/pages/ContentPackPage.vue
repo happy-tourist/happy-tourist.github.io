@@ -119,102 +119,101 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-130/132: summary rows + drill-in; soft-unpublished gray -->
-      <q-list bordered separator class="rounded-borders">
-        <q-item
+      <!-- SC-PACK-229 / D13: 100×200 task-set cards; soft-unpublish / open rules preserved -->
+      <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
+        <PackListCardTile
           v-for="(ts, si) in live.taskSets"
           :key="ts.id"
+          :title="
+            $t('content.taskSetLabelFrom', {
+              n: si + 1,
+              name: ts.authorDisplayName || $t('content.authorUser'),
+            })
+          "
           :clickable="canEnterTaskSet(ts)"
-          :class="{ 'text-grey-6': isSetSoftUnpublished(ts) }"
-          :data-test-id="
+          :muted="isSetSoftUnpublished(ts)"
+          :test-id="
             isNeverLiveGhost(ts) ? `pack-task-set-ghost-${ts.id}` : `pack-task-set-row-${ts.id}`
           "
-          v-ripple="canEnterTaskSet(ts)"
-          @click="onTaskSetClick(ts)"
+          @open="onTaskSetClick(ts)"
         >
-          <q-item-section>
-            <q-item-label>
-              {{
-                $t('content.taskSetLabelFrom', {
-                  n: si + 1,
-                  name: ts.authorDisplayName || $t('content.authorUser'),
-                })
-              }}
-              <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" class="q-ml-sm">
-                {{ $t('content.unpublishedByStaff') }}
-              </q-badge>
-              <q-badge
-                v-else-if="setModerationBadge(ts)"
-                :color="setModerationBadgeColor(ts)"
-                class="q-ml-sm"
-                :data-test-id="`pack-task-set-status-${ts.id}`"
-              >
-                {{ setModerationBadge(ts) }}
-              </q-badge>
-              <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
-                {{ ts.coauthorLabels.join(', ') }}
-              </span>
-            </q-item-label>
-            <q-item-label caption>
-              {{ $t('content.tasksCount', { n: ts.tasks.length }) }} ·
-              {{ difficultySummary(ts) }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <div class="q-gutter-xs" @click.stop>
-              <q-btn
-                v-if="canAuthorEditSet(ts)"
-                flat
-                dense
-                icon="edit"
-                :aria-label="$t('content.edit')"
-                data-test-id="pack-task-set-author-edit"
-                @click.stop="onAuthorEditSet(ts)"
-              />
-              <q-btn
-                v-if="auth.isStaff && isSetSoftUnpublished(ts)"
-                flat
-                dense
-                color="primary"
-                :label="$t('content.republish')"
-                :loading="content.loading"
-                @click.stop="onRepublishSet(ts.id)"
-              />
-              <q-btn
-                v-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
-                flat
-                dense
-                icon="edit"
-                :aria-label="$t('content.edit')"
-                @click.stop="onStaffEditSet(ts.id)"
-              />
-              <q-btn
-                v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
-                flat
-                dense
-                color="warning"
-                :label="$t('content.unpublish')"
-                :loading="content.loading"
-                @click.stop="confirmUnpublishSet(ts.id)"
-              />
-              <q-btn
-                v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
-                flat
-                dense
-                color="warning"
-                :label="$t('content.unpublish')"
-                disable
-              >
-                <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
-              </q-btn>
-              <q-icon v-if="canEnterTaskSet(ts)" name="chevron_right" />
-            </div>
-          </q-item-section>
-        </q-item>
-        <q-item v-if="!live.taskSets.length">
-          <q-item-section class="text-muted">{{ $t('content.emptyTasks') }}</q-item-section>
-        </q-item>
-      </q-list>
+          <template #status>
+            <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
+              {{ $t('content.unpublishedByStaff') }}
+            </q-badge>
+            <q-badge
+              v-else-if="setModerationBadge(ts)"
+              :color="setModerationBadgeColor(ts)"
+              dense
+              :data-test-id="`pack-task-set-status-${ts.id}`"
+            >
+              {{ setModerationBadge(ts) }}
+            </q-badge>
+          </template>
+          <template #trailing>
+            <q-btn
+              v-if="canAuthorEditSet(ts)"
+              flat
+              dense
+              round
+              size="sm"
+              icon="edit"
+              :aria-label="$t('content.edit')"
+              data-test-id="pack-task-set-author-edit"
+              @click.stop="onAuthorEditSet(ts)"
+            />
+            <q-btn
+              v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
+              flat
+              dense
+              round
+              size="sm"
+              icon="edit"
+              :aria-label="$t('content.edit')"
+              @click.stop="onStaffEditSet(ts.id)"
+            />
+          </template>
+          <template #caption>
+            {{ $t('content.tasksCount', { n: ts.tasks.length }) }} ·
+            {{ difficultySummary(ts) }}
+            <span v-if="ts.coauthorLabels?.length"> · {{ ts.coauthorLabels.join(', ') }}</span>
+          </template>
+          <template #actions>
+            <q-btn
+              v-if="auth.isStaff && isSetSoftUnpublished(ts)"
+              flat
+              dense
+              size="sm"
+              color="primary"
+              :label="$t('content.republish')"
+              :loading="content.loading"
+              @click.stop="onRepublishSet(ts.id)"
+            />
+            <q-btn
+              v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
+              flat
+              dense
+              size="sm"
+              color="warning"
+              :label="$t('content.unpublish')"
+              :loading="content.loading"
+              @click.stop="confirmUnpublishSet(ts.id)"
+            />
+            <q-btn
+              v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
+              flat
+              dense
+              size="sm"
+              color="warning"
+              :label="$t('content.unpublish')"
+              disable
+            >
+              <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
+            </q-btn>
+          </template>
+        </PackListCardTile>
+      </div>
+      <div v-else class="text-muted">{{ $t('content.emptyTasks') }}</div>
     </template>
 
     <q-dialog v-model="gateOpen">
@@ -287,6 +286,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackListCardTile from '@/components/PackListCardTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
 
