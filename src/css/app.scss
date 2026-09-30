@@ -15,3 +15,54 @@
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+
+/* Peek-comparable answer-slot chrome (GamePage `.peek-slot` + editor/tile `.peek-slot-like`; SC-PACK-237/238). */
+.peek-slot,
+.peek-slot-like {
+  min-width: 72px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 2px dashed rgba(0, 0, 0, 0.28);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+}
+
+.body--dark .peek-slot,
+.body--dark .peek-slot-like {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.peek-slot--filled,
+.peek-slot-like--filled {
+  border-style: solid;
+  border-color: var(--q-primary);
+}
+
+.peek-slot--interactive,
+.peek-slot-like--interactive {
+  cursor: pointer;
+}
+
+.peek-slot__empty,
+.peek-slot-like__empty {
+  opacity: 0.55;
+  font-size: 12px;
+}
+
+.peek-slot__label,
+.peek-slot-like__label {
+  font-size: 13px;
+  text-align: center;
+  word-break: break-word;
+}
+
+.peek-slot-like-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}

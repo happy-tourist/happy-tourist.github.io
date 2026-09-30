@@ -81,18 +81,23 @@
                 @click="removeFormSlot"
               />
             </div>
-            <div class="row q-gutter-xs q-mb-sm">
-              <q-chip
+            <div class="peek-slot-like-row q-mb-sm" data-testid="compose-slot-row">
+              <div
                 v-for="slot in taskForm.slots"
                 :key="slot.id"
-                dense
-                removable
-                :outline="!slot.answerCardId"
-                :color="slot.answerCardId ? 'primary' : 'grey'"
-                @remove="clearFormSlot(slot)"
+                class="peek-slot-like"
+                :class="{
+                  'peek-slot-like--filled': Boolean(slot.answerCardId),
+                  'peek-slot-like--interactive': !readOnly && Boolean(slot.answerCardId),
+                }"
+                data-testid="peek-slot-like"
+                @click="slot.answerCardId && clearFormSlot(slot)"
               >
-                {{ slotLabel(slot) }}
-              </q-chip>
+                <span v-if="slot.answerCardId" class="peek-slot-like__label">{{
+                  slotLabel(slot)
+                }}</span>
+                <span v-else class="peek-slot-like__empty">{{ slotLabel(slot) }}</span>
+              </div>
             </div>
             <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
             <div class="pack-card-grid q-mb-md" data-testid="slot-picker-grid">
@@ -257,6 +262,7 @@ import type { QForm } from 'quasar';
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
+import { fingerprintEditorContent, isEditorContentDirty } from '@/lib/editorDirty';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -290,6 +296,8 @@ const editingTaskId = ref<string | null>(null);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const threadMessages = ref<ModerationMessage[]>([]);
+/** D3 / SC-PACK-234: pristine snapshot after load / successful submit. */
+const submitBaseline = ref<string | null>(null);
 const taskForm = reactive<{
   question: string;
   difficulty: Difficulty;
@@ -352,8 +360,11 @@ const meetsMinima = computed(() => {
   );
 });
 
+/** D3 / SC-PACK-234: dirty vs load baseline. */
+const isDirty = computed(() => isEditorContentDirty(local.value, submitBaseline.value));
+
 const canSubmit = computed(() => {
-  if (readOnly.value || !meetsMinima.value) return false;
+  if (readOnly.value || !meetsMinima.value || !isDirty.value) return false;
   if (state.value?.moderationStatus === 'pending') return false;
   return true;
 });
@@ -376,6 +387,7 @@ const submitHint = computed(() => {
   if (state.value?.foreignPending) return t('content.addTaskSetForeignPending');
   if (state.value?.moderationStatus === 'pending') return t('content.statusPendingAuthor');
   if (!meetsMinima.value) return t('content.submitTasksHint');
+  if (!isDirty.value) return t('content.submitHintNotDirty');
   return '';
 });
 
@@ -543,7 +555,7 @@ async function onSubmit() {
       ...(state.value?.stagedRevisionId ? { stagedRevisionId: state.value.stagedRevisionId } : {}),
     });
     await content.loadAddTaskSet(packId.value);
-    syncFromState();
+    syncFromState({ refreshBaseline: true });
     await loadThread();
   } catch {
     /* error in store */
@@ -556,18 +568,19 @@ async function onCancel() {
   try {
     await content.cancelRequest(id);
     await content.loadAddTaskSet(packId.value);
-    syncFromState();
+    syncFromState({ refreshBaseline: true });
     await loadThread();
   } catch {
     /* error in store */
   }
 }
 
-function syncFromState() {
+function syncFromState(opts?: { refreshBaseline?: boolean }) {
   const data = content.addTaskSet;
   if (!data) {
     local.value = null;
     liveCards.value = [];
+    submitBaseline.value = null;
     return;
   }
   liveCards.value = data.liveCards ?? [];
@@ -580,14 +593,18 @@ function syncFromState() {
         coauthorLabels: [],
         tasks: [],
       };
+  if (opts?.refreshBaseline || submitBaseline.value == null) {
+    submitBaseline.value = fingerprintEditorContent(local.value);
+  }
 }
 
 async function load() {
   if (!packId.value) return;
   if (!checkGate()) return;
+  submitBaseline.value = null;
   try {
     await content.loadAddTaskSet(packId.value);
-    syncFromState();
+    syncFromState({ refreshBaseline: true });
     await loadThread();
   } catch {
     if (content.error === 'not_in_collection' || content.error === 'pack_not_public') {

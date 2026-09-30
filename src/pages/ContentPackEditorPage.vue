@@ -418,6 +418,13 @@ import type { QForm } from 'quasar';
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackListCardTile from '@/components/PackListCardTile.vue';
 import {
+  clearPackSubmitBaseline,
+  ensurePackSubmitBaseline,
+  getPackSubmitBaseline,
+  isEditorContentDirty,
+  setPackSubmitBaseline,
+} from '@/lib/editorDirty';
+import {
   downloadCsvText,
   parseAnswers,
   sanitizePackCsvFilename,
@@ -522,9 +529,16 @@ const meetsSubmitMinima = computed(() => {
   );
 });
 
+/** D3 / SC-PACK-234: dirty vs session baseline (survives cards↔tasks). */
+const isDirty = computed(() => {
+  if (!local.value || !packId.value) return false;
+  return isEditorContentDirty(local.value, getPackSubmitBaseline(packId.value));
+});
+
 /** SC-PACK-102/156: unified submit for creator / task-set-author working copy (incl. post-publish). */
 const canSubmit = computed(() => {
   if (staffMode.value || !local.value || readOnly.value) return false;
+  if (!isDirty.value) return false;
   if (content.editorKind === 'task_set_author') {
     // Task-set author submits from cards page after editing own sets; minima = own sets.
     const mine = local.value.taskSets.filter((ts) => ts.authorUserId === uid.value);
@@ -559,13 +573,21 @@ const submitHint = computed(() => {
     return t('content.statusPendingAuthor');
   }
   if (content.editorKind === 'task_set_author') {
+    if (!isDirty.value) return t('content.submitHintNotDirty');
     return t('content.submitHintTaskSetAuthor');
   }
   if (!meetsSubmitMinima.value) {
     return t('content.submitHint');
   }
+  if (!isDirty.value) return t('content.submitHintNotDirty');
   return t('content.submitHint');
 });
+
+function capturePackBaseline(body: PackContent, refresh = false) {
+  if (!packId.value) return;
+  if (refresh) setPackSubmitBaseline(packId.value, body);
+  else ensurePackSubmitBaseline(packId.value, body);
+}
 
 /** Task-set author cannot edit answer cards (SC-PACK-159). */
 const cardsReadOnly = computed(() => readOnly.value || content.editorKind === 'task_set_author');
@@ -924,6 +946,7 @@ async function onSubmit() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
     suppressAutosave = false;
+    capturePackBaseline(local.value, true);
     await loadThread();
   } catch {
     /* error in store */
@@ -950,6 +973,8 @@ async function enterStaffEdit() {
   local.value = JSON.parse(JSON.stringify(data.content)) as PackContent;
   suppressAutosave = false;
   staffMode.value = true;
+  // Staff has no Submit; still seed baseline so author session state stays coherent.
+  capturePackBaseline(local.value);
 }
 
 async function load() {
@@ -971,6 +996,7 @@ async function load() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(content.draft)) as PackContent;
     suppressAutosave = false;
+    capturePackBaseline(local.value);
     startLockHeartbeat();
     return;
   }
@@ -986,12 +1012,18 @@ async function load() {
       const draftData = await content.loadDraft(packId.value);
       packHasLive = Boolean(draftData.pack.hasLive);
       createdBy = draftData.pack.createdBy;
-      // Unpublished creator path (even if staff) — keep submit.
+      // D1 / SC-PACK-231: published + staff → staff-save before creator/author branch.
+      if (auth.isStaff && packHasLive) {
+        await enterStaffEdit();
+        return;
+      }
+      // Unpublished creator path (even if staff) — keep submit (SC-PACK-232).
       if (!packHasLive && createdBy === uid.value) {
         suppressAutosave = true;
         local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
         suppressAutosave = false;
         staffMode.value = false;
+        capturePackBaseline(local.value);
         await loadThread();
         return;
       }
@@ -1004,6 +1036,7 @@ async function load() {
         local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
         suppressAutosave = false;
         staffMode.value = false;
+        capturePackBaseline(local.value);
         await loadThread();
         return;
       }
@@ -1041,12 +1074,16 @@ async function load() {
 }
 
 onMounted(load);
-watch(packId, load);
+watch(packId, (id, prev) => {
+  if (prev && prev !== id) clearPackSubmitBaseline(prev);
+  void load();
+});
 
 /** SC-PACK-115: unlock only when leaving the whole Edit session, not cards↔tasks. */
 onBeforeRouteLeave((to) => {
   if (!packId.value) return;
   if (isStaffEditSessionNavigation(to, packId.value)) return;
+  clearPackSubmitBaseline(packId.value);
   // Prefer staffEditTarget so mid-load leave still unlocks (lockHeld may still be false).
   if (!lockHeld.value && !content.staffEditTarget) return;
   void content.releaseEditLock(packId.value).catch(() => {

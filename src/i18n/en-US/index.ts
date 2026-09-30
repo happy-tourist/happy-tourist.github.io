@@ -278,6 +278,7 @@ export default {
     submitTasksHint: 'Нужно минимум 2 вопроса со слотами.',
     submitAnswersHintNotDirty: 'Нет изменений карточек для отправки.',
     submitTasksHintNotDirty: 'Нет изменений заданий для отправки.',
+    submitHintNotDirty: 'Нет изменений для отправки на модерацию.',
     submitLockedOther: 'Сейчас на модерации изменения другого автора — отправка недоступна.',
     submitHint:
       'Нужно ≥2 карточки, ≥1 набор заданий (≥2 вопроса), у каждого задания заполнены слоты.',
@@ -450,6 +451,7 @@ export default {
     submitModeration: 'На модерацию',
     submitHint: 'Заполните поле и отправьте на модерацию.',
     submitHintStarts: 'Нужно минимум {min} стартовых клеток (сейчас {starts}).',
+    submitHintNotDirty: 'Нет изменений для отправки на модерацию.',
     moderationThread: 'Тред модерации',
     delete: 'Удалить карту',
     deleteConfirmTitle: 'Удалить карту?',

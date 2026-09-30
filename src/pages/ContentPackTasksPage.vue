@@ -96,18 +96,23 @@
               />
               <q-btn flat dense round icon="add" :disable="readOnly" @click="addFormSlot" />
             </div>
-            <div class="row q-gutter-sm q-mb-sm">
-              <q-chip
+            <div class="peek-slot-like-row q-mb-sm" data-testid="compose-slot-row">
+              <div
                 v-for="slot in taskForm.slots"
                 :key="slot.id"
-                clickable
-                :outline="!slot.answerCardId"
-                :color="slot.answerCardId ? 'primary' : 'grey'"
-                :disable="readOnly"
-                @click="clearFormSlot(slot)"
+                class="peek-slot-like"
+                :class="{
+                  'peek-slot-like--filled': Boolean(slot.answerCardId),
+                  'peek-slot-like--interactive': !readOnly && Boolean(slot.answerCardId),
+                }"
+                data-testid="peek-slot-like"
+                @click="slot.answerCardId && clearFormSlot(slot)"
               >
-                {{ slotLabel(slot) }}
-              </q-chip>
+                <span v-if="slot.answerCardId" class="peek-slot-like__label">{{
+                  slotLabel(slot)
+                }}</span>
+                <span v-else class="peek-slot-like__empty">{{ slotLabel(slot) }}</span>
+              </div>
             </div>
             <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
             <div class="pack-card-grid q-mb-md" data-testid="slot-picker-grid">
@@ -148,6 +153,7 @@
       </q-card>
 
       <PackTasksCsvControls
+        v-if="!viewOnly"
         :tasks="taskSet.tasks"
         :answer-cards="local.answerCards"
         :pack-title="local.title"
@@ -272,6 +278,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
+import { clearPackSubmitBaseline, ensurePackSubmitBaseline } from '@/lib/editorDirty';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -675,6 +682,10 @@ async function load() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(payload)) as PackContent;
     suppressAutosave = false;
+    // D3: seed pack Submit baseline for author session (cards↔tasks); staff has no Submit.
+    if (!liveViewMode.value && local.value && packId.value) {
+      ensurePackSubmitBaseline(packId.value, local.value);
+    }
 
     if (!local.value.answerCards.length) {
       await router.replace(
@@ -742,8 +753,10 @@ watch([packId, taskSetId], load);
 
 /** SC-PACK-115: unlock only when leaving the whole Edit session. */
 onBeforeRouteLeave((to) => {
-  if (!content.staffEditTarget || !packId.value) return;
+  if (!packId.value) return;
   if (isStaffEditSessionNavigation(to, packId.value)) return;
+  clearPackSubmitBaseline(packId.value);
+  if (!content.staffEditTarget) return;
   void content.releaseEditLock(packId.value).catch(() => {
     /* ignore */
   });

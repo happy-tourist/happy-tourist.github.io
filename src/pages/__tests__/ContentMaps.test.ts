@@ -1076,4 +1076,150 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
       wrapper.html().indexOf('map-editor-seats'),
     );
   });
+
+  it('SC-MAP-62: staff creator on published map has no Submit (staff Mode)', async () => {
+    authState.isStaff = true;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = { id: 'm-approved' };
+    routeState.query = { staff: '1' };
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    loadStaffEdit.mockImplementation(() => {
+      mapsState.map = { ...approvedMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision };
+      return Promise.resolve({
+        map: mapsState.map,
+        content: mapsState.draft,
+        target: 'live',
+      });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(acquireEditLock).toHaveBeenCalledWith('m-approved');
+    expect(loadStaffEdit).toHaveBeenCalledWith('m-approved');
+    expect(wrapper.text()).toContain('maps.staffEditSubtitle');
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.submitModeration'))).toBe(
+      false,
+    );
+  });
+
+  it('SC-MAP-63: staff=1 on never-published keeps Submit (not staffMode)', async () => {
+    authState.isStaff = true;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = { id: 'm-draft' };
+    routeState.query = { staff: '1' };
+    routeState.path = '/content/maps/m-draft/edit';
+    routeState.fullPath = '/content/maps/m-draft/edit?staff=1';
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision, players: 1, touristsPerPlayer: 1 };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(loadStaffEdit).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('maps.staffEditSubtitle');
+    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.submitModeration'))).toBe(
+      true,
+    );
+  });
+
+  it('SC-MAP-63: staff creator on never-published map keeps Submit', async () => {
+    authState.isStaff = true;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = { id: 'm-draft' };
+    routeState.query = {};
+    routeState.path = '/content/maps/m-draft/edit';
+    routeState.fullPath = '/content/maps/m-draft/edit';
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap, createdBy: 'u1' };
+      mapsState.draft = { ...draftRevision, players: 1, touristsPerPlayer: 1 };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    expect(loadStaffEdit).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-test-id="map-paint-tools"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('maps.staffEditSubtitle');
+    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.submitModeration'))).toBe(
+      true,
+    );
+  });
+
+  it('SC-MAP-65: Submit disabled on open without edits; enabled after paint', async () => {
+    authState.isStaff = false;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = { id: 'm-draft' };
+    routeState.query = {};
+    routeState.path = '/content/maps/m-draft/edit';
+    routeState.fullPath = '/content/maps/m-draft/edit';
+    // Start at index 1 so stub click (index 0) paints without toggling the existing start off.
+    const readyGrid = `.1${'.'.repeat(98)}`;
+    const readyRevision = { grid: readyGrid, players: 1, touristsPerPlayer: 1 };
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap, createdBy: 'u1' };
+      mapsState.draft = { ...readyRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    saveDraft.mockImplementation((_id: string, body: MapRevision) => {
+      mapsState.draft = { ...body };
+      return Promise.resolve(mapsState.draft);
+    });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    const submit = () =>
+      wrapper!.findAll('button').find((b) => b.text().includes('maps.submitModeration'));
+    expect(submit()).toBeTruthy();
+    expect(submit()!.attributes('disabled')).toBeDefined();
+
+    await wrapper.find('.map-preview-stub').trigger('click');
+    await flushPromises();
+
+    expect(submit()!.attributes('disabled')).toBeUndefined();
+  });
+
+  it('SC-MAP-65: after successful submit, baseline refresh disables Submit', async () => {
+    authState.isStaff = false;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = { id: 'm-draft' };
+    routeState.query = {};
+    routeState.path = '/content/maps/m-draft/edit';
+    routeState.fullPath = '/content/maps/m-draft/edit';
+    const readyGrid = `.1${'.'.repeat(98)}`;
+    const readyRevision = { grid: readyGrid, players: 1, touristsPerPlayer: 1 };
+    loadDraft.mockImplementation(() => {
+      mapsState.map = { ...draftMap, createdBy: 'u1' };
+      mapsState.draft = { ...readyRevision };
+      return Promise.resolve({ map: mapsState.map, content: mapsState.draft });
+    });
+    saveDraft.mockImplementation((_id: string, body: MapRevision) => {
+      mapsState.draft = { ...body };
+      return Promise.resolve(mapsState.draft);
+    });
+    submitMap.mockResolvedValue({ id: 'req1', mapId: 'm-draft', status: 'pending' });
+    wrapper = getEditorWrapper();
+    await flushPromises();
+
+    await wrapper.find('.map-preview-stub').trigger('click');
+    await flushPromises();
+
+    const submit = () =>
+      wrapper!.findAll('button').find((b) => b.text().includes('maps.submitModeration'));
+    expect(submit()!.attributes('disabled')).toBeUndefined();
+
+    await submit()!.trigger('click');
+    await flushPromises();
+
+    expect(submitMap).toHaveBeenCalled();
+    expect(submit()!.attributes('disabled')).toBeDefined();
+  });
 });

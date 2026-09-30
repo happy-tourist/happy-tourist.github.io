@@ -18,18 +18,19 @@ const stubs = {
     template: '<span class="q-badge-stub" v-bind="$attrs"><slot /></span>',
   },
   'q-tooltip': { template: '<span><slot /></span>' },
-  'q-chip': {
-    template: '<span class="q-chip-stub pack-task-tile__slot" v-bind="$attrs"><slot /></span>',
-  },
 };
 
 const vueSrc = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '../PackTaskTile.vue'),
   'utf8',
 );
+const appScss = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../../css/app.scss'),
+  'utf8',
+);
 
 describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
-  it('shows question, difficulty top-left, and slot chips in a row', () => {
+  it('shows question, difficulty top-left, and peek-slot-like slots in a row', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Capital of France?',
@@ -46,8 +47,35 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(wrapper.find('.pack-task-tile__slots').text()).toContain('Lyon');
     expect(wrapper.find('.pack-task-tile__body').exists()).toBe(true);
     expect(wrapper.findAll('.pack-task-tile__slot')).toHaveLength(2);
+    expect(wrapper.findAll('[data-testid="peek-slot-like"]')).toHaveLength(2);
+    expect(wrapper.findAll('[data-testid="peek-slot-like"]')[0]!.classes()).toContain(
+      'peek-slot-like--filled',
+    );
     expect(vueSrc).toMatch(/\.pack-task-tile__slot-list\s*\{[^}]*flex-direction:\s*row/s);
     expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*border-left:/s);
+    expect(vueSrc).not.toMatch(/<q-chip/);
+  });
+
+  it('SC-PACK-238: slots use peek-comparable chrome class and sizes', () => {
+    const wrapper = mount(PackTaskTile, {
+      props: {
+        question: 'Q?',
+        difficulty: 1,
+        slotLabels: ['A', 'content.slotEmpty'],
+      },
+      global: { stubs },
+    });
+
+    const slots = wrapper.findAll('[data-testid="peek-slot-like"]');
+    expect(slots).toHaveLength(2);
+    expect(slots[0]!.classes()).toContain('peek-slot-like');
+    expect(slots[0]!.classes()).toContain('peek-slot-like--filled');
+    expect(slots[1]!.classes()).toContain('peek-slot-like');
+    expect(slots[1]!.classes()).not.toContain('peek-slot-like--filled');
+    expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-width:\s*72px/s);
+    expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-height:\s*40px/s);
+    expect(appScss).toMatch(/border:\s*2px\s+dashed/);
+    expect(appScss).toMatch(/\.peek-slot-like--filled\s*\{[^}]*border-style:\s*solid/s);
   });
 
   it('editable shows bottom full-width text Edit/Delete; body has no edit-on-click', async () => {

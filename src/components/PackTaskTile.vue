@@ -21,9 +21,16 @@
       </div>
       <div class="pack-task-tile__slots">
         <div v-if="slotLabels.length" class="pack-task-tile__slot-list">
-          <q-chip v-for="(label, i) in slotLabels" :key="i" dense class="pack-task-tile__slot">
-            {{ label }}
-          </q-chip>
+          <div
+            v-for="(label, i) in slotLabels"
+            :key="i"
+            class="peek-slot-like pack-task-tile__slot"
+            :class="{ 'peek-slot-like--filled': isSlotFilled(label) }"
+            data-testid="peek-slot-like"
+          >
+            <span v-if="isSlotFilled(label)" class="peek-slot-like__label">{{ label }}</span>
+            <span v-else class="peek-slot-like__empty">{{ label || emptySlotLabel }}</span>
+          </div>
         </div>
         <div v-else class="text-muted">{{ $t('content.slotEmpty') }}</div>
       </div>
@@ -86,6 +93,13 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}`));
+const emptySlotLabel = computed(() => t('content.slotEmpty'));
+
+/** Filled when parent passed non-empty content (not slotEmpty key/copy). */
+function isSlotFilled(label: string): boolean {
+  const trimmed = label.trim();
+  return Boolean(trimmed) && trimmed !== emptySlotLabel.value;
+}
 </script>
 
 <style scoped>
@@ -197,10 +211,9 @@ const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}
   width: 100%;
 }
 
+/* Slot chrome: global `.peek-slot-like` (app.scss) — SC-PACK-238. */
 .pack-task-tile__slot {
-  font-size: 1.1rem;
-  background: var(--pack-tile-chip-bg);
   color: var(--pack-tile-fg);
-  word-break: break-word;
+  max-width: 100%;
 }
 </style>

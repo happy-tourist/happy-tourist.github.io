@@ -243,6 +243,7 @@ import type { QForm } from 'quasar';
 import { useQuasar } from 'quasar';
 
 import MapGridPreview from '@/components/MapGridPreview.vue';
+import { fingerprintEditorContent, isEditorContentDirty } from '@/lib/editorDirty';
 import { useAuthStore } from '@/stores/auth';
 import { type ModerationMessage } from '@/stores/content';
 import {
@@ -277,6 +278,8 @@ const paintTools: MapPaintTool[] = ['start', 'task', 'finish'];
 const seatOptions = [1, 2, 3, 4].map((n) => ({ label: String(n), value: n }));
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
+/** D3 / SC-MAP-65: pristine snapshot after load / successful submit. */
+const submitBaseline = ref<string | null>(null);
 const staffMode = ref(false);
 const viewOnly = ref(false);
 const lockHeld = ref(false);
@@ -345,6 +348,7 @@ const statusBadgeColor = computed(() => {
 const canSubmit = computed(() => {
   if (staffMode.value || viewOnly.value || gateOpen.value || !local.value) return false;
   if (startCount.value < minStarts.value) return false;
+  if (!isEditorContentDirty(local.value, submitBaseline.value)) return false;
   if (maps.pendingRequestId && !maps.isPendingAuthor) return false;
   // SC-MAP-35 / SC-PACK-163 parity: author may resubmit while open/pending.
   return true;
@@ -360,8 +364,21 @@ const submitHint = computed(() => {
   if (startCount.value < minStarts.value) {
     return t('maps.submitHintStarts', { min: minStarts.value, starts: startCount.value });
   }
+  if (local.value && !isEditorContentDirty(local.value, submitBaseline.value)) {
+    return t('maps.submitHintNotDirty');
+  }
   return t('maps.submitHint');
 });
+
+function captureMapBaseline(body: MapRevision | null, refresh = false) {
+  if (!body) {
+    if (refresh) submitBaseline.value = null;
+    return;
+  }
+  if (refresh || submitBaseline.value == null) {
+    submitBaseline.value = fingerprintEditorContent(body);
+  }
+}
 
 const canCancelRequest = computed(
   () =>
@@ -539,6 +556,7 @@ async function onSubmit() {
   try {
     await flushAutosave();
     await maps.submitMap(mapId.value);
+    if (local.value) captureMapBaseline(local.value, true);
     await loadThread();
   } catch {
     /* error in store */
@@ -587,6 +605,8 @@ async function enterStaffEdit() {
   viewOnly.value = false;
   lockHeld.value = true;
   local.value = maps.draft ? { ...maps.draft } : null;
+  // Staff has no Submit; skip dirty baseline (unaffected).
+  submitBaseline.value = null;
   startLockHeartbeat();
 }
 
@@ -600,6 +620,7 @@ async function enterAuthorEdit() {
   staffMode.value = false;
   viewOnly.value = false;
   local.value = maps.draft ? { ...maps.draft } : null;
+  captureMapBaseline(local.value, true);
   await loadThread();
 }
 
@@ -636,6 +657,7 @@ async function enterViewOnly() {
   viewOnly.value = true;
   lockHeld.value = false;
   local.value = maps.liveContent ? { ...maps.liveContent } : null;
+  submitBaseline.value = null;
 }
 
 async function boot() {
@@ -649,6 +671,20 @@ async function boot() {
 
   if (wantStaff) {
     try {
+      // SC-MAP-63: never-published must keep creator Submit — do not force staffMode.
+      // loadDraft may fail for non-creator staff on published maps; then staff-edit.
+      let probedHasLive: boolean | null = null;
+      try {
+        await maps.loadDraft(mapId.value);
+        probedHasLive = Boolean(maps.map?.hasLive);
+        maps.error = null;
+      } catch {
+        maps.error = null;
+      }
+      if (probedHasLive === false) {
+        await enterAuthorEdit();
+        return;
+      }
       await enterStaffEdit();
       return;
     } catch {
@@ -660,6 +696,21 @@ async function boot() {
 
   if (wantAuthorEdit) {
     try {
+      // D1 / SC-MAP-62: published + staff must not take creator ?edit=1 author path.
+      if (auth.isStaff) {
+        await maps.loadDraft(mapId.value);
+        if (maps.map?.hasLive) {
+          await enterStaffEdit();
+          if (route.query.staff !== '1') {
+            await router.replace({
+              name: 'content-map-edit',
+              params: { id: mapId.value },
+              query: { staff: '1' },
+            });
+          }
+          return;
+        }
+      }
       await enterAuthorEdit();
       return;
     } catch {
@@ -676,6 +727,7 @@ async function boot() {
       staffMode.value = false;
       viewOnly.value = false;
       local.value = maps.draft ? { ...maps.draft } : null;
+      captureMapBaseline(local.value, true);
       if (!checkGate()) {
         /* gate dialog */
       }
@@ -696,6 +748,7 @@ async function boot() {
       staffMode.value = false;
       viewOnly.value = false;
       local.value = maps.draft ? { ...maps.draft } : null;
+      captureMapBaseline(local.value, true);
       await loadThread();
       return;
     }

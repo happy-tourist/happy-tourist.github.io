@@ -3887,43 +3887,9 @@ body.body--dark .say-picker {
   z-index: 1;
 }
 
+/* Slot chrome lives in app.scss (`.peek-slot` / `--filled` / label) — shared with editor tiles. */
 .peek-slots {
   min-height: 48px;
-}
-
-.peek-slot {
-  min-width: 72px;
-  min-height: 40px;
-  padding: 6px 10px;
-  border: 2px dashed rgba(0, 0, 0, 0.28);
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.body--dark .peek-slot {
-  border-color: rgba(255, 255, 255, 0.35);
-}
-
-.peek-slot--filled {
-  border-style: solid;
-  border-color: var(--q-primary);
-}
-
-.peek-slot--interactive {
-  cursor: pointer;
-}
-
-.peek-slot__empty {
-  opacity: 0.55;
-  font-size: 12px;
-}
-
-.peek-slot__label {
-  font-size: 13px;
-  text-align: center;
 }
 
 /* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */
