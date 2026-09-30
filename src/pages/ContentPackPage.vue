@@ -119,7 +119,7 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-229/239…243: dedicated task-set summary cards; soft-unpublish / open preserved -->
+      <!-- SC-PACK-229/239…244: dedicated task-set summary cards; soft-unpublish / open preserved -->
       <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
         <PackTaskSetCardTile
           v-for="(ts, si) in live.taskSets"
@@ -137,22 +137,32 @@
           @open="onTaskSetClick(ts)"
         >
           <template #status>
-            <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
+            <q-badge
+              v-if="isSetSoftUnpublished(ts)"
+              color="grey"
+              dense
+              class="pack-task-set-status-badge"
+            >
+              <q-icon name="visibility_off" size="12px" />
               {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
             <q-badge
               v-else-if="setModerationBadge(ts)"
               :color="setModerationBadgeColor(ts)"
               dense
+              class="pack-task-set-status-badge"
               :data-test-id="`pack-task-set-status-${ts.id}`"
             >
+              <q-icon :name="setModerationBadgeIcon(ts)" size="12px" />
               {{ setModerationBadge(ts) }}
             </q-badge>
           </template>
-          <template #actions>
+          <!-- Omit empty #actions so pale divider / slim chrome appear only when controls exist (SC-PACK-239). -->
+          <template v-if="hasTaskSetCardActions(ts)" #actions>
             <q-btn
               v-if="canAuthorEditSet(ts)"
               outline
+              dense
               no-caps
               class="full-width"
               icon="edit"
@@ -163,6 +173,7 @@
             <q-btn
               v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
               outline
+              dense
               no-caps
               class="full-width"
               icon="edit"
@@ -172,6 +183,7 @@
             <q-btn
               v-if="auth.isStaff && isSetSoftUnpublished(ts)"
               outline
+              dense
               no-caps
               class="full-width"
               color="primary"
@@ -183,9 +195,9 @@
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
               outline
+              dense
               no-caps
               class="full-width"
-              color="warning"
               icon="visibility_off"
               :label="$t('content.taskSetCardUnpublish')"
               :loading="content.loading"
@@ -194,9 +206,9 @@
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
               outline
+              dense
               no-caps
               class="full-width"
-              color="warning"
               icon="visibility_off"
               :label="$t('content.taskSetCardUnpublish')"
               disable
@@ -404,12 +416,22 @@ function setModerationBadge(ts: TaskSet): string {
   return '';
 }
 
+/** Mock: НА ПРОВЕРКЕ yellow/gold; ДОРАБОТАТЬ muted grey (not loud warning fill). */
 function setModerationBadgeColor(ts: TaskSet): string {
   const status = ts.moderationStatus;
-  if (status === 'pending') return 'orange';
-  if (status === 'needs_revision') return 'warning';
+  if (status === 'pending') return 'warning';
+  if (status === 'needs_revision') return 'grey';
   if (status === 'draft') return 'grey';
   return 'grey';
+}
+
+/** Temp Material until task-set-badge-*.svg (pack-cards.md). */
+function setModerationBadgeIcon(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return 'schedule';
+  if (status === 'needs_revision') return 'close';
+  if (status === 'draft') return 'edit_note';
+  return 'edit_note';
 }
 
 function canEnterTaskSet(ts: TaskSet): boolean {
@@ -467,6 +489,11 @@ function canAuthorEditSet(ts: TaskSet): boolean {
   // Pack creator edits via header Edit; task-set author edits own set (SC-PACK-158/159).
   if (content.pack.createdBy === uid.value) return false;
   return Boolean(uid.value) && ts.authorUserId === uid.value;
+}
+
+/** True when at least one outline card action would render (avoid empty actions chrome). */
+function hasTaskSetCardActions(ts: TaskSet): boolean {
+  return canAuthorEditSet(ts) || auth.isStaff;
 }
 
 async function onAuthorEdit() {

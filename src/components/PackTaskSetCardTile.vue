@@ -23,13 +23,15 @@
 
       <div class="pack-task-set-tile__stats" data-testid="pack-task-set-stats">
         <div class="pack-task-set-tile__stat-row" data-testid="pack-task-set-total">
-          <!-- Placeholder until task-set-card-tasks.svg arrives (Decision 4). -->
-          <q-icon
-            name="description"
-            size="14px"
-            class="pack-task-set-tile__total-icon"
-            data-testid="pack-task-set-total-icon"
-          />
+          <span class="pack-task-set-tile__lead" aria-hidden="true">
+            <!-- Placeholder until task-set-card-tasks.svg arrives (Decision 4). -->
+            <q-icon
+              name="description"
+              size="14px"
+              class="pack-task-set-tile__total-icon"
+              data-testid="pack-task-set-total-icon"
+            />
+          </span>
           <span class="pack-task-set-tile__stat-label">{{ $t('content.taskSetCardTotal') }}</span>
           <span class="pack-task-set-tile__stat-count">{{ totalCount }}</span>
         </div>
@@ -38,23 +40,31 @@
           data-testid="pack-task-set-divider-total"
           aria-hidden="true"
         />
-        <div
-          v-for="row in difficultyRows"
-          :key="row.difficulty"
-          class="pack-task-set-tile__stat-row"
-          :data-testid="`pack-task-set-diff-${row.difficulty}`"
-        >
-          <span class="pack-task-set-tile__dots" :data-diff="row.difficulty" aria-hidden="true">
-            <span
-              v-for="i in 3"
-              :key="i"
-              class="pack-task-set-tile__dot"
-              :class="{ 'pack-task-set-tile__dot--filled': i <= row.difficulty }"
-            />
-          </span>
-          <span class="pack-task-set-tile__stat-label">{{ row.label }}</span>
-          <span class="pack-task-set-tile__stat-count">{{ row.count }}</span>
-        </div>
+        <template v-for="(row, idx) in difficultyRows" :key="row.difficulty">
+          <div
+            class="pack-task-set-tile__stat-row"
+            :data-testid="`pack-task-set-diff-${row.difficulty}`"
+          >
+            <span class="pack-task-set-tile__lead" aria-hidden="true">
+              <span class="pack-task-set-tile__dots" :data-diff="row.difficulty">
+                <span
+                  v-for="i in 3"
+                  :key="i"
+                  class="pack-task-set-tile__dot"
+                  :class="{ 'pack-task-set-tile__dot--filled': i <= row.difficulty }"
+                />
+              </span>
+            </span>
+            <span class="pack-task-set-tile__stat-label">{{ row.label }}</span>
+            <span class="pack-task-set-tile__stat-count">{{ row.count }}</span>
+          </div>
+          <div
+            v-if="idx < difficultyRows.length - 1"
+            class="pack-task-set-tile__divider"
+            :data-testid="`pack-task-set-divider-diff-${row.difficulty}`"
+            aria-hidden="true"
+          />
+        </template>
       </div>
     </div>
 
@@ -123,27 +133,32 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Task-set summary chrome (SC-PACK-229/239…243): denser than catalog 150×200. */
+/* Task-set summary chrome (SC-PACK-229/239…244): denser than catalog 150×200. */
 .pack-task-set-tile {
+  /* Lead = three 6px dots + 2×2px gaps → 22px (Decision 9 / SC-PACK-244). */
+  --pack-ts-lead-w: 22px;
   --pack-ts-bg: #ffffff;
   --pack-ts-fg: rgba(0, 0, 0, 0.87);
   --pack-ts-muted: rgba(0, 0, 0, 0.7);
   --pack-ts-border: rgba(0, 0, 0, 0.14);
-  --pack-ts-splitter: rgba(0, 0, 0, 0.12);
+  /* Pale / low-contrast dividers (light). */
+  --pack-ts-splitter: rgba(0, 0, 0, 0.08);
   --pack-ts-dot-1: #43a047;
   --pack-ts-dot-2: #f9a825;
   --pack-ts-dot-3: #e53935;
+  --pack-ts-action-h: 30px;
 
   position: relative;
   box-sizing: border-box;
   width: 156px;
-  min-height: 228px;
+  min-height: 232px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
   border: 1px solid var(--pack-ts-border);
   background: var(--pack-ts-bg);
   color: var(--pack-ts-fg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -153,10 +168,12 @@ function onBodyClick() {
   --pack-ts-fg: rgba(255, 255, 255, 0.92);
   --pack-ts-muted: rgba(255, 255, 255, 0.78);
   --pack-ts-border: rgba(255, 255, 255, 0.22);
-  --pack-ts-splitter: rgba(255, 255, 255, 0.18);
+  /* Pale divider on dark. */
+  --pack-ts-splitter: rgba(255, 255, 255, 0.12);
   --pack-ts-dot-1: #66bb6a;
   --pack-ts-dot-2: #ffca28;
   --pack-ts-dot-3: #ef5350;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .pack-task-set-tile--clickable {
@@ -174,13 +191,26 @@ function onBodyClick() {
   color: var(--pack-ts-muted);
 }
 
+/* Reserved top status band — empty space stays here when no badge (SC-PACK-244). */
 .pack-task-set-tile__status {
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 0.25rem 0.35rem 0;
-  min-height: 1.35rem;
+  align-items: center;
+  padding: 0.3rem 0.35rem 0;
+  min-height: 1.55rem;
   flex: 0 0 auto;
+}
+
+/* Mock: icon + short uppercase label in pill (Material placeholders until SVG). */
+.pack-task-set-tile__status :deep(.pack-task-set-status-badge) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 0.12rem 0.4rem;
 }
 
 .pack-task-set-tile__body {
@@ -188,7 +218,7 @@ function onBodyClick() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.15rem 0.45rem 0.35rem;
+  padding: 0.1rem 0.45rem 0.25rem;
 }
 
 .pack-task-set-tile__title {
@@ -203,51 +233,66 @@ function onBodyClick() {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   color: var(--pack-ts-fg);
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
+  flex: 0 0 auto;
 }
 
 .pack-task-set-tile__stats {
   display: flex;
   flex-direction: column;
-  gap: 0.18rem;
+  flex: 1 1 auto;
+  justify-content: center;
+  gap: 0;
   font-size: 0.68rem;
   line-height: 1.2;
   color: var(--pack-ts-muted);
+  min-height: 0;
 }
 
 .pack-task-set-tile__stat-row {
+  display: grid;
+  grid-template-columns: var(--pack-ts-lead-w) minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.3rem;
+  min-width: 0;
+  padding: 0.12rem 0;
+}
+
+.pack-task-set-tile__lead {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  min-width: 0;
+  justify-content: center;
+  width: var(--pack-ts-lead-w);
+  min-width: var(--pack-ts-lead-w);
 }
 
 .pack-task-set-tile__total-icon {
-  flex: 0 0 auto;
   color: var(--pack-ts-muted);
 }
 
 .pack-task-set-tile__stat-label {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
 
 .pack-task-set-tile__stat-count {
-  flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   color: var(--pack-ts-fg);
   font-weight: 600;
+  text-align: right;
 }
 
+/* Pale 1px dividers: after total, between every diff row, above actions. */
 .pack-task-set-tile__divider {
   height: 0;
   border: 0;
   border-top: 1px solid var(--pack-ts-splitter);
-  margin: 0.15rem 0 0.05rem;
+  margin: 0;
   flex: 0 0 auto;
+  width: 100%;
 }
 
 .pack-task-set-tile__dots {
@@ -285,13 +330,19 @@ function onBodyClick() {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 0.25rem;
-  padding: 0.35rem 0.4rem 0.45rem;
+  gap: 0.2rem;
+  padding: 0.3rem 0.4rem 0.4rem;
   border-top: 1px solid var(--pack-ts-splitter);
   box-sizing: border-box;
 }
 
+/* Slim outline actions ~28–32 CSS px (SC-PACK-241 / Decision 5). */
 .pack-task-set-tile__actions :deep(.q-btn) {
   width: 100%;
+  min-height: 28px;
+  height: var(--pack-ts-action-h);
+  max-height: 32px;
+  padding: 0 0.4rem;
+  font-size: 0.72rem;
 }
 </style>

@@ -98,9 +98,10 @@ const stubs = {
       disable: { type: Boolean, default: false },
       icon: { type: String, default: undefined },
       outline: { type: Boolean, default: false },
+      dense: { type: Boolean, default: false },
     },
     template:
-      '<button type="button" v-bind="$attrs" :disabled="disable" :data-icon="icon" :data-outline="outline ? \'1\' : \'\'" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :disabled="disable" :data-icon="icon" :data-outline="outline ? \'1\' : \'\'" :data-dense="dense ? \'1\' : \'\'" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
   },
   'q-banner': true,
   'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
@@ -285,10 +286,13 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     const card = wrapper.find('[data-test-id="editor-task-set-row-ts1"]');
     expect(card.exists()).toBe(true);
     expect(card.classes()).toContain('pack-task-set-tile');
-    expect(wrapper.find('[data-test-id="editor-task-set-edit-ts1"]').exists()).toBe(true);
+    const editBtn = wrapper.find('[data-test-id="editor-task-set-edit-ts1"]');
+    expect(editBtn.exists()).toBe(true);
     expect(
       card.find('.pack-task-set-tile__actions [data-test-id="editor-task-set-edit-ts1"]').exists(),
     ).toBe(true);
+    expect(editBtn.attributes('data-outline')).toBe('1');
+    expect(editBtn.attributes('data-dense')).toBe('1');
     expect(card.find('.pack-task-set-tile__title').text()).toContain('content.taskSetLabel');
   });
 
@@ -326,10 +330,38 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     // Outline + icon (SC-PACK-241); not icon-only corner.
     expect(editBtn.attributes('data-icon')).toBe('edit');
     expect(editBtn.attributes('data-outline')).toBe('1');
+    // Slim ~28–32px via dense (+ tile CSS min-height).
+    expect(editBtn.attributes('data-dense')).toBe('1');
     expect(editBtn.text()).toContain('content.edit');
     expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
+  });
+
+  it('SC-PACK-239: viewer without card actions has no empty actions chrome', async () => {
+    // Pack creator on live: Edit is header-only; card actions omitted for non-staff non-contrib.
+    authState.user = { id: 'owner', anonymous: false };
+    authState.isStaff = false;
+    contentState.pack = { ...contentState.pack!, createdBy: 'owner' };
+    contentState.liveContent = {
+      ...contentState.liveContent!,
+      taskSets: [
+        {
+          id: 'ts1',
+          authorUserId: 'owner',
+          authorDisplayName: 'Owner',
+          coauthorLabels: [],
+          tasks: [{ id: 't1', question: 'Q?', difficulty: 1, slots: [] }],
+        },
+      ],
+    };
+
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    const card = wrapper.find('[data-test-id="pack-task-set-row-ts1"]');
+    expect(card.exists()).toBe(true);
+    expect(card.find('.pack-task-set-tile__actions').exists()).toBe(false);
   });
 
   it('SC-PACK-241/243: card soft-unpublish/republish use short keys; pack unpublish stays long', async () => {

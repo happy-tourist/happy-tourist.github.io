@@ -13,7 +13,7 @@ const stubs = {
     props: ['label', 'icon', 'outline', 'dense', 'disable'],
     emits: ['click'],
     template:
-      '<button type="button" v-bind="$attrs" :disabled="disable" @click="$emit(\'click\')">{{ icon }} {{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :disabled="disable" :data-dense="dense ? \'1\' : \'\'" @click="$emit(\'click\')">{{ icon }} {{ label }}<slot /></button>',
   },
   'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
   'q-icon': {
@@ -27,7 +27,7 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
+describe('PackTaskSetCardTile (SC-PACK-229/239…244)', () => {
   it('mounts with ~150–160 width, taller than 200, and light/dark contrast tokens', () => {
     expect(vueSrc).toMatch(/width:\s*15[0-6]px/);
     expect(vueSrc).toMatch(/min-height:\s*2[2-4]\dpx/);
@@ -55,7 +55,7 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain('5');
   });
 
-  it('SC-PACK-239/242/243: total icon, divider, colored outline dots; no hover scale', () => {
+  it('SC-PACK-239/242/243: total icon, pale dividers, colored outline dots; no hover scale', () => {
     expect(vueSrc).toMatch(/name=["']description["']/);
     expect(vueSrc).toMatch(/pack-task-set-tile__divider/);
     expect(vueSrc).toMatch(/--pack-ts-dot-1/);
@@ -72,6 +72,9 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
         countDiff2: 2,
         countDiff3: 1,
       },
+      slots: {
+        actions: '<button data-test-id="set-edit" type="button">edit</button>',
+      },
       global: { stubs },
     });
 
@@ -82,7 +85,14 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain(
       'content.taskSetCardTotal',
     );
+    // Pale dividers: after total, between every diff pair, above actions (border-top).
     expect(wrapper.find('[data-testid="pack-task-set-divider-total"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-divider-diff-1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-divider-diff-2"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-divider-diff-3"]').exists()).toBe(false);
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__actions[\s\S]*border-top:\s*1px\s+solid/);
+    expect(wrapper.find('.pack-task-set-tile__actions').exists()).toBe(true);
+
     expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
@@ -120,6 +130,54 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
     expect(messages.content.taskSetCardDiff2).toBe('Средние:');
     expect(messages.content.taskSetCardDiff3).toBe('Сложные:');
     expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
+  });
+
+  it('SC-PACK-244: lead/label/count column grid and reserved top without badge', () => {
+    expect(vueSrc).toMatch(/--pack-ts-lead-w/);
+    expect(vueSrc).toMatch(/grid-template-columns:\s*var\(--pack-ts-lead-w\)/);
+    expect(vueSrc).toMatch(/pack-task-set-tile__lead/);
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__status[\s\S]*min-height:/);
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__body[\s\S]*flex:\s*1\s+1\s+auto/);
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__stats[\s\S]*flex:\s*1\s+1\s+auto/);
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: { title: 'Set', totalCount: 3, countDiff1: 1, countDiff2: 1, countDiff3: 1 },
+      global: { stubs },
+    });
+
+    // No status slot → reserved band still present (empty).
+    expect(wrapper.find('.pack-task-set-tile__status').exists()).toBe(true);
+    expect(wrapper.find('.pack-task-set-tile__status').text().trim()).toBe('');
+
+    const totalRow = wrapper.find('[data-testid="pack-task-set-total"]');
+    expect(totalRow.find('.pack-task-set-tile__lead').exists()).toBe(true);
+    expect(totalRow.find('.pack-task-set-tile__stat-label').exists()).toBe(true);
+    expect(totalRow.find('.pack-task-set-tile__stat-count').exists()).toBe(true);
+
+    for (const d of [1, 2, 3]) {
+      const row = wrapper.find(`[data-testid="pack-task-set-diff-${d}"]`);
+      expect(row.find('.pack-task-set-tile__lead .pack-task-set-tile__dots').exists()).toBe(true);
+      expect(row.find('.pack-task-set-tile__stat-label').exists()).toBe(true);
+      expect(row.find('.pack-task-set-tile__stat-count').exists()).toBe(true);
+    }
+  });
+
+  it('SC-PACK-241: slim action height tokens (~28–32 CSS px)', () => {
+    expect(vueSrc).toMatch(/min-height:\s*28px/);
+    expect(vueSrc).toMatch(/max-height:\s*32px/);
+    expect(vueSrc).toMatch(/--pack-ts-action-h/);
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: { title: 'Set', totalCount: 0 },
+      slots: {
+        actions:
+          '<button data-test-id="slim-a" type="button">a</button><button data-test-id="slim-b" type="button">b</button>',
+      },
+      global: { stubs },
+    });
+
+    // Multiple actions stay stacked in the actions column.
+    expect(wrapper.findAll('.pack-task-set-tile__actions [data-test-id]')).toHaveLength(2);
   });
 
   it('places status top and actions bottom; emits open on body click only', async () => {

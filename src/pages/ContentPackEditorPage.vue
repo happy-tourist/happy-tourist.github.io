@@ -202,22 +202,31 @@
           @open="canOpenTasks && canEnterEditorSet(ts) && openTaskSet(ts.id)"
         >
           <template #status>
-            <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
+            <q-badge
+              v-if="isSetSoftUnpublished(ts)"
+              color="grey"
+              dense
+              class="pack-task-set-status-badge"
+            >
+              <q-icon name="visibility_off" size="12px" />
               {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
             <q-badge
               v-else-if="editorSetModerationBadge(ts)"
               :color="editorSetModerationBadgeColor(ts)"
               dense
+              class="pack-task-set-status-badge"
               :data-test-id="`editor-task-set-status-${ts.id}`"
             >
+              <q-icon :name="editorSetModerationBadgeIcon(ts)" size="12px" />
               {{ editorSetModerationBadge(ts) }}
             </q-badge>
           </template>
-          <template #actions>
+          <template v-if="hasEditorTaskSetCardActions(ts)" #actions>
             <q-btn
               v-if="canOpenTasks && canEnterEditorSet(ts)"
               outline
+              dense
               no-caps
               class="full-width"
               icon="edit"
@@ -229,6 +238,7 @@
             <q-btn
               v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
               outline
+              dense
               no-caps
               class="full-width"
               color="primary"
@@ -242,9 +252,9 @@
                 staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && canUnpublishSet
               "
               outline
+              dense
               no-caps
               class="full-width"
-              color="warning"
               icon="visibility_off"
               :label="$t('content.taskSetCardUnpublish')"
               :loading="content.loading"
@@ -255,9 +265,9 @@
                 staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && !canUnpublishSet
               "
               outline
+              dense
               no-caps
               class="full-width"
-              color="warning"
               icon="visibility_off"
               :label="$t('content.taskSetCardUnpublish')"
               disable
@@ -885,12 +895,22 @@ function editorSetModerationBadge(ts: TaskSet): string {
   return '';
 }
 
+/** Mock: НА ПРОВЕРКЕ yellow/gold; ДОРАБОТАТЬ muted grey (not loud warning fill). */
 function editorSetModerationBadgeColor(ts: TaskSet): string {
   const status = ts.moderationStatus;
-  if (status === 'pending') return 'orange';
-  if (status === 'needs_revision') return 'warning';
+  if (status === 'pending') return 'warning';
+  if (status === 'needs_revision') return 'grey';
   if (status === 'draft') return 'grey';
   return 'grey';
+}
+
+/** Temp Material until task-set-badge-*.svg (pack-cards.md). */
+function editorSetModerationBadgeIcon(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return 'schedule';
+  if (status === 'needs_revision') return 'close';
+  if (status === 'draft') return 'edit_note';
+  return 'edit_note';
 }
 
 function canEnterEditorSet(ts: TaskSet): boolean {
@@ -902,6 +922,13 @@ function canEnterEditorSet(ts: TaskSet): boolean {
     return Boolean(uid.value) && ts.authorUserId === uid.value;
   }
   return true;
+}
+
+/** True when at least one outline card action would render (avoid empty actions chrome). */
+function hasEditorTaskSetCardActions(ts: TaskSet): boolean {
+  if (canOpenTasks.value && canEnterEditorSet(ts)) return true;
+  if (staffMode.value && content.pack?.hasLive) return true;
+  return false;
 }
 
 const canUnpublishSet = computed(() => {
