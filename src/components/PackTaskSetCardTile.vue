@@ -133,7 +133,7 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Task-set summary chrome (SC-PACK-229/239…244): denser than catalog 150×200. */
+/* Task-set summary chrome (SC-PACK-229/239…246): denser than catalog 150×200. */
 .pack-task-set-tile {
   /* Lead = three 6px dots + 2×2px gaps → 22px (Decision 9 / SC-PACK-244). */
   --pack-ts-lead-w: 22px;
@@ -141,24 +141,33 @@ function onBodyClick() {
   --pack-ts-fg: rgba(0, 0, 0, 0.87);
   --pack-ts-muted: rgba(0, 0, 0, 0.7);
   --pack-ts-border: rgba(0, 0, 0, 0.14);
+  /* Soft resting border ~#e1e3e6 sense; hover → near-black (Decision 10). */
+  --pack-ts-border-hover: #212121;
+  --pack-ts-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --pack-ts-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.14);
   /* Pale / low-contrast dividers (light). */
   --pack-ts-splitter: rgba(0, 0, 0, 0.08);
   --pack-ts-dot-1: #43a047;
   --pack-ts-dot-2: #f9a825;
   --pack-ts-dot-3: #e53935;
   --pack-ts-action-h: 30px;
+  /* Visual Spec spacing (SC-PACK-245): title→stats 12–16; row pad-y 6–8; air row↔divider 8–12. */
+  --pack-ts-title-gap: 14px;
+  --pack-ts-row-pad-y: 6px;
+  --pack-ts-divider-air: 5px;
 
   position: relative;
   box-sizing: border-box;
   width: 156px;
-  min-height: 232px;
+  /* Resting mock ≈206 CSS px; roomier rhythm MAY grow a few px above. */
+  min-height: 206px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
   border: 1px solid var(--pack-ts-border);
   background: var(--pack-ts-bg);
   color: var(--pack-ts-fg);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--pack-ts-shadow);
   overflow: hidden;
   flex: 0 0 auto;
 }
@@ -168,22 +177,27 @@ function onBodyClick() {
   --pack-ts-fg: rgba(255, 255, 255, 0.92);
   --pack-ts-muted: rgba(255, 255, 255, 0.78);
   --pack-ts-border: rgba(255, 255, 255, 0.22);
+  /* Light-grey hover border — not --q-secondary (Decision 10 / SC-PACK-246). */
+  --pack-ts-border-hover: #bdbdbd;
+  --pack-ts-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --pack-ts-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
   /* Pale divider on dark. */
   --pack-ts-splitter: rgba(255, 255, 255, 0.12);
   --pack-ts-dot-1: #66bb6a;
   --pack-ts-dot-2: #ffca28;
   --pack-ts-dot-3: #ef5350;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .pack-task-set-tile--clickable {
   cursor: pointer;
 }
 
-/* Existing clickable border affordance only — no hover scale / enlarge polish. */
-.pack-task-set-tile--clickable:hover {
-  border-color: var(--q-secondary);
-  box-shadow: 0 0 0 1px var(--q-secondary);
+/* Themed hover: border + soft lift only — no scale / no icon recolor (SC-PACK-246). */
+.pack-task-set-tile--clickable:hover,
+.pack-task-set-tile--clickable:focus-visible {
+  border-color: var(--pack-ts-border-hover);
+  box-shadow: var(--pack-ts-shadow-hover);
+  outline: none;
 }
 
 .pack-task-set-tile--muted {
@@ -196,21 +210,46 @@ function onBodyClick() {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0.3rem 0.35rem 0;
-  min-height: 1.55rem;
+  padding: 8px 10px 0;
+  min-height: 22px;
   flex: 0 0 auto;
 }
 
-/* Mock: icon + short uppercase label in pill (Material placeholders until SVG). */
+/*
+ * Soft muted pills (not Quasar solid grey/warning fills) — mock light grey /
+ * dark soft chrome; pending = gold/amber ink + soft tint (Decision 4 / mock).
+ */
 .pack-task-set-tile__status :deep(.pack-task-set-status-badge) {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
+  gap: 2px;
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.2;
-  padding: 0.12rem 0.4rem;
+  min-height: 18px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-badge--muted) {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: rgba(0, 0, 0, 0.72) !important;
+}
+
+.body--dark .pack-task-set-tile__status :deep(.pack-task-set-status-badge--muted) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: rgba(255, 255, 255, 0.82) !important;
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-badge--pending) {
+  background: rgba(249, 168, 37, 0.16) !important;
+  color: #f9a825 !important;
+}
+
+.body--dark .pack-task-set-tile__status :deep(.pack-task-set-status-badge--pending) {
+  background: rgba(255, 193, 7, 0.14) !important;
+  color: #ffc107 !important;
 }
 
 .pack-task-set-tile__body {
@@ -218,11 +257,11 @@ function onBodyClick() {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0.1rem 0.45rem 0.25rem;
+  padding: 0 12px 6px;
 }
 
 .pack-task-set-tile__title {
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.78rem;
   line-height: 1.25;
   text-align: center;
@@ -233,7 +272,7 @@ function onBodyClick() {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   color: var(--pack-ts-fg);
-  margin-bottom: 0.3rem;
+  margin-bottom: var(--pack-ts-title-gap);
   flex: 0 0 auto;
 }
 
@@ -255,7 +294,7 @@ function onBodyClick() {
   align-items: center;
   column-gap: 0.3rem;
   min-width: 0;
-  padding: 0.12rem 0;
+  padding: var(--pack-ts-row-pad-y) 0;
 }
 
 .pack-task-set-tile__lead {
@@ -290,7 +329,8 @@ function onBodyClick() {
   height: 0;
   border: 0;
   border-top: 1px solid var(--pack-ts-splitter);
-  margin: 0;
+  /* Air row↔divider: 8–12 total = 2 × --pack-ts-divider-air (split above+below). */
+  margin: var(--pack-ts-divider-air) 0;
   flex: 0 0 auto;
   width: 100%;
 }
@@ -331,7 +371,9 @@ function onBodyClick() {
   flex-direction: column;
   width: 100%;
   gap: 0.2rem;
-  padding: 0.3rem 0.4rem 0.4rem;
+  /* Air around actions divider: ~5 above (via margin) + ~5 below line (pad-top). */
+  margin-top: var(--pack-ts-divider-air);
+  padding: var(--pack-ts-divider-air) 8px 8px;
   border-top: 1px solid var(--pack-ts-splitter);
   box-sizing: border-box;
 }
@@ -344,5 +386,11 @@ function onBodyClick() {
   max-height: 32px;
   padding: 0 0.4rem;
   font-size: 0.72rem;
+  /* Mock: pale outline + dark label (not brand primary tint). */
+  color: var(--pack-ts-fg);
+}
+
+.pack-task-set-tile__actions :deep(.q-btn--outline:before) {
+  border-color: var(--pack-ts-border);
 }
 </style>

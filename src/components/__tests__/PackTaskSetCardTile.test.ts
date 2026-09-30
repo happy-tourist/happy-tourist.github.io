@@ -27,10 +27,10 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackTaskSetCardTile (SC-PACK-229/239…244)', () => {
+describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
   it('mounts with ~150–160 width, taller than 200, and light/dark contrast tokens', () => {
     expect(vueSrc).toMatch(/width:\s*15[0-6]px/);
-    expect(vueSrc).toMatch(/min-height:\s*2[2-4]\dpx/);
+    expect(vueSrc).toMatch(/min-height:\s*20[6-9]px|min-height:\s*2[1-4]\dpx/);
     expect(vueSrc).toMatch(/--pack-ts-bg:\s*#ffffff/);
     expect(vueSrc).toMatch(/\.body--dark\s+\.pack-task-set-tile/);
     expect(vueSrc).toMatch(/--pack-ts-bg:\s*#2a2a2a/);
@@ -160,6 +160,66 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…244)', () => {
       expect(row.find('.pack-task-set-tile__stat-label').exists()).toBe(true);
       expect(row.find('.pack-task-set-tile__stat-count').exists()).toBe(true);
     }
+  });
+
+  it('SC-PACK-245: roomier title→stats and divider air tokens', () => {
+    expect(vueSrc).toMatch(/--pack-ts-title-gap:\s*1[2-6]px/);
+    expect(vueSrc).toMatch(/margin-bottom:\s*var\(--pack-ts-title-gap\)/);
+    expect(vueSrc).toMatch(/--pack-ts-row-pad-y:\s*[6-8]px/);
+    expect(vueSrc).toMatch(/padding:\s*var\(--pack-ts-row-pad-y\)\s+0/);
+    expect(vueSrc).toMatch(/--pack-ts-divider-air:\s*[4-6]px/);
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile__divider[\s\S]*margin:\s*var\(--pack-ts-divider-air\)\s+0/,
+    );
+    expect(vueSrc).toMatch(/min-height:\s*20[6-9]px|min-height:\s*2[1-4]\dpx/);
+    // List grid gutter must stay out of this tile (Decision 10 / Non-Goals).
+    expect(vueSrc).not.toMatch(/\.pack-card-grid/);
+  });
+
+  it('SC-PACK-246: themed hover border + soft lift; no scale; no --q-secondary; icons static', () => {
+    expect(vueSrc).not.toMatch(/transform:\s*scale/);
+    expect(vueSrc).toMatch(/--pack-ts-border-hover:\s*#212121/);
+    expect(vueSrc).toMatch(/--pack-ts-border-hover:\s*#bdbdbd/);
+    expect(vueSrc).toMatch(/--pack-ts-shadow-hover:/);
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile--clickable:hover[\s\S]*border-color:\s*var\(--pack-ts-border-hover\)/,
+    );
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile--clickable:hover[\s\S]*box-shadow:\s*var\(--pack-ts-shadow-hover\)/,
+    );
+    // Must not use brand secondary as the only hover cue.
+    expect(vueSrc).not.toMatch(/\.pack-task-set-tile--clickable:hover[\s\S]{0,200}--q-secondary/);
+    // Hover chrome only — no rules that recolor dots / total icon on hover.
+    expect(vueSrc).not.toMatch(
+      /\.pack-task-set-tile--clickable:hover[\s\S]{0,400}pack-task-set-tile__dot/,
+    );
+    expect(vueSrc).not.toMatch(
+      /\.pack-task-set-tile--clickable:hover[\s\S]{0,400}pack-task-set-tile__total-icon/,
+    );
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: {
+        title: 'Set',
+        totalCount: 2,
+        countDiff1: 1,
+        countDiff2: 1,
+        countDiff3: 0,
+        clickable: true,
+      },
+      global: { stubs },
+    });
+    expect(wrapper.classes()).toContain('pack-task-set-tile--clickable');
+    // Dot fill colors come from static --pack-ts-dot-* tokens, not hover state.
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile__dot--filled[\s\S]*background:\s*var\(--pack-ts-dot-color\)/,
+    );
+  });
+
+  it('soft status pills + pale action outline (mock; not Quasar solid fills)', () => {
+    expect(vueSrc).toMatch(/pack-task-set-status-badge--muted/);
+    expect(vueSrc).toMatch(/pack-task-set-status-badge--pending/);
+    expect(vueSrc).toMatch(/padding:\s*2px\s+6px/);
+    expect(vueSrc).toMatch(/\.q-btn--outline:before[\s\S]*border-color:\s*var\(--pack-ts-border\)/);
   });
 
   it('SC-PACK-241: slim action height tokens (~28–32 CSS px)', () => {

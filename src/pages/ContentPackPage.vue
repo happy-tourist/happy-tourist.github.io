@@ -119,7 +119,7 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-229/239…244: dedicated task-set summary cards; soft-unpublish / open preserved -->
+      <!-- SC-PACK-229/239…246: dedicated task-set summary cards; soft-unpublish / open preserved -->
       <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
         <PackTaskSetCardTile
           v-for="(ts, si) in live.taskSets"
@@ -139,18 +139,17 @@
           <template #status>
             <q-badge
               v-if="isSetSoftUnpublished(ts)"
-              color="grey"
               dense
-              class="pack-task-set-status-badge"
+              class="pack-task-set-status-badge pack-task-set-status-badge--muted"
             >
               <q-icon name="visibility_off" size="12px" />
               {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
             <q-badge
               v-else-if="setModerationBadge(ts)"
-              :color="setModerationBadgeColor(ts)"
               dense
               class="pack-task-set-status-badge"
+              :class="setModerationBadgeToneClass(ts)"
               :data-test-id="`pack-task-set-status-${ts.id}`"
             >
               <q-icon :name="setModerationBadgeIcon(ts)" size="12px" />
@@ -186,7 +185,6 @@
               dense
               no-caps
               class="full-width"
-              color="primary"
               icon="visibility"
               :label="$t('content.taskSetCardRepublish')"
               :loading="content.loading"
@@ -416,13 +414,11 @@ function setModerationBadge(ts: TaskSet): string {
   return '';
 }
 
-/** Mock: НА ПРОВЕРКЕ yellow/gold; ДОРАБОТАТЬ muted grey (not loud warning fill). */
-function setModerationBadgeColor(ts: TaskSet): string {
-  const status = ts.moderationStatus;
-  if (status === 'pending') return 'warning';
-  if (status === 'needs_revision') return 'grey';
-  if (status === 'draft') return 'grey';
-  return 'grey';
+/** Mock soft pills: pending = gold tone; revise/draft/unpublished = muted (not Quasar solid fills). */
+function setModerationBadgeToneClass(ts: TaskSet): string {
+  return ts.moderationStatus === 'pending'
+    ? 'pack-task-set-status-badge--pending'
+    : 'pack-task-set-status-badge--muted';
 }
 
 /** Temp Material until task-set-badge-*.svg (pack-cards.md). */
