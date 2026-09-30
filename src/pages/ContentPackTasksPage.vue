@@ -392,7 +392,7 @@ const taskSet = computed(
   () => local.value?.taskSets.find((ts) => ts.id === taskSetId.value) ?? null,
 );
 
-/** SC-PACK-135: «Набор заданий {n}» without author/coauthor when set is known. */
+/** SC-PACK-135/243: «Набор заданий #{n}» without author/coauthor when set is known. */
 const taskSetHeading = computed(() => {
   const sets = local.value?.taskSets ?? [];
   const idx = sets.findIndex((ts) => ts.id === taskSetId.value);

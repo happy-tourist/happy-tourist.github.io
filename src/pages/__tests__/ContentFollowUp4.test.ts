@@ -476,9 +476,9 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.republish'))).toBe(
-      true,
-    );
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardRepublish')),
+    ).toBe(true);
 
     // Click first task-set card (published ts1).
     const setRows = wrapper
@@ -529,8 +529,9 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
 
     const setUnpub = wrapper
       .findAll('button')
-      .filter((b) => b.text().includes('content.unpublish'));
-    // Pack-level unpublish + disabled set unpublish
+      .filter((b) => b.text().includes('content.taskSetCardUnpublish'));
+    // Disabled set unpublish on the card (short key).
+    expect(setUnpub.length).toBeGreaterThanOrEqual(1);
     expect(
       setUnpub.some((b) => b.attributes('disabled') === '' || b.attributes('disabled') === 'true'),
     ).toBe(true);

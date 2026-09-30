@@ -353,6 +353,9 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
   });
 
   it('SC-LOBBY-23/24: multi-select published sets within one pack; row shows pack theme without set author', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
+
     await openCreate();
     await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
     await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
@@ -412,7 +415,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
 
     expect(wrapper!.find('[data-test-id="check-s-soft"]').exists()).toBe(false);
     const pub = wrapper!.get('[data-test-id="check-s-pub"]').element.closest('label');
-    // Soft set is pack index 0 → published set stays «Набор заданий 2».
+    // Soft set is pack index 0 → published set stays «Набор заданий #2».
     expect(pub?.getAttribute('data-set-n')).toBe('2');
     expect(wrapper!.text()).not.toContain('Иван');
   });
@@ -484,6 +487,9 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
   });
 
   it('SC-LOBBY-25/26: listing shows map preview, room maxSeats capacity, pack/set ordinals without set author', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
+
     gameState.rooms = [
       {
         roomId: 'r1',

@@ -6,6 +6,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
 import PackTaskSetCardTile from '@/components/PackTaskSetCardTile.vue';
+import messages from '@/i18n/en-US';
 
 const stubs = {
   'q-btn': {
@@ -15,6 +16,10 @@ const stubs = {
       '<button type="button" v-bind="$attrs" :disabled="disable" @click="$emit(\'click\')">{{ icon }} {{ label }}<slot /></button>',
   },
   'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
+  'q-icon': {
+    props: ['name', 'size'],
+    template: '<i v-bind="$attrs" :data-name="name" />',
+  },
 };
 
 const vueSrc = readFileSync(
@@ -22,7 +27,7 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackTaskSetCardTile (SC-PACK-229/239…242)', () => {
+describe('PackTaskSetCardTile (SC-PACK-229/239…243)', () => {
   it('mounts with ~150–160 width, taller than 200, and light/dark contrast tokens', () => {
     expect(vueSrc).toMatch(/width:\s*15[0-6]px/);
     expect(vueSrc).toMatch(/min-height:\s*2[2-4]\dpx/);
@@ -33,7 +38,7 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…242)', () => {
 
     const wrapper = mount(PackTaskSetCardTile, {
       props: {
-        title: 'Набор заданий 1',
+        title: 'Набор заданий #1',
         totalCount: 5,
         countDiff1: 2,
         countDiff2: 1,
@@ -46,11 +51,19 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…242)', () => {
 
     expect(wrapper.classes()).toContain('pack-task-set-tile');
     expect(wrapper.classes()).toContain('pack-task-set-tile--clickable');
-    expect(wrapper.find('.pack-task-set-tile__title').text()).toBe('Набор заданий 1');
+    expect(wrapper.find('.pack-task-set-tile__title').text()).toBe('Набор заданий #1');
     expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain('5');
   });
 
-  it('SC-PACK-239: shows total and difficulty rows with filled-dot count = difficulty', () => {
+  it('SC-PACK-239/242/243: total icon, divider, colored outline dots; no hover scale', () => {
+    expect(vueSrc).toMatch(/name=["']description["']/);
+    expect(vueSrc).toMatch(/pack-task-set-tile__divider/);
+    expect(vueSrc).toMatch(/--pack-ts-dot-1/);
+    expect(vueSrc).toMatch(/--pack-ts-dot-2/);
+    expect(vueSrc).toMatch(/--pack-ts-dot-3/);
+    expect(vueSrc).toMatch(/background:\s*transparent/);
+    expect(vueSrc).not.toMatch(/transform:\s*scale/);
+
     const wrapper = mount(PackTaskSetCardTile, {
       props: {
         title: 'Set',
@@ -63,6 +76,13 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…242)', () => {
     });
 
     expect(wrapper.find('[data-testid="pack-task-set-stats"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-total-icon"]').attributes('data-name')).toBe(
+      'description',
+    );
+    expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain(
+      'content.taskSetCardTotal',
+    );
+    expect(wrapper.find('[data-testid="pack-task-set-divider-total"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
@@ -75,9 +95,31 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…242)', () => {
     expect(filled(1)).toBe(1);
     expect(filled(2)).toBe(2);
     expect(filled(3)).toBe(3);
-    expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').text()).toContain('1');
-    expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').text()).toContain('2');
-    expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').text()).toContain('1');
+
+    expect(
+      wrapper
+        .find('[data-testid="pack-task-set-diff-1"] .pack-task-set-tile__dots')
+        .attributes('data-diff'),
+    ).toBe('1');
+    expect(
+      wrapper
+        .find('[data-testid="pack-task-set-diff-2"] .pack-task-set-tile__dots')
+        .attributes('data-diff'),
+    ).toBe('2');
+    expect(
+      wrapper
+        .find('[data-testid="pack-task-set-diff-3"] .pack-task-set-tile__dots')
+        .attributes('data-diff'),
+    ).toBe('3');
+
+    expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').text()).toContain(
+      'content.taskSetCardDiff1',
+    );
+    expect(messages.content.taskSetCardTotal).toBe('Заданий:');
+    expect(messages.content.taskSetCardDiff1).toBe('Лёгкие:');
+    expect(messages.content.taskSetCardDiff2).toBe('Средние:');
+    expect(messages.content.taskSetCardDiff3).toBe('Сложные:');
+    expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
   });
 
   it('places status top and actions bottom; emits open on body click only', async () => {

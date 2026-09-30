@@ -331,4 +331,55 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
   });
+
+  it('SC-PACK-241/243: card soft-unpublish/republish use short keys; pack unpublish stays long', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetLabel).toMatch(/#\{n\}/);
+    expect(messages.content.taskSetCardTotal).toBe('Заданий:');
+    expect(messages.content.taskSetCardUnpublish).toBe('Снять');
+    expect(messages.content.taskSetCardRepublish).toBe('Вернуть');
+    expect(messages.content.unpublish).toBe('Снять с публикации');
+    expect(messages.content.republish).toBe('Опубликовать снова');
+
+    authState.isStaff = true;
+    authState.user = { id: 'staff1', anonymous: false };
+    contentState.liveContent = {
+      ...contentState.liveContent!,
+      taskSets: [
+        {
+          id: 'ts1',
+          authorUserId: 'u1',
+          authorDisplayName: 'Author',
+          coauthorLabels: [],
+          inCatalog: true,
+          tasks: [{ id: 't1', question: 'Q?', difficulty: 1, slots: [] }],
+        },
+        {
+          id: 'ts2',
+          authorUserId: 'u1',
+          authorDisplayName: 'Author',
+          coauthorLabels: [],
+          inCatalog: false,
+          tasks: [{ id: 't2', question: 'Q2?', difficulty: 2, slots: [] }],
+        },
+      ],
+    };
+
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    const card = wrapper.find('[data-test-id="pack-task-set-row-ts1"]');
+    expect(card.exists()).toBe(true);
+    expect(card.find('.pack-task-set-tile__title').text()).toContain('content.taskSetLabel');
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardUnpublish')),
+    ).toBe(true);
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardRepublish')),
+    ).toBe(true);
+    // Pack-level chrome keeps long copy.
+    expect(wrapper.findAll('button').some((b) => b.text().includes('content.unpublish'))).toBe(
+      true,
+    );
+  });
 });

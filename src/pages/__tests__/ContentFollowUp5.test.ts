@@ -304,6 +304,9 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
   });
 
   it('SC-PACK-135: live, editor, staff hub, tasks header show label without author/coauthor', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
+
     const live = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
     const liveText = live.text();

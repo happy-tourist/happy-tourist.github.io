@@ -119,7 +119,7 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-229/239…242: dedicated task-set summary cards; soft-unpublish / open preserved -->
+      <!-- SC-PACK-229/239…243: dedicated task-set summary cards; soft-unpublish / open preserved -->
       <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
         <PackTaskSetCardTile
           v-for="(ts, si) in live.taskSets"
@@ -153,7 +153,6 @@
             <q-btn
               v-if="canAuthorEditSet(ts)"
               outline
-              dense
               no-caps
               class="full-width"
               icon="edit"
@@ -164,7 +163,6 @@
             <q-btn
               v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
               outline
-              dense
               no-caps
               class="full-width"
               icon="edit"
@@ -174,36 +172,33 @@
             <q-btn
               v-if="auth.isStaff && isSetSoftUnpublished(ts)"
               outline
-              dense
               no-caps
               class="full-width"
               color="primary"
               icon="visibility"
-              :label="$t('content.republish')"
+              :label="$t('content.taskSetCardRepublish')"
               :loading="content.loading"
               @click.stop="onRepublishSet(ts.id)"
             />
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
               outline
-              dense
               no-caps
               class="full-width"
               color="warning"
               icon="visibility_off"
-              :label="$t('content.unpublish')"
+              :label="$t('content.taskSetCardUnpublish')"
               :loading="content.loading"
               @click.stop="confirmUnpublishSet(ts.id)"
             />
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
               outline
-              dense
               no-caps
               class="full-width"
               color="warning"
               icon="visibility_off"
-              :label="$t('content.unpublish')"
+              :label="$t('content.taskSetCardUnpublish')"
               disable
             >
               <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>

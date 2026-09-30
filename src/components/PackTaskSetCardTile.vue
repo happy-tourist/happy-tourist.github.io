@@ -23,16 +23,28 @@
 
       <div class="pack-task-set-tile__stats" data-testid="pack-task-set-stats">
         <div class="pack-task-set-tile__stat-row" data-testid="pack-task-set-total">
+          <!-- Placeholder until task-set-card-tasks.svg arrives (Decision 4). -->
+          <q-icon
+            name="description"
+            size="14px"
+            class="pack-task-set-tile__total-icon"
+            data-testid="pack-task-set-total-icon"
+          />
           <span class="pack-task-set-tile__stat-label">{{ $t('content.taskSetCardTotal') }}</span>
           <span class="pack-task-set-tile__stat-count">{{ totalCount }}</span>
         </div>
+        <div
+          class="pack-task-set-tile__divider"
+          data-testid="pack-task-set-divider-total"
+          aria-hidden="true"
+        />
         <div
           v-for="row in difficultyRows"
           :key="row.difficulty"
           class="pack-task-set-tile__stat-row"
           :data-testid="`pack-task-set-diff-${row.difficulty}`"
         >
-          <span class="pack-task-set-tile__dots" aria-hidden="true">
+          <span class="pack-task-set-tile__dots" :data-diff="row.difficulty" aria-hidden="true">
             <span
               v-for="i in 3"
               :key="i"
@@ -111,15 +123,16 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Task-set summary chrome (SC-PACK-229/239…242): denser than catalog 150×200. */
+/* Task-set summary chrome (SC-PACK-229/239…243): denser than catalog 150×200. */
 .pack-task-set-tile {
   --pack-ts-bg: #ffffff;
   --pack-ts-fg: rgba(0, 0, 0, 0.87);
   --pack-ts-muted: rgba(0, 0, 0, 0.7);
   --pack-ts-border: rgba(0, 0, 0, 0.14);
   --pack-ts-splitter: rgba(0, 0, 0, 0.12);
-  --pack-ts-dot: rgba(0, 0, 0, 0.28);
-  --pack-ts-dot-filled: rgba(0, 0, 0, 0.78);
+  --pack-ts-dot-1: #43a047;
+  --pack-ts-dot-2: #f9a825;
+  --pack-ts-dot-3: #e53935;
 
   position: relative;
   box-sizing: border-box;
@@ -141,14 +154,16 @@ function onBodyClick() {
   --pack-ts-muted: rgba(255, 255, 255, 0.78);
   --pack-ts-border: rgba(255, 255, 255, 0.22);
   --pack-ts-splitter: rgba(255, 255, 255, 0.18);
-  --pack-ts-dot: rgba(255, 255, 255, 0.28);
-  --pack-ts-dot-filled: rgba(255, 255, 255, 0.88);
+  --pack-ts-dot-1: #66bb6a;
+  --pack-ts-dot-2: #ffca28;
+  --pack-ts-dot-3: #ef5350;
 }
 
 .pack-task-set-tile--clickable {
   cursor: pointer;
 }
 
+/* Existing clickable border affordance only — no hover scale / enlarge polish. */
 .pack-task-set-tile--clickable:hover {
   border-color: var(--q-secondary);
   box-shadow: 0 0 0 1px var(--q-secondary);
@@ -207,6 +222,11 @@ function onBodyClick() {
   min-width: 0;
 }
 
+.pack-task-set-tile__total-icon {
+  flex: 0 0 auto;
+  color: var(--pack-ts-muted);
+}
+
 .pack-task-set-tile__stat-label {
   flex: 1 1 auto;
   min-width: 0;
@@ -222,22 +242,42 @@ function onBodyClick() {
   font-weight: 600;
 }
 
+.pack-task-set-tile__divider {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--pack-ts-splitter);
+  margin: 0.15rem 0 0.05rem;
+  flex: 0 0 auto;
+}
+
 .pack-task-set-tile__dots {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   flex: 0 0 auto;
+  --pack-ts-dot-color: var(--pack-ts-dot-1);
+}
+
+.pack-task-set-tile__dots[data-diff='2'] {
+  --pack-ts-dot-color: var(--pack-ts-dot-2);
+}
+
+.pack-task-set-tile__dots[data-diff='3'] {
+  --pack-ts-dot-color: var(--pack-ts-dot-3);
 }
 
 .pack-task-set-tile__dot {
-  width: 5px;
-  height: 5px;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--pack-ts-dot);
+  background: transparent;
+  border: 1px solid var(--pack-ts-dot-color);
 }
 
 .pack-task-set-tile__dot--filled {
-  background: var(--pack-ts-dot-filled);
+  background: var(--pack-ts-dot-color);
+  border-color: var(--pack-ts-dot-color);
 }
 
 .pack-task-set-tile__actions {
@@ -245,8 +285,8 @@ function onBodyClick() {
   display: flex;
   flex-direction: column;
   width: 100%;
-  gap: 0.2rem;
-  padding: 0.3rem 0.35rem 0.4rem;
+  gap: 0.25rem;
+  padding: 0.35rem 0.4rem 0.45rem;
   border-top: 1px solid var(--pack-ts-splitter);
   box-sizing: border-box;
 }

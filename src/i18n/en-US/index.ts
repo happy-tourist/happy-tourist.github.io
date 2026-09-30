@@ -217,15 +217,21 @@ export default {
     csvTasksMissingAnswers:
       'Импорт невозможен — в карточках нет ответов: {list}. Набор заданий не изменён.',
     taskSets: 'Наборы заданий',
-    /** SC-PACK-135: ordinal task-set label (no author/coauthor). */
-    taskSetLabel: 'Набор заданий {n}',
+    /** SC-PACK-135/243: ordinal task-set label with `#` (no author/coauthor). */
+    taskSetLabel: 'Набор заданий #{n}',
     /** Legacy; content surfaces use `taskSetLabel` (SC-PACK-135 redesign). */
-    taskSetLabelFrom: 'Набор заданий {n} от {name}',
-    /** SC-PACK-239: task-set summary card stats rows. */
-    taskSetCardTotal: 'Всего',
-    taskSetCardDiff1: 'лёгкие',
-    taskSetCardDiff2: 'средние',
-    taskSetCardDiff3: 'сложные',
+    taskSetLabelFrom: 'Набор заданий #{n} от {name}',
+    /** SC-PACK-239/243: task-set summary card stats rows. */
+    taskSetCardTotal: 'Заданий:',
+    taskSetCardDiff1: 'Лёгкие:',
+    taskSetCardDiff2: 'Средние:',
+    taskSetCardDiff3: 'Сложные:',
+    /**
+     * SC-PACK-241/243: short soft-unpublish / republish on task-set cards only.
+     * Pack/catalog `unpublish` / `republish` and confirm dialogs stay long.
+     */
+    taskSetCardUnpublish: 'Снять',
+    taskSetCardRepublish: 'Вернуть',
     /**
      * SC-PACK-240: short badges on task-set cards only
      * (page subtitles may keep longer phrases).
