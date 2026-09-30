@@ -411,18 +411,26 @@ const publishedTaskSets = computed(() => {
   return sets.filter(isPublishedTaskSet);
 });
 
-const taskSetOptions = computed(() =>
-  publishedTaskSets.value.map((ts) => ({
-    label: t('lobby.taskSetFromAuthor', {
-      pack: selectedPackTitle.value,
-      name: ts.authorDisplayName || t('content.authorUser'),
-    }),
-    value: ts.id,
-    /** Exposed for tests / aria — pack theme + author (SC-LOBBY-24). */
-    packTitle: selectedPackTitle.value,
-    authorDisplayName: ts.authorDisplayName || '',
-  })),
-);
+const taskSetOptions = computed(() => {
+  // Ordinal n matches live/editor pack index (all sets), not filtered published-only index.
+  const allSets = content.liveContent?.taskSets ?? [];
+  return publishedTaskSets.value.map((ts) => {
+    const packIndex = allSets.findIndex((s) => s.id === ts.id);
+    const setOrdinal = packIndex >= 0 ? packIndex + 1 : 1;
+    const setLabel = t('content.taskSetLabel', { n: setOrdinal });
+    return {
+      label: t('lobby.taskSetOption', {
+        pack: selectedPackTitle.value,
+        set: setLabel,
+      }),
+      value: ts.id,
+      /** Exposed for tests / aria — pack theme + ordinal set (SC-LOBBY-24; no author). */
+      packTitle: selectedPackTitle.value,
+      setLabel,
+      setOrdinal,
+    };
+  });
+});
 
 const canConfirmCreate = computed(
   () =>
@@ -534,14 +542,9 @@ function roomPackSetsCaption(room: RoomAvailable<GameRoomMeta>): string | null {
   if (!packTitle || !Array.isArray(labels) || !labels.length) {
     return null;
   }
-  const authors = labels
-    .map((l) => (typeof l?.authorDisplayName === 'string' ? l.authorDisplayName.trim() : ''))
-    .filter(Boolean)
-    .join(', ');
-  if (!authors) {
-    return packTitle;
-  }
-  return t('lobby.packSetsCaption', { pack: packTitle, authors });
+  // SC-LOBBY-26: pack title + ordinal set labels; never surface task-set author.
+  const sets = labels.map((_, i) => t('content.taskSetLabel', { n: i + 1 })).join(', ');
+  return t('lobby.packSetsCaption', { pack: packTitle, sets });
 }
 
 async function onConfirmCreate() {

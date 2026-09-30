@@ -91,6 +91,9 @@ export default {
     packRequired: 'Выберите набор',
     taskSets: 'Наборы заданий',
     taskSetRequired: 'Выберите хотя бы один набор заданий',
+    /** Create picker row: pack theme + ordinal set label (SC-LOBBY-24; no set author). */
+    taskSetOption: '{pack} · {set}',
+    /** Legacy; lobby create uses `taskSetOption` without author (SC-LOBBY-24 redesign). */
     taskSetFromAuthor: '{pack} · набор заданий от {name}',
     selectAllTaskSets: 'Выбрать все',
     emptyMaps: 'Нет опубликованных карт',
@@ -106,7 +109,8 @@ export default {
     catapultDensityMany: 'много',
     capacity: '{seats}/{maxSeats}',
     mapCapacityCaption: '{players}×{tourists}',
-    packSetsCaption: '{pack} · {authors}',
+    /** Listing caption: pack theme + ordinal set labels (SC-LOBBY-26; no set author). */
+    packSetsCaption: '{pack} · {sets}',
   },
   header: {
     lobby: 'Лобби',
@@ -213,9 +217,25 @@ export default {
     csvTasksMissingAnswers:
       'Импорт невозможен — в карточках нет ответов: {list}. Набор заданий не изменён.',
     taskSets: 'Наборы заданий',
+    /** SC-PACK-135: ordinal task-set label (no author/coauthor). */
     taskSetLabel: 'Набор заданий {n}',
-    /** SC-PACK-135 / D18: author on every task-set row. */
+    /** Legacy; content surfaces use `taskSetLabel` (SC-PACK-135 redesign). */
     taskSetLabelFrom: 'Набор заданий {n} от {name}',
+    /** SC-PACK-239: task-set summary card stats rows. */
+    taskSetCardTotal: 'Всего',
+    taskSetCardDiff1: 'лёгкие',
+    taskSetCardDiff2: 'средние',
+    taskSetCardDiff3: 'сложные',
+    /**
+     * SC-PACK-240: short badges on task-set cards only
+     * (page subtitles may keep longer phrases).
+     */
+    taskSetCardBadge: {
+      unpublished: 'СНЯТО',
+      pending: 'НА ПРОВЕРКЕ',
+      needs_revision: 'ДОРАБОТАТЬ',
+      draft: 'ЧЕРНОВИК',
+    },
     /** SC-PACK-136 / D19: generic back (not pack title). */
     back: 'Вернуться',
     tasks: 'Задания',

@@ -392,16 +392,12 @@ const taskSet = computed(
   () => local.value?.taskSets.find((ts) => ts.id === taskSetId.value) ?? null,
 );
 
-/** SC-PACK-135: «Набор заданий {n} от {name}» when set is known. */
+/** SC-PACK-135: «Набор заданий {n}» without author/coauthor when set is known. */
 const taskSetHeading = computed(() => {
   const sets = local.value?.taskSets ?? [];
   const idx = sets.findIndex((ts) => ts.id === taskSetId.value);
   if (idx < 0) return t('content.tasksTitle');
-  const ts = sets[idx]!;
-  return t('content.taskSetLabelFrom', {
-    n: idx + 1,
-    name: ts.authorDisplayName || t('content.authorUser'),
-  });
+  return t('content.taskSetLabel', { n: idx + 1 });
 });
 
 /** 1-based set index for CSV export filename (D9 / SC-PACK-213). */

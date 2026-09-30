@@ -93,9 +93,14 @@ vi.mock('@/stores/content', async (importOriginal) => {
 const stubs = {
   'q-page': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable', 'icon'],
+    props: {
+      label: { type: String, default: undefined },
+      disable: { type: Boolean, default: false },
+      icon: { type: String, default: undefined },
+      outline: { type: Boolean, default: false },
+    },
     template:
-      '<button type="button" v-bind="$attrs" :disabled="disable" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :disabled="disable" :data-icon="icon" :data-outline="outline ? \'1\' : \'\'" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
   },
   'q-banner': true,
   'q-badge': { template: '<span v-bind="$attrs"><slot /></span>' },
@@ -110,6 +115,7 @@ const stubs = {
   'q-icon': true,
   PackAnswerCardTile: { template: '<div class="pack-answer-tile-stub" />' },
   PackListCardTile: false,
+  PackTaskSetCardTile: false,
 };
 
 describe('catalog + task-set cards (SC-PACK-228/229)', () => {
@@ -236,7 +242,7 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     ).toContain('Draft description');
   });
 
-  it('SC-PACK-229: live task-set list uses 150×200 cards with status and bottom Edit', async () => {
+  it('SC-PACK-229: live task-set list uses summary cards with status and bottom Edit', async () => {
     // Set author (not pack creator) gets Edit on the card (SC-PACK-158).
     authState.user = { id: 'contrib', anonymous: false };
     contentState.pack = { ...contentState.pack!, createdBy: 'owner' };
@@ -260,30 +266,69 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-grid"]').exists()).toBe(true);
     const card = wrapper.find('[data-test-id="pack-task-set-row-ts1"]');
     expect(card.exists()).toBe(true);
-    expect(card.classes()).toContain('pack-list-tile');
+    expect(card.classes()).toContain('pack-task-set-tile');
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="pack-task-set-author-edit"]').exists()).toBe(true);
     expect(
-      card.find('.pack-list-tile__trailing [data-test-id="pack-task-set-author-edit"]').exists(),
-    ).toBe(false);
-    expect(
-      card.find('.pack-list-tile__actions [data-test-id="pack-task-set-author-edit"]').exists(),
+      card.find('.pack-task-set-tile__actions [data-test-id="pack-task-set-author-edit"]').exists(),
     ).toBe(true);
-    expect(card.find('.pack-list-tile__title').text()).toContain('content.taskSetLabelFrom');
+    expect(card.find('.pack-task-set-tile__title').text()).toContain('content.taskSetLabel');
+    expect(card.find('.pack-task-set-tile__title').text()).not.toContain('taskSetLabelFrom');
+    expect(card.find('[data-testid="pack-task-set-stats"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-229: editor task-set list uses same 150×200 card chrome with bottom Edit', async () => {
+  it('SC-PACK-229: editor task-set list uses same summary card chrome with bottom Edit', async () => {
     const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
     await flushPromises();
 
     expect(wrapper.find('[data-testid="editor-task-set-grid"]').exists()).toBe(true);
     const card = wrapper.find('[data-test-id="editor-task-set-row-ts1"]');
     expect(card.exists()).toBe(true);
-    expect(card.classes()).toContain('pack-list-tile');
+    expect(card.classes()).toContain('pack-task-set-tile');
     expect(wrapper.find('[data-test-id="editor-task-set-edit-ts1"]').exists()).toBe(true);
     expect(
-      card.find('.pack-list-tile__actions [data-test-id="editor-task-set-edit-ts1"]').exists(),
+      card.find('.pack-task-set-tile__actions [data-test-id="editor-task-set-edit-ts1"]').exists(),
     ).toBe(true);
-    expect(card.find('.pack-list-tile__title').text()).toContain('content.taskSetLabelFrom');
+    expect(card.find('.pack-task-set-tile__title').text()).toContain('content.taskSetLabel');
+  });
+
+  it('SC-PACK-240/241: short card badges and outline icon actions on live task-set card', async () => {
+    authState.user = { id: 'contrib', anonymous: false };
+    contentState.pack = { ...contentState.pack!, createdBy: 'owner' };
+    contentState.liveContent = {
+      ...contentState.liveContent!,
+      taskSets: [
+        {
+          id: 'ts1',
+          authorUserId: 'contrib',
+          authorDisplayName: 'Contrib',
+          coauthorLabels: [],
+          moderationStatus: 'needs_revision',
+          tasks: [
+            { id: 't1', question: 'Q1?', difficulty: 1, slots: [] },
+            { id: 't2', question: 'Q2?', difficulty: 2, slots: [] },
+            { id: 't3', question: 'Q3?', difficulty: 3, slots: [] },
+          ],
+        },
+      ],
+    };
+
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    const status = wrapper.find('[data-test-id="pack-task-set-status-ts1"]');
+    expect(status.exists()).toBe(true);
+    expect(status.text()).toContain('content.taskSetCardBadge.needs_revision');
+    expect(status.text()).not.toContain('content.taskSetStatusMarks');
+
+    const editBtn = wrapper.find('[data-test-id="pack-task-set-author-edit"]');
+    expect(editBtn.exists()).toBe(true);
+    // Outline + icon (SC-PACK-241); not icon-only corner.
+    expect(editBtn.attributes('data-icon')).toBe('edit');
+    expect(editBtn.attributes('data-outline')).toBe('1');
+    expect(editBtn.text()).toContain('content.edit');
+    expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
   });
 });

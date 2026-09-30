@@ -265,6 +265,7 @@ const stubs = {
       '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
   },
   PackListCardTile: false,
+  PackTaskSetCardTile: false,
 };
 
 describe('content follow-up 5 (SC-PACK-134…136)', () => {
@@ -296,18 +297,24 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     expect(wrapper.text()).toContain('Ответ Альфа');
     expect(wrapper.text()).toContain('Ответ Бета');
     expect(wrapper.text()).not.toContain('content.slotFilled');
-    expect(wrapper.text()).toContain('content.taskSetLabelFrom');
+    expect(wrapper.find('[data-testid="staff-task-set-heading"]').text()).toBe(
+      'content.taskSetLabel',
+    );
+    expect(wrapper.text()).not.toContain('content.taskSetLabelFrom');
   });
 
-  it('SC-PACK-135: live and editor show author on every task-set row', async () => {
+  it('SC-PACK-135: live, editor, staff hub, tasks header show label without author/coauthor', async () => {
     const live = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
     const liveText = live.text();
-    expect(liveText).toContain('content.taskSetLabelFrom');
+    expect(liveText).toContain('content.taskSetLabel');
+    expect(liveText).not.toContain('content.taskSetLabelFrom');
+    expect(liveText).not.toContain('Мария');
+    expect(liveText).not.toContain('соавтор');
     // Two separate rows (not collapsed) — both rendered
     const liveRows = live
-      .findAll('.pack-list-tile')
-      .filter((n) => n.text().includes('content.taskSetLabelFrom'));
+      .findAll('.pack-task-set-tile')
+      .filter((n) => n.text().includes('content.taskSetLabel'));
     expect(liveRows.length).toBe(2);
 
     contentState.staffEditTarget = 'live';
@@ -315,10 +322,27 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     const editor = shallowMount(ContentPackEditorPage, { global: { stubs } });
     await flushPromises();
     const editorRows = editor
-      .findAll('.pack-list-tile')
-      .filter((n) => n.text().includes('content.taskSetLabelFrom'));
+      .findAll('.pack-task-set-tile')
+      .filter((n) => n.text().includes('content.taskSetLabel'));
     expect(editorRows.length).toBe(2);
-    expect(editor.text()).toContain('соавтор');
+    expect(editor.text()).not.toContain('соавтор');
+    expect(editor.text()).not.toContain('content.taskSetLabelFrom');
+    expect(editor.text()).not.toContain('Мария');
+
+    contentState.staffPreview = structuredClone(contentState._taskSetPreview);
+    const staff = shallowMount(ContentStaffRequestPage, { global: { stubs } });
+    await flushPromises();
+    const staffHeading = staff.find('[data-testid="staff-task-set-heading"]');
+    expect(staffHeading.exists()).toBe(true);
+    expect(staffHeading.text()).toBe('content.taskSetLabel');
+    expect(staff.text()).not.toContain('content.taskSetLabelFrom');
+    expect(staff.text()).not.toContain('ivan');
+
+    const tasks = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    await flushPromises();
+    expect(tasks.text()).toContain('content.taskSetLabel');
+    expect(tasks.text()).not.toContain('content.taskSetLabelFrom');
+    expect(tasks.text()).not.toContain('Мария');
   });
 
   it('SC-PACK-136/182: live drill-in has no «Вернуться»; crumbs cover path', async () => {
@@ -330,7 +354,8 @@ describe('content follow-up 5 (SC-PACK-134…136)', () => {
     // SC-PACK-182: live view no longer shows content.back («Вернуться»).
     expect(buttons.some((b) => b.text() === 'content.back')).toBe(false);
     expect(wrapper.text()).not.toMatch(/Большой пак(?!.*content)/);
-    // Heading uses author label, not pack title as back
-    expect(wrapper.text()).toContain('content.taskSetLabelFrom');
+    // Heading uses ordinal label without author, not pack title as back
+    expect(wrapper.text()).toContain('content.taskSetLabel');
+    expect(wrapper.text()).not.toContain('content.taskSetLabelFrom');
   });
 });

@@ -156,6 +156,7 @@ const stubs = {
   'q-chip': { template: '<span><slot /></span>' },
   MapGridPreview: { template: '<div class="map-preview-stub" />' },
   PackListCardTile: false,
+  PackTaskSetCardTile: false,
   PackAnswerCardTile: true,
 };
 
@@ -283,7 +284,7 @@ describe('live task-set moderation marks (SC-PACK-171…174)', () => {
     await flushPromises();
     const badge = wrapper.find('[data-test-id="pack-task-set-status-ts1"]');
     expect(badge.exists()).toBe(true);
-    expect(badge.text()).toContain('content.taskSetStatusMarks.pending');
+    expect(badge.text()).toContain('content.taskSetCardBadge.pending');
   });
 
   it('SC-PACK-172: set author sees needs_revision on live set row', async () => {
@@ -299,7 +300,7 @@ describe('live task-set moderation marks (SC-PACK-171…174)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
-      'content.taskSetStatusMarks.needs_revision',
+      'content.taskSetCardBadge.needs_revision',
     );
   });
 
@@ -337,7 +338,7 @@ describe('live task-set moderation marks (SC-PACK-171…174)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
-      'content.taskSetStatusMarks.pending',
+      'content.taskSetCardBadge.pending',
     );
   });
 
@@ -354,7 +355,7 @@ describe('live task-set moderation marks (SC-PACK-171…174)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts1"]').text()).toContain(
-      'content.taskSetStatusMarks.needs_moderation',
+      'content.taskSetCardBadge.draft',
     );
   });
 });
@@ -414,7 +415,7 @@ describe('never-live add-task-set ghost (SC-PACK-188…190)', () => {
     await flushPromises();
     expect(wrapper.find('[data-test-id="pack-task-set-ghost-ts-ghost"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts-ghost"]').text()).toContain(
-      'content.taskSetStatusMarks.needs_revision',
+      'content.taskSetCardBadge.needs_revision',
     );
     // S0 remains without inheriting needs_revision from ghost S1 (SC-PACK-187 client view).
     expect(wrapper.find('[data-test-id="pack-task-set-status-ts0"]').exists()).toBe(false);
@@ -504,6 +505,12 @@ describe('staff take UI (SC-PACK-161…163)', () => {
 
     const detail = shallowMount(ContentStaffRequestPage, { global: { stubs } });
     await flushPromises();
+    // SC-PACK-135: staff hub set heading has no author/coauthor
+    const setHeading = detail.find('[data-testid="staff-task-set-heading"]');
+    expect(setHeading.exists()).toBe(true);
+    expect(setHeading.text()).toBe('content.taskSetLabel');
+    expect(detail.text()).not.toContain('content.taskSetLabelFrom');
+    expect(detail.text()).not.toContain('Contrib');
     const approve = detail.find('[data-test-id="staff-approve"]');
     expect(approve.exists()).toBe(true);
     expect((approve.element as HTMLButtonElement).disabled).toBe(true);

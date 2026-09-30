@@ -32,7 +32,7 @@ export interface GameRoomMeta {
   touristsPerPlayer?: number;
   /** Selected pack title/theme (SC-LOBBY-26). */
   packTitle?: string;
-  /** Selected task-set author labels (SC-LOBBY-26). */
+  /** Selected task-set ids (+ optional author for API compat); UI shows ordinals (SC-LOBBY-26). */
   taskSetLabels?: GameRoomTaskSetLabel[];
   [key: string]: unknown;
 }

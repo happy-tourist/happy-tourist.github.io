@@ -260,6 +260,7 @@ const stubs = {
   },
   PackTasksCsvControls: { template: '<div data-testid="tasks-csv-stub" />' },
   PackListCardTile: false,
+  PackTaskSetCardTile: false,
 };
 
 describe('moderation UX follow-up (SC-PACK-126…128)', () => {

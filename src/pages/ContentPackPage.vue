@@ -119,17 +119,16 @@
           @click="onAddTaskSet"
         />
       </div>
-      <!-- SC-PACK-229 / D13′: 150×200 task-set cards; actions bottom; soft-unpublish / open preserved -->
+      <!-- SC-PACK-229/239…242: dedicated task-set summary cards; soft-unpublish / open preserved -->
       <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
-        <PackListCardTile
+        <PackTaskSetCardTile
           v-for="(ts, si) in live.taskSets"
           :key="ts.id"
-          :title="
-            $t('content.taskSetLabelFrom', {
-              n: si + 1,
-              name: ts.authorDisplayName || $t('content.authorUser'),
-            })
-          "
+          :title="$t('content.taskSetLabel', { n: si + 1 })"
+          :total-count="ts.tasks.length"
+          :count-diff1="difficultyCounts(ts).d1"
+          :count-diff2="difficultyCounts(ts).d2"
+          :count-diff3="difficultyCounts(ts).d3"
           :clickable="canEnterTaskSet(ts)"
           :muted="isSetSoftUnpublished(ts)"
           :test-id="
@@ -139,7 +138,7 @@
         >
           <template #status>
             <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
-              {{ $t('content.unpublishedByStaff') }}
+              {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
             <q-badge
               v-else-if="setModerationBadge(ts)"
@@ -150,67 +149,67 @@
               {{ setModerationBadge(ts) }}
             </q-badge>
           </template>
-          <template #caption>
-            {{ $t('content.tasksCount', { n: ts.tasks.length }) }} ·
-            {{ difficultySummary(ts) }}
-            <span v-if="ts.coauthorLabels?.length"> · {{ ts.coauthorLabels.join(', ') }}</span>
-          </template>
           <template #actions>
             <q-btn
               v-if="canAuthorEditSet(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
+              icon="edit"
               :label="$t('content.edit')"
               data-test-id="pack-task-set-author-edit"
               @click.stop="onAuthorEditSet(ts)"
             />
             <q-btn
               v-else-if="auth.isStaff && isSetSoftUnpublished(ts) && showStaffEdit"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
+              icon="edit"
               :label="$t('content.edit')"
               @click.stop="onStaffEditSet(ts.id)"
             />
             <q-btn
               v-if="auth.isStaff && isSetSoftUnpublished(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="primary"
+              icon="visibility"
               :label="$t('content.republish')"
               :loading="content.loading"
               @click.stop="onRepublishSet(ts.id)"
             />
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && canUnpublishSet(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="warning"
+              icon="visibility_off"
               :label="$t('content.unpublish')"
               :loading="content.loading"
               @click.stop="confirmUnpublishSet(ts.id)"
             />
             <q-btn
               v-if="auth.isStaff && !isSetSoftUnpublished(ts) && !canUnpublishSet(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="warning"
+              icon="visibility_off"
               :label="$t('content.unpublish')"
               disable
             >
               <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
             </q-btn>
           </template>
-        </PackListCardTile>
+        </PackTaskSetCardTile>
       </div>
       <div v-else class="text-muted">{{ $t('content.emptyTasks') }}</div>
     </template>
@@ -285,7 +284,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
-import PackListCardTile from '@/components/PackListCardTile.vue';
+import PackTaskSetCardTile from '@/components/PackTaskSetCardTile.vue';
 import { useAuthStore } from '@/stores/auth';
 import { contentErrorI18nKey, useContentStore, type TaskSet } from '@/stores/content';
 
@@ -401,12 +400,12 @@ function isNeverLiveGhost(ts: TaskSet): boolean {
   return ts.neverLive === true;
 }
 
-/** SC-PACK-171…174 / D10: pending | needs_revision | draft for set author + staff only. */
+/** SC-PACK-171…174 / D10 + SC-PACK-240: short card badges for set author + staff. */
 function setModerationBadge(ts: TaskSet): string {
   const status = ts.moderationStatus;
-  if (status === 'pending') return t('content.taskSetStatusMarks.pending');
-  if (status === 'needs_revision') return t('content.taskSetStatusMarks.needs_revision');
-  if (status === 'draft') return t('content.taskSetStatusMarks.needs_moderation');
+  if (status === 'pending') return t('content.taskSetCardBadge.pending');
+  if (status === 'needs_revision') return t('content.taskSetCardBadge.needs_revision');
+  if (status === 'draft') return t('content.taskSetCardBadge.draft');
   return '';
 }
 
@@ -428,7 +427,7 @@ function canUnpublishSet(ts: TaskSet): boolean {
   return publishedSetCount.value > 1;
 }
 
-function difficultySummary(ts: TaskSet): string {
+function difficultyCounts(ts: TaskSet): { d1: number; d2: number; d3: number } {
   let d1 = 0;
   let d2 = 0;
   let d3 = 0;
@@ -437,7 +436,7 @@ function difficultySummary(ts: TaskSet): string {
     else if (task.difficulty === 2) d2 += 1;
     else if (task.difficulty === 3) d3 += 1;
   }
-  return t('content.taskSetDifficultySummary', { d1, d2, d3 });
+  return { d1, d2, d3 };
 }
 
 function load() {

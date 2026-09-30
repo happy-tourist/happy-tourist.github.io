@@ -45,9 +45,9 @@ import { computed } from 'vue';
 
 const props = withDefaults(
   defineProps<{
-    /** Truncated primary label (pack title or task-set label). */
+    /** Truncated primary label (pack title). */
     title: string;
-    /** Catalog pack description (truncated); omit on task-set cards. */
+    /** Catalog pack description (truncated). */
     description?: string;
     clickable?: boolean;
     /** Soft-unpublished / gray row chrome. */
@@ -76,7 +76,7 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Fixed 150×200 catalog / task-set cards (D13′ / SC-PACK-228/229). */
+/* Fixed 150×200 catalog pack cards (SC-PACK-228). Task-set lists use PackTaskSetCardTile. */
 .pack-list-tile {
   --pack-list-bg: #ffffff;
   --pack-list-fg: rgba(0, 0, 0, 0.87);

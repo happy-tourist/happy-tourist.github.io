@@ -171,16 +171,8 @@
 
       <div class="text-h6 q-mb-sm">{{ $t('content.taskSets') }}</div>
       <div v-for="(ts, si) in packContent.taskSets" :key="ts.id" class="q-mb-md">
-        <div class="text-subtitle1 q-mb-xs">
-          {{
-            $t('content.taskSetLabelFrom', {
-              n: si + 1,
-              name: ts.authorDisplayName || $t('content.authorUser'),
-            })
-          }}
-          <span v-if="ts.coauthorLabels?.length" class="text-muted text-caption q-ml-sm">
-            {{ ts.coauthorLabels.join(', ') }}
-          </span>
+        <div class="text-subtitle1 q-mb-xs" data-testid="staff-task-set-heading">
+          {{ $t('content.taskSetLabel', { n: si + 1 }) }}
         </div>
         <div v-if="ts.tasks.length" class="pack-card-grid" data-testid="task-card-grid">
           <PackTaskTile

@@ -181,21 +181,20 @@
           <q-tooltip v-if="!canOpenTasks">{{ $t('content.tasksNeedCards') }}</q-tooltip>
         </q-btn>
       </div>
-      <!-- SC-PACK-229 / D13′: 150×200 task-set cards; actions bottom text; soft-unpublish preserved -->
+      <!-- SC-PACK-229/239…242: dedicated task-set summary cards; soft-unpublish preserved -->
       <div
         v-if="local.taskSets.length"
         class="pack-card-grid q-mb-lg"
         data-testid="editor-task-set-grid"
       >
-        <PackListCardTile
+        <PackTaskSetCardTile
           v-for="(ts, si) in local.taskSets"
           :key="ts.id"
-          :title="
-            $t('content.taskSetLabelFrom', {
-              n: si + 1,
-              name: ts.authorDisplayName || $t('content.authorUser'),
-            })
-          "
+          :title="$t('content.taskSetLabel', { n: si + 1 })"
+          :total-count="ts.tasks.length"
+          :count-diff1="difficultyCounts(ts).d1"
+          :count-diff2="difficultyCounts(ts).d2"
+          :count-diff3="difficultyCounts(ts).d3"
           :clickable="canOpenTasks && canEnterEditorSet(ts)"
           :muted="isSetSoftUnpublished(ts)"
           :cascade-gap="content.taskSetHasCascadeGap(ts)"
@@ -204,20 +203,25 @@
         >
           <template #status>
             <q-badge v-if="isSetSoftUnpublished(ts)" color="grey" dense>
-              {{ $t('content.unpublishedByStaff') }}
+              {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
-          </template>
-          <template #caption>
-            {{ $t('content.tasksCount', { n: ts.tasks.length }) }}
-            <span v-if="ts.coauthorLabels?.length"> · {{ ts.coauthorLabels.join(', ') }}</span>
+            <q-badge
+              v-else-if="editorSetModerationBadge(ts)"
+              :color="editorSetModerationBadgeColor(ts)"
+              dense
+              :data-test-id="`editor-task-set-status-${ts.id}`"
+            >
+              {{ editorSetModerationBadge(ts) }}
+            </q-badge>
           </template>
           <template #actions>
             <q-btn
               v-if="canOpenTasks && canEnterEditorSet(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
+              icon="edit"
               :label="$t('content.edit')"
               :data-test-id="`editor-task-set-edit-${ts.id}`"
               :disable="!canOpenTasks"
@@ -225,11 +229,12 @@
             />
             <q-btn
               v-if="staffMode && content.pack?.hasLive && isSetSoftUnpublished(ts)"
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="primary"
+              icon="visibility"
               :label="$t('content.republish')"
               :loading="content.loading"
               @click.stop="onRepublishSet(ts.id)"
@@ -238,11 +243,12 @@
               v-if="
                 staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && canUnpublishSet
               "
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="warning"
+              icon="visibility_off"
               :label="$t('content.unpublish')"
               :loading="content.loading"
               @click.stop="confirmUnpublishSet(ts.id)"
@@ -251,18 +257,19 @@
               v-if="
                 staffMode && content.pack?.hasLive && !isSetSoftUnpublished(ts) && !canUnpublishSet
               "
-              flat
+              outline
               dense
               no-caps
               class="full-width"
               color="warning"
+              icon="visibility_off"
               :label="$t('content.unpublish')"
               disable
             >
               <q-tooltip>{{ $t('content.lastPublishedTaskSetHint') }}</q-tooltip>
             </q-btn>
           </template>
-        </PackListCardTile>
+        </PackTaskSetCardTile>
       </div>
       <div v-else class="text-muted q-mb-lg">{{ $t('content.emptyTaskSets') }}</div>
 
@@ -416,7 +423,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
 
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
-import PackListCardTile from '@/components/PackListCardTile.vue';
+import PackTaskSetCardTile from '@/components/PackTaskSetCardTile.vue';
 import {
   clearPackSubmitBaseline,
   ensurePackSubmitBaseline,
@@ -859,6 +866,35 @@ function openTaskSet(taskSetId: string) {
 
 function isSetSoftUnpublished(ts: TaskSet): boolean {
   return ts.inCatalog === false;
+}
+
+function difficultyCounts(ts: TaskSet): { d1: number; d2: number; d3: number } {
+  let d1 = 0;
+  let d2 = 0;
+  let d3 = 0;
+  for (const task of ts.tasks) {
+    if (task.difficulty === 1) d1 += 1;
+    else if (task.difficulty === 2) d2 += 1;
+    else if (task.difficulty === 3) d3 += 1;
+  }
+  return { d1, d2, d3 };
+}
+
+/** SC-PACK-240: short badges on editor task-set cards. */
+function editorSetModerationBadge(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return t('content.taskSetCardBadge.pending');
+  if (status === 'needs_revision') return t('content.taskSetCardBadge.needs_revision');
+  if (status === 'draft') return t('content.taskSetCardBadge.draft');
+  return '';
+}
+
+function editorSetModerationBadgeColor(ts: TaskSet): string {
+  const status = ts.moderationStatus;
+  if (status === 'pending') return 'orange';
+  if (status === 'needs_revision') return 'warning';
+  if (status === 'draft') return 'grey';
+  return 'grey';
 }
 
 function canEnterEditorSet(ts: TaskSet): boolean {

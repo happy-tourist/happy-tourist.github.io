@@ -226,6 +226,7 @@ const stubs = {
     template: '<div class="pack-task-tile-stub">{{ question }}</div>',
   },
   PackListCardTile: false,
+  PackTaskSetCardTile: false,
 };
 
 describe('follow-up 4 UI (SC-PACK-129…133)', () => {
@@ -448,8 +449,10 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('content.tasksCount');
-    expect(wrapper.text()).toContain('content.taskSetDifficultySummary');
+    expect(wrapper.find('[data-testid="pack-task-set-stats"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-total"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Easy?');
     expect(wrapper.text()).not.toContain('Hard?');
   });
@@ -458,10 +461,10 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('content.unpublishedByStaff');
-    expect(wrapper.find('.pack-list-tile--muted').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
+    expect(wrapper.find('.pack-task-set-tile--muted').exists()).toBe(true);
 
-    const softRow = wrapper.find('.pack-list-tile--muted');
+    const softRow = wrapper.find('.pack-task-set-tile--muted');
     expect(softRow.exists()).toBe(true);
     await softRow.trigger('click');
     await flushPromises();
@@ -479,8 +482,8 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
 
     // Click first task-set card (published ts1).
     const setRows = wrapper
-      .findAll('.pack-list-tile')
-      .filter((n) => n.text().includes('content.taskSetLabelFrom'));
+      .findAll('.pack-task-set-tile')
+      .filter((n) => n.text().includes('content.taskSetLabel'));
     expect(setRows.length).toBeGreaterThanOrEqual(1);
     await setRows[0]!.trigger('click');
     await flushPromises();

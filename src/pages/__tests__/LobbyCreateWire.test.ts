@@ -168,7 +168,8 @@ const stubs = {
           v-for="opt in options"
           :key="String(opt.value)"
           :data-pack="opt.packTitle"
-          :data-author="opt.authorDisplayName"
+          :data-set="opt.setLabel"
+          :data-set-n="opt.setOrdinal"
         >
           <input
             v-if="type === 'checkbox'"
@@ -351,7 +352,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     );
   });
 
-  it('SC-LOBBY-23/24: multi-select published sets within one pack; row shows pack theme + author', async () => {
+  it('SC-LOBBY-23/24: multi-select published sets within one pack; row shows pack theme without set author', async () => {
     await openCreate();
     await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
     await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
@@ -359,12 +360,16 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
 
     expect(contentState.loadLivePack).toHaveBeenCalledWith('pack-p');
     expect(wrapper!.find('[data-test-id="check-s-soft"]').exists()).toBe(false);
-    expect(wrapper!.text()).toContain('lobby.taskSetFromAuthor');
+    expect(wrapper!.text()).toContain('lobby.taskSetOption');
+    expect(wrapper!.text()).not.toContain('lobby.taskSetFromAuthor');
     const s1 = wrapper!.get('[data-test-id="check-s1"]').element.closest('label');
     const s2 = wrapper!.get('[data-test-id="check-s2"]').element.closest('label');
     expect(s1?.getAttribute('data-pack')).toBe('Математика');
-    expect(s1?.getAttribute('data-author')).toBe('Иван');
-    expect(s2?.getAttribute('data-author')).toBe('Мария');
+    expect(s1?.getAttribute('data-set')).toBe('content.taskSetLabel');
+    expect(s2?.getAttribute('data-set')).toBe('content.taskSetLabel');
+    expect(s1?.getAttribute('data-author')).toBeNull();
+    expect(wrapper!.text()).not.toContain('Иван');
+    expect(wrapper!.text()).not.toContain('Мария');
 
     await wrapper!.get('[data-test-id="check-s1"]').setValue(true);
     await wrapper!.get('[data-test-id="check-s2"]').setValue(true);
@@ -372,6 +377,44 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
 
     const confirm = wrapper!.get('[data-test-id="lobby-create-confirm"]');
     expect(confirm.attributes('disabled')).toBeFalsy();
+  });
+
+  it('SC-LOBBY-24: create picker ordinals follow pack index when a soft set is ahead', async () => {
+    contentState.loadLivePack.mockImplementation((packId: string) => {
+      contentState.pack = { id: packId, title: 'Математика' };
+      contentState.liveContent = {
+        title: 'Математика',
+        taskSets: [
+          {
+            id: 's-soft',
+            authorUserId: 'a0',
+            authorDisplayName: 'Hidden',
+            coauthorLabels: [],
+            inCatalog: false,
+            tasks: [],
+          },
+          {
+            id: 's-pub',
+            authorUserId: 'a1',
+            authorDisplayName: 'Иван',
+            coauthorLabels: [],
+            inCatalog: true,
+            tasks: [],
+          },
+        ],
+      };
+    });
+
+    await openCreate();
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper!.find('[data-test-id="check-s-soft"]').exists()).toBe(false);
+    const pub = wrapper!.get('[data-test-id="check-s-pub"]').element.closest('label');
+    // Soft set is pack index 0 → published set stays «Набор заданий 2».
+    expect(pub?.getAttribute('data-set-n')).toBe('2');
+    expect(wrapper!.text()).not.toContain('Иван');
   });
 
   it('SC-LOBBY-30: single published set is pre-checked', async () => {
@@ -440,7 +483,7 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     expect(gameState.createGame).not.toHaveBeenCalled();
   });
 
-  it('SC-LOBBY-25/26: listing shows map preview, room maxSeats capacity, pack/set labels', async () => {
+  it('SC-LOBBY-25/26: listing shows map preview, room maxSeats capacity, pack/set ordinals without set author', async () => {
     gameState.rooms = [
       {
         roomId: 'r1',
@@ -468,9 +511,10 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     expect(wrapper.find('[data-test-id="lobby-room-map-capacity"]').text()).toContain(
       'lobby.mapCapacityCaption',
     );
-    expect(wrapper.find('[data-test-id="lobby-room-pack-sets"]').text()).toContain(
-      'lobby.packSetsCaption',
-    );
+    const packSets = wrapper.find('[data-test-id="lobby-room-pack-sets"]');
+    expect(packSets.text()).toContain('lobby.packSetsCaption');
+    expect(packSets.text()).not.toContain('Мария');
+    expect(wrapper.text()).not.toContain('Мария');
     expect(wrapper.text()).toContain('lobby.capacity');
   });
 });
