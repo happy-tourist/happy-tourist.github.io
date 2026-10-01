@@ -296,7 +296,7 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(card.find('.pack-task-set-tile__title').text()).toContain('content.taskSetLabel');
   });
 
-  it('SC-PACK-240/241: short card badges and outline icon actions on live task-set card', async () => {
+  it('SC-PACK-240/241/248: short card badges with SVG icons and outline actions on live task-set card', async () => {
     authState.user = { id: 'contrib', anonymous: false };
     contentState.pack = { ...contentState.pack!, createdBy: 'owner' };
     contentState.liveContent = {
@@ -324,6 +324,11 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(status.exists()).toBe(true);
     expect(status.text()).toContain('content.taskSetCardBadge.needs_revision');
     expect(status.text()).not.toContain('content.taskSetStatusMarks');
+    // SC-PACK-248: custom SVG mask icon class (not Material close/schedule/…).
+    expect(status.find('.pack-task-set-status-icon--revise').exists()).toBe(true);
+    expect(status.find('.pack-task-set-status-icon--revise').element.tagName.toLowerCase()).toBe(
+      'span',
+    );
 
     const editBtn = wrapper.find('[data-test-id="pack-task-set-author-edit"]');
     expect(editBtn.exists()).toBe(true);
@@ -336,6 +341,10 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-diff-1"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-2"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-task-set-diff-3"]').exists()).toBe(true);
+    // Total-row custom SVG (SC-PACK-248).
+    expect(wrapper.find('[data-testid="pack-task-set-total-icon"]').attributes('data-icon')).toBe(
+      'task-set-card-tasks',
+    );
   });
 
   it('SC-PACK-239: viewer without card actions has no empty actions chrome', async () => {

@@ -27,7 +27,7 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
+describe('PackTaskSetCardTile (SC-PACK-229/239…248)', () => {
   it('mounts with ~150–160 width, taller than 200, and light/dark contrast tokens', () => {
     expect(vueSrc).toMatch(/width:\s*15[0-6]px/);
     expect(vueSrc).toMatch(/min-height:\s*20[6-9]px|min-height:\s*2[1-4]\dpx/);
@@ -55,8 +55,13 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
     expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain('5');
   });
 
-  it('SC-PACK-239/242/243: total icon, pale dividers, colored outline dots; no hover scale', () => {
-    expect(vueSrc).toMatch(/name=["']description["']/);
+  it('SC-PACK-239/242/243: total SVG icon, pale dividers, colored outline dots; no hover scale', () => {
+    expect(vueSrc).toMatch(/task-set-card-tasks\.svg/);
+    expect(vueSrc).toMatch(/pack-task-set-tile__total-icon/);
+    expect(vueSrc).toMatch(
+      /mask(?:-image)?:\s*var\(--pack-ts-icon-tasks\)|mask:\s*var\(--pack-ts-icon-tasks\)/,
+    );
+    expect(vueSrc).not.toMatch(/name=["']description["']/);
     expect(vueSrc).toMatch(/pack-task-set-tile__divider/);
     expect(vueSrc).toMatch(/--pack-ts-dot-1/);
     expect(vueSrc).toMatch(/--pack-ts-dot-2/);
@@ -79,9 +84,10 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
     });
 
     expect(wrapper.find('[data-testid="pack-task-set-stats"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="pack-task-set-total-icon"]').attributes('data-name')).toBe(
-      'description',
-    );
+    const totalIcon = wrapper.find('[data-testid="pack-task-set-total-icon"]');
+    expect(totalIcon.exists()).toBe(true);
+    expect(totalIcon.attributes('data-icon')).toBe('task-set-card-tasks');
+    expect(totalIcon.element.tagName.toLowerCase()).toBe('span');
     expect(wrapper.find('[data-testid="pack-task-set-total"]').text()).toContain(
       'content.taskSetCardTotal',
     );
@@ -162,18 +168,79 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
     }
   });
 
-  it('SC-PACK-245: roomier title→stats and divider air tokens', () => {
-    expect(vueSrc).toMatch(/--pack-ts-title-gap:\s*1[2-6]px/);
+  it('SC-PACK-245/247: title→stats and divider air tokens (retuned)', () => {
+    // SC-PACK-247 retune: title-gap 7; divider-air 2–3 (total ~4–6); status→title pad.
+    expect(vueSrc).toMatch(/--pack-ts-title-gap:\s*7px/);
     expect(vueSrc).toMatch(/margin-bottom:\s*var\(--pack-ts-title-gap\)/);
     expect(vueSrc).toMatch(/--pack-ts-row-pad-y:\s*[6-8]px/);
     expect(vueSrc).toMatch(/padding:\s*var\(--pack-ts-row-pad-y\)\s+0/);
-    expect(vueSrc).toMatch(/--pack-ts-divider-air:\s*[4-6]px/);
+    expect(vueSrc).toMatch(/--pack-ts-divider-air:\s*[2-3]px/);
     expect(vueSrc).toMatch(
       /\.pack-task-set-tile__divider[\s\S]*margin:\s*var\(--pack-ts-divider-air\)\s+0/,
     );
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__status[\s\S]*padding:\s*8px\s+10px\s+[6-8]px/);
     expect(vueSrc).toMatch(/min-height:\s*20[6-9]px|min-height:\s*2[1-4]\dpx/);
-    // List grid gutter must stay out of this tile (Decision 10 / Non-Goals).
+    // List grid gutter must stay out of this tile (Decision 10/11 / Non-Goals).
     expect(vueSrc).not.toMatch(/\.pack-card-grid/);
+  });
+
+  it('SC-PACK-248: custom SVG total + badge icons via currentColor / CSS mask', () => {
+    expect(vueSrc).toMatch(/task-set-card-tasks\.svg/);
+    expect(vueSrc).toMatch(/task-set-badge-revise\.svg/);
+    expect(vueSrc).toMatch(/task-set-badge-pending\.svg/);
+    expect(vueSrc).toMatch(/task-set-badge-unpublished\.svg/);
+    expect(vueSrc).toMatch(/task-set-badge-draft\.svg/);
+    expect(vueSrc).not.toMatch(/name=["']description["']/);
+    expect(vueSrc).not.toMatch(/name=["'](?:close|schedule|visibility_off|edit_note)["']/);
+
+    // Total icon size 14; badge icons ~12; ink via currentColor.
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__total-icon[\s\S]*width:\s*14px/);
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__total-icon[\s\S]*height:\s*14px/);
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile__total-icon[\s\S]*background-color:\s*currentColor/,
+    );
+    expect(vueSrc).toMatch(/\.pack-task-set-status-icon[\s\S]*width:\s*12px/);
+    expect(vueSrc).toMatch(/\.pack-task-set-status-icon[\s\S]*background-color:\s*currentColor/);
+
+    // Soft muted / pending badge colors from Visual Spec (not Quasar solid fills).
+    expect(vueSrc).toMatch(
+      /pack-task-set-status-badge--muted[\s\S]*background:\s*rgba\(0,\s*0,\s*0,\s*0\.06\)/,
+    );
+    expect(vueSrc).toMatch(
+      /pack-task-set-status-badge--muted[\s\S]*color:\s*rgba\(0,\s*0,\s*0,\s*0\.72\)/,
+    );
+    expect(vueSrc).toMatch(
+      /pack-task-set-status-badge--pending[\s\S]*background:\s*rgba\(249,\s*168,\s*37,\s*0\.16\)/,
+    );
+    expect(vueSrc).toMatch(/pack-task-set-status-badge--pending[\s\S]*color:\s*#f9a825/);
+    expect(vueSrc).toMatch(
+      /\.body--dark[\s\S]*pack-task-set-status-badge--muted[\s\S]*rgba\(255,\s*255,\s*255,\s*0\.12\)/,
+    );
+    expect(vueSrc).toMatch(
+      /\.body--dark[\s\S]*pack-task-set-status-badge--pending[\s\S]*color:\s*#ffc107/,
+    );
+    // Stats icon ink = muted token.
+    expect(vueSrc).toMatch(/--pack-ts-muted:\s*rgba\(0,\s*0,\s*0,\s*0\.7\)/);
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile__total-icon[\s\S]*color:\s*var\(--pack-ts-muted\)/,
+    );
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: { title: 'Set', totalCount: 1, countDiff1: 1 },
+      slots: {
+        status:
+          '<span class="pack-task-set-status-badge pack-task-set-status-badge--muted">' +
+          '<span class="pack-task-set-status-icon pack-task-set-status-icon--revise" data-testid="badge-revise"></span>' +
+          'ДОРАБОТАТЬ</span>',
+      },
+      global: { stubs },
+    });
+    expect(wrapper.find('[data-testid="pack-task-set-total-icon"]').attributes('data-icon')).toBe(
+      'task-set-card-tasks',
+    );
+    expect(wrapper.find('[data-testid="badge-revise"]').classes()).toContain(
+      'pack-task-set-status-icon--revise',
+    );
   });
 
   it('SC-PACK-246: themed hover border + soft lift; no scale; no --q-secondary; icons static', () => {
@@ -220,6 +287,22 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…246)', () => {
     expect(vueSrc).toMatch(/pack-task-set-status-badge--pending/);
     expect(vueSrc).toMatch(/padding:\s*2px\s+6px/);
     expect(vueSrc).toMatch(/\.q-btn--outline:before[\s\S]*border-color:\s*var\(--pack-ts-border\)/);
+  });
+
+  it('soft-unpublish muted: opacity 0.72 + dashed border; counts use title.fg', () => {
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile--muted[\s\S]*opacity:\s*0\.72[\s\S]*border-style:\s*dashed/,
+    );
+    expect(vueSrc).toMatch(
+      /\.pack-task-set-tile__stat-count[\s\S]*color:\s*var\(--pack-ts-fg\)/,
+    );
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__stat-count[\s\S]*font-weight:\s*600/);
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: { title: 'Set', totalCount: 1, countDiff1: 1, muted: true },
+      global: { stubs },
+    });
+    expect(wrapper.classes()).toContain('pack-task-set-tile--muted');
   });
 
   it('SC-PACK-241: slim action height tokens (~28–32 CSS px)', () => {

@@ -207,7 +207,10 @@
               dense
               class="pack-task-set-status-badge pack-task-set-status-badge--muted"
             >
-              <q-icon name="visibility_off" size="12px" />
+              <span
+                class="pack-task-set-status-icon pack-task-set-status-icon--unpublished"
+                aria-hidden="true"
+              />
               {{ $t('content.taskSetCardBadge.unpublished') }}
             </q-badge>
             <q-badge
@@ -217,7 +220,11 @@
               :class="editorSetModerationBadgeToneClass(ts)"
               :data-test-id="`editor-task-set-status-${ts.id}`"
             >
-              <q-icon :name="editorSetModerationBadgeIcon(ts)" size="12px" />
+              <span
+                class="pack-task-set-status-icon"
+                :class="editorSetModerationBadgeIconClass(ts)"
+                aria-hidden="true"
+              />
               {{ editorSetModerationBadge(ts) }}
             </q-badge>
           </template>
@@ -900,13 +907,13 @@ function editorSetModerationBadgeToneClass(ts: TaskSet): string {
     : 'pack-task-set-status-badge--muted';
 }
 
-/** Temp Material until task-set-badge-*.svg (pack-cards.md). */
-function editorSetModerationBadgeIcon(ts: TaskSet): string {
+/** Custom SVG badge icons via CSS mask classes (SC-PACK-248 / Decision 12). */
+function editorSetModerationBadgeIconClass(ts: TaskSet): string {
   const status = ts.moderationStatus;
-  if (status === 'pending') return 'schedule';
-  if (status === 'needs_revision') return 'close';
-  if (status === 'draft') return 'edit_note';
-  return 'edit_note';
+  if (status === 'pending') return 'pack-task-set-status-icon--pending';
+  if (status === 'needs_revision') return 'pack-task-set-status-icon--revise';
+  if (status === 'draft') return 'pack-task-set-status-icon--draft';
+  return 'pack-task-set-status-icon--draft';
 }
 
 function canEnterEditorSet(ts: TaskSet): boolean {

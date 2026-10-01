@@ -6,6 +6,7 @@
       'pack-task-set-tile--muted': muted,
       'cascade-gap-outline': cascadeGap,
     }"
+    :style="iconMaskVars"
     :data-test-id="testId"
     :data-testid="testId"
     :role="clickable ? 'button' : undefined"
@@ -24,12 +25,11 @@
       <div class="pack-task-set-tile__stats" data-testid="pack-task-set-stats">
         <div class="pack-task-set-tile__stat-row" data-testid="pack-task-set-total">
           <span class="pack-task-set-tile__lead" aria-hidden="true">
-            <!-- Placeholder until task-set-card-tasks.svg arrives (Decision 4). -->
-            <q-icon
-              name="description"
-              size="14px"
+            <!-- Custom SVG via CSS mask + currentColor (Decision 12 / SC-PACK-248). -->
+            <span
               class="pack-task-set-tile__total-icon"
               data-testid="pack-task-set-total-icon"
+              data-icon="task-set-card-tasks"
             />
           </span>
           <span class="pack-task-set-tile__stat-label">{{ $t('content.taskSetCardTotal') }}</span>
@@ -78,6 +78,12 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import iconTasks from '@/assets/content/task-set-card-tasks.svg';
+import iconBadgeDraft from '@/assets/content/task-set-badge-draft.svg';
+import iconBadgePending from '@/assets/content/task-set-badge-pending.svg';
+import iconBadgeRevise from '@/assets/content/task-set-badge-revise.svg';
+import iconBadgeUnpublished from '@/assets/content/task-set-badge-unpublished.svg';
+
 const props = withDefaults(
   defineProps<{
     /** Truncated task-set label (no author). */
@@ -109,6 +115,15 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+/** CSS mask URLs for total-row + status badge icons (ink via currentColor). */
+const iconMaskVars = {
+  '--pack-ts-icon-tasks': `url(${iconTasks})`,
+  '--pack-ts-icon-revise': `url(${iconBadgeRevise})`,
+  '--pack-ts-icon-pending': `url(${iconBadgePending})`,
+  '--pack-ts-icon-unpublished': `url(${iconBadgeUnpublished})`,
+  '--pack-ts-icon-draft': `url(${iconBadgeDraft})`,
+};
+
 const difficultyRows = computed(() => [
   {
     difficulty: 1 as const,
@@ -133,7 +148,7 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Task-set summary chrome (SC-PACK-229/239…246): denser than catalog 150×200. */
+/* Task-set summary chrome (SC-PACK-229/239…248): denser than catalog 150×200. */
 .pack-task-set-tile {
   /* Lead = three 6px dots + 2×2px gaps → 22px (Decision 9 / SC-PACK-244). */
   --pack-ts-lead-w: 22px;
@@ -151,10 +166,10 @@ function onBodyClick() {
   --pack-ts-dot-2: #f9a825;
   --pack-ts-dot-3: #e53935;
   --pack-ts-action-h: 30px;
-  /* Visual Spec spacing (SC-PACK-245): title→stats 12–16; row pad-y 6–8; air row↔divider 8–12. */
-  --pack-ts-title-gap: 14px;
+  /* Spacing retune (SC-PACK-247 / Decision 11): title→stats ~7; divider air ~4–6 total. */
+  --pack-ts-title-gap: 7px;
   --pack-ts-row-pad-y: 6px;
-  --pack-ts-divider-air: 5px;
+  --pack-ts-divider-air: 3px;
 
   position: relative;
   box-sizing: border-box;
@@ -200,17 +215,20 @@ function onBodyClick() {
   outline: none;
 }
 
+/* Soft-unpublish (СНЯТО): Spec opacity 0.72 + mock dashed outline. */
 .pack-task-set-tile--muted {
   opacity: 0.72;
   color: var(--pack-ts-muted);
+  border-style: dashed;
 }
 
-/* Reserved top status band — empty space stays here when no badge (SC-PACK-244). */
+/* Reserved top status band — empty space stays here when no badge (SC-PACK-244).
+ * pad-bottom 7 → status→title air ~6–8 CSS px (SC-PACK-247 / Decision 11). */
 .pack-task-set-tile__status {
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 8px 10px 0;
+  padding: 8px 10px 7px;
   min-height: 22px;
   flex: 0 0 auto;
 }
@@ -250,6 +268,41 @@ function onBodyClick() {
 .body--dark .pack-task-set-tile__status :deep(.pack-task-set-status-badge--pending) {
   background: rgba(255, 193, 7, 0.14) !important;
   color: #ffc107 !important;
+}
+
+/* Badge icons: ~12px CSS mask; ink = badge currentColor (muted / pending) — SC-PACK-248. */
+.pack-task-set-tile__status :deep(.pack-task-set-status-icon) {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-icon--revise) {
+  -webkit-mask-image: var(--pack-ts-icon-revise);
+  mask-image: var(--pack-ts-icon-revise);
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-icon--pending) {
+  -webkit-mask-image: var(--pack-ts-icon-pending);
+  mask-image: var(--pack-ts-icon-pending);
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-icon--unpublished) {
+  -webkit-mask-image: var(--pack-ts-icon-unpublished);
+  mask-image: var(--pack-ts-icon-unpublished);
+}
+
+.pack-task-set-tile__status :deep(.pack-task-set-status-icon--draft) {
+  -webkit-mask-image: var(--pack-ts-icon-draft);
+  mask-image: var(--pack-ts-icon-draft);
 }
 
 .pack-task-set-tile__body {
@@ -305,8 +358,15 @@ function onBodyClick() {
   min-width: var(--pack-ts-lead-w);
 }
 
+/* Total-row icon: 14×14 CSS mask; ink = stats.icon.ink (--pack-ts-muted) — SC-PACK-248. */
 .pack-task-set-tile__total-icon {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
   color: var(--pack-ts-muted);
+  background-color: currentColor;
+  -webkit-mask: var(--pack-ts-icon-tasks) center / contain no-repeat;
+  mask: var(--pack-ts-icon-tasks) center / contain no-repeat;
 }
 
 .pack-task-set-tile__stat-label {
@@ -317,6 +377,7 @@ function onBodyClick() {
   text-align: left;
 }
 
+/* Counts use title.fg (stronger than labels) — mock light/dark; Visual Spec count.fg. */
 .pack-task-set-tile__stat-count {
   font-variant-numeric: tabular-nums;
   color: var(--pack-ts-fg);
@@ -329,7 +390,7 @@ function onBodyClick() {
   height: 0;
   border: 0;
   border-top: 1px solid var(--pack-ts-splitter);
-  /* Air row↔divider: 8–12 total = 2 × --pack-ts-divider-air (split above+below). */
+  /* Air row↔divider: ~4–6 total = 2 × --pack-ts-divider-air (SC-PACK-247). */
   margin: var(--pack-ts-divider-air) 0;
   flex: 0 0 auto;
   width: 100%;
@@ -371,7 +432,7 @@ function onBodyClick() {
   flex-direction: column;
   width: 100%;
   gap: 0.2rem;
-  /* Air around actions divider: ~5 above (via margin) + ~5 below line (pad-top). */
+  /* Air around actions divider: --pack-ts-divider-air above + below border (SC-PACK-247). */
   margin-top: var(--pack-ts-divider-air);
   padding: var(--pack-ts-divider-air) 8px 8px;
   border-top: 1px solid var(--pack-ts-splitter);
