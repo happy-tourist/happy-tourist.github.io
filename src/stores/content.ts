@@ -14,6 +14,16 @@ export type PackListModerationStatus =
 /** Open moderation kind on list row (SC-PACK-191/192): pack-level vs add-task-set. */
 export type PackListOpenRequestType = 'pack' | 'task_set';
 
+/** Lightweight set row on GET /api/content/packs (SC-PACK-252/253). */
+export interface PackTaskSetPreview {
+  id: string;
+  /** 1-based index in taskSetsPreview order (not raw DB position). */
+  ordinal: number;
+  taskCount: number;
+  inCatalog: boolean;
+  neverLive?: boolean;
+}
+
 export interface ContentPackSummary {
   id: string;
   title: string;
@@ -37,6 +47,11 @@ export interface ContentPackSummary {
   isMine?: boolean;
   isContributor?: boolean;
   isFavorite?: boolean;
+  /**
+   * Full lightweight set preview for catalog card (SC-PACK-249/252).
+   * Client shows ≤4 + overflow; missing → treat as [].
+   */
+  taskSetsPreview?: PackTaskSetPreview[];
 }
 
 export interface AnswerCard {

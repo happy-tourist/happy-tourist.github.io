@@ -77,7 +77,7 @@ const stubs = {
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
   'q-icon': true,
-  // Render real 150×200 cards so packs-row / packs-star test ids stay queryable (SC-PACK-228).
+  // Render real ~180×260 cards so packs-row / packs-star test ids stay queryable (SC-PACK-228).
   PackListCardTile: false,
 };
 

@@ -119,7 +119,7 @@ const stubs = {
   PackTaskSetCardTile: false,
 };
 
-describe('catalog + task-set cards (SC-PACK-228/229)', () => {
+describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
   beforeEach(() => {
     authState.user = { id: 'u1', anonymous: false };
     authState.isStaff = false;
@@ -189,7 +189,7 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-228: catalog packs render as 150×200 cards with star TL, description, Edit bottom', async () => {
+  it('SC-PACK-228: catalog packs render as ~180×260 cards with star TL, description, Edit bottom', async () => {
     contentState.catalog = [
       {
         id: 'pub1',
@@ -203,6 +203,10 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
         isMine: false,
         isContributor: false,
         isFavorite: false,
+        taskSetsPreview: [
+          { id: 'ts1', ordinal: 1, taskCount: 10, inCatalog: true },
+          { id: 'ts2', ordinal: 2, taskCount: 5, inCatalog: true },
+        ],
       },
       {
         id: 'draft1',
@@ -214,6 +218,7 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
         moderationStatus: 'draft',
         isMine: true,
         isFavorite: false,
+        taskSetsPreview: [],
       },
     ];
 
@@ -233,6 +238,10 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(
       wrapper.find('.pack-list-tile__actions [data-test-id="packs-edit-draft1"]').exists(),
     ).toBe(true);
+    const editBtn = wrapper.find('[data-test-id="packs-edit-draft1"]');
+    expect(editBtn.attributes('data-outline')).toBe('1');
+    expect(editBtn.attributes('data-icon')).toBe('edit');
+    expect(editBtn.attributes('data-dense')).toBe('1');
     expect(wrapper.find('[data-test-id="packs-edit-pub1"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-status-draft1"]').exists()).toBe(true);
     expect(
@@ -241,6 +250,126 @@ describe('catalog + task-set cards (SC-PACK-228/229)', () => {
     expect(
       wrapper.find('[data-test-id="packs-row-draft1"] .pack-list-tile__description').text(),
     ).toContain('Draft description');
+    // Set preview on published card.
+    expect(
+      wrapper.find('[data-test-id="packs-row-pub1"] [data-testid="pack-list-sets"]').exists(),
+    ).toBe(true);
+  });
+
+  it('SC-PACK-249: catalog card shows ≤4 sets + overflow; muted soft-unpub/neverLive rows', async () => {
+    contentState.catalog = [
+      {
+        id: 'pub1',
+        title: 'Six sets pack',
+        description: 'Has six sets',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'other',
+        moderationStatus: 'in_catalog',
+        isMine: false,
+        isFavorite: false,
+        taskSetsPreview: [
+          { id: 'a', ordinal: 1, taskCount: 48, inCatalog: true },
+          { id: 'b', ordinal: 2, taskCount: 36, inCatalog: false },
+          { id: 'c', ordinal: 3, taskCount: 12, inCatalog: true },
+          { id: 'd', ordinal: 4, taskCount: 8, inCatalog: true },
+          { id: 'e', ordinal: 5, taskCount: 4, inCatalog: true },
+          { id: 'f', ordinal: 6, taskCount: 2, inCatalog: true, neverLive: true },
+        ],
+      },
+    ];
+
+    const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
+    await flushPromises();
+
+    const card = wrapper.find('[data-test-id="packs-row-pub1"]');
+    expect(card.exists()).toBe(true);
+    expect(card.findAll('[data-testid="pack-list-set-row"]')).toHaveLength(4);
+    expect(card.find('[data-testid="pack-list-sets-overflow"]').exists()).toBe(true);
+    expect(card.findAll('.pack-list-tile__set-row--muted').length).toBeGreaterThanOrEqual(1);
+    expect(card.find('[data-testid="pack-list-set-icon"]').attributes('data-icon')).toBe(
+      'task-set-card-tasks',
+    );
+  });
+
+  it('SC-PACK-250: outline+icon Edit/Unpublish; whole-card open outside actions/star', async () => {
+    authState.isStaff = true;
+    authState.user = { id: 'staff1', anonymous: false };
+    contentState.catalog = [
+      {
+        id: 'pub1',
+        title: 'Staff pack',
+        description: 'Desc',
+        blocked: false,
+        hasLive: true,
+        inCatalog: true,
+        createdBy: 'u1',
+        moderationStatus: 'draft',
+        openRequestType: 'pack',
+        isMine: true,
+        isFavorite: false,
+        taskSetsPreview: [{ id: 'ts1', ordinal: 1, taskCount: 3, inCatalog: true }],
+      },
+    ];
+
+    const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
+    await flushPromises();
+
+    const editBtn = wrapper.find('[data-test-id="packs-edit-pub1"]');
+    expect(editBtn.exists()).toBe(true);
+    expect(editBtn.attributes('data-outline')).toBe('1');
+    expect(editBtn.attributes('data-icon')).toBe('edit');
+    expect(editBtn.attributes('data-dense')).toBe('1');
+
+    const unpubBtn = wrapper.find('[data-test-id="packs-unpublish-pub1"]');
+    expect(unpubBtn.exists()).toBe(true);
+    expect(unpubBtn.attributes('data-outline')).toBe('1');
+    expect(unpubBtn.attributes('data-icon')).toBe('visibility_off');
+    expect(unpubBtn.text()).toContain('content.unpublish');
+
+    // Body open → Edit for pack-level draft.
+    await wrapper.find('[data-test-id="packs-row-pub1"]').trigger('click');
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'content-pack-edit',
+      params: { id: 'pub1' },
+    });
+  });
+
+  it('SC-PACK-251: revise badge short ДОРАБОТАТЬ red-outline; title uppercase CSS', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetCardBadge.needs_revision).toBe('ДОРАБОТАТЬ');
+    expect(messages.content.statuses.needs_revision).toBe('Нужна доработка');
+    expect(messages.content.packCardSetsOverflow).toBe('ещё {k}');
+
+    contentState.catalog = [
+      {
+        id: 'rev1',
+        title: 'География мира',
+        description: 'Факты и столицы.',
+        blocked: false,
+        hasLive: false,
+        createdBy: 'u1',
+        moderationStatus: 'needs_revision',
+        openRequestType: 'pack',
+        isMine: true,
+        isFavorite: false,
+        taskSetsPreview: [],
+      },
+    ];
+
+    const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
+    await flushPromises();
+
+    const status = wrapper.find('[data-test-id="packs-status-rev1"]');
+    expect(status.exists()).toBe(true);
+    expect(status.classes()).toContain('pack-list-status-badge--revise');
+    expect(status.text()).toContain('content.taskSetCardBadge.needs_revision');
+    expect(status.text()).not.toContain('content.statuses.needs_revision');
+
+    const title = wrapper.find('[data-test-id="packs-row-rev1"] .pack-list-tile__title');
+    expect(title.exists()).toBe(true);
+    expect(title.text()).toContain('География мира');
   });
 
   it('SC-PACK-229: live task-set list uses summary cards with status and bottom Edit', async () => {

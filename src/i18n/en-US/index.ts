@@ -219,6 +219,11 @@ export default {
     taskSets: 'Наборы заданий',
     /** SC-PACK-135/243: ordinal task-set label with `#` (no author/coauthor). */
     taskSetLabel: 'Набор заданий #{n}',
+    /**
+     * SC-PACK-249: catalog pack card overflow when more than 4 set-preview rows.
+     * `{k}` = hidden count (taskSetsPreview.length − 4).
+     */
+    packCardSetsOverflow: 'ещё {k}',
     /** Legacy; content surfaces use `taskSetLabel` (SC-PACK-135 redesign). */
     taskSetLabelFrom: 'Набор заданий #{n} от {name}',
     /** SC-PACK-239/243: task-set summary card stats rows. */

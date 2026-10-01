@@ -293,9 +293,7 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…248)', () => {
     expect(vueSrc).toMatch(
       /\.pack-task-set-tile--muted[\s\S]*opacity:\s*0\.72[\s\S]*border-style:\s*dashed/,
     );
-    expect(vueSrc).toMatch(
-      /\.pack-task-set-tile__stat-count[\s\S]*color:\s*var\(--pack-ts-fg\)/,
-    );
+    expect(vueSrc).toMatch(/\.pack-task-set-tile__stat-count[\s\S]*color:\s*var\(--pack-ts-fg\)/);
     expect(vueSrc).toMatch(/\.pack-task-set-tile__stat-count[\s\S]*font-weight:\s*600/);
 
     const wrapper = mount(PackTaskSetCardTile, {

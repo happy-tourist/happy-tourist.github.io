@@ -39,13 +39,14 @@
     <div v-else-if="!filteredPacks.length" class="text-muted">
       {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
     </div>
-    <!-- SC-PACK-228 / D13′: 150×200 — status top, star TL, description, actions bottom text -->
+    <!-- SC-PACK-228/249…251: ~180×260 — star TL, status TR, set preview, outline+icon actions -->
     <div v-else class="pack-card-grid" data-testid="packs-card-grid">
       <PackListCardTile
         v-for="item in filteredPacks"
         :key="item.id"
         :title="item.title || $t('content.untitled')"
         :description="item.description || ''"
+        :task-sets-preview="item.taskSetsPreview ?? []"
         clickable
         :test-id="`packs-row-${item.id}`"
         @open="onRowClick(item)"
@@ -72,6 +73,15 @@
             {{ $t('content.blocked') }}
           </q-badge>
           <q-badge
+            v-else-if="isReviseStatus(item)"
+            dense
+            outline
+            class="pack-list-status-badge--revise"
+            :data-test-id="`packs-status-${item.id}`"
+          >
+            {{ $t('content.taskSetCardBadge.needs_revision') }}
+          </q-badge>
+          <q-badge
             v-else-if="statusBadge(item)"
             :color="statusBadgeColor(item)"
             dense
@@ -80,36 +90,40 @@
             {{ statusBadge(item) }}
           </q-badge>
         </template>
-        <template #actions>
+        <!-- Omit empty #actions so pale divider appears only when controls exist. -->
+        <template v-if="hasCatalogCardActions(item)" #actions>
           <q-btn
             v-if="shouldOpenPackEditFromList(item)"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
+            icon="edit"
             :label="$t('content.edit')"
             :data-test-id="`packs-edit-${item.id}`"
             @click.stop="onEditClick(item)"
           />
           <q-btn
             v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="warning"
+            icon="visibility_off"
             :label="$t('content.unpublish')"
+            :data-test-id="`packs-unpublish-${item.id}`"
             :loading="content.loading"
             @click.stop="confirmUnpublish(item.id)"
           />
           <q-btn
             v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="primary"
+            icon="visibility"
             :label="$t('content.republish')"
+            :data-test-id="`packs-republish-${item.id}`"
             :loading="content.loading"
             @click.stop="onRepublish(item.id)"
           />
@@ -240,11 +254,17 @@ function onFilterClick(value: PacksListFilter, identityOnly: boolean) {
   listFilter.value = value;
 }
 
+/** SC-PACK-251: revise uses short «ДОРАБОТАТЬ» red-outline badge (not statuses.needs_revision). */
+function isReviseStatus(item: ContentPackSummary): boolean {
+  return item.moderationStatus === 'needs_revision';
+}
+
 function statusBadge(item: ContentPackSummary): string {
   if (item.blocked) return '';
   const status = item.moderationStatus;
   if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'needs_revision') return t('content.statuses.needs_revision');
+  // needs_revision rendered via isReviseStatus + taskSetCardBadge.needs_revision
+  if (status === 'needs_revision') return '';
   if (status === 'draft' || (!item.hasLive && status !== 'unpublished')) {
     return t('content.statusDraft');
   }
@@ -258,10 +278,17 @@ function statusBadge(item: ContentPackSummary): string {
 function statusBadgeColor(item: ContentPackSummary): string {
   const status = item.moderationStatus;
   if (status === 'pending') return 'orange';
-  if (status === 'needs_revision') return 'warning';
   if (status === 'draft' || !item.hasLive) return 'grey';
   if (status === 'unpublished' || item.inCatalog === false) return 'grey';
   return 'grey';
+}
+
+/** True when at least one outline card action would render (avoid empty actions chrome). */
+function hasCatalogCardActions(item: ContentPackSummary): boolean {
+  if (shouldOpenPackEditFromList(item)) return true;
+  if (auth.isStaff && item.hasLive && item.inCatalog === true) return true;
+  if (auth.isStaff && item.hasLive && item.inCatalog === false) return true;
+  return false;
 }
 
 function canStar(item: ContentPackSummary): boolean {
