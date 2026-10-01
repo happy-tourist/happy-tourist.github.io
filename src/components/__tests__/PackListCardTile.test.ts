@@ -31,7 +31,7 @@ const sixSets: PackTaskSetPreview[] = [
   { id: 's6', ordinal: 6, taskCount: 2, inCatalog: true },
 ];
 
-describe('PackListCardTile (SC-PACK-228/249/251/254)', () => {
+describe('PackListCardTile (SC-PACK-228/249/251/254/255)', () => {
   it('SC-PACK-228: resting ~180×260 with uppercase title, description, set preview chrome', () => {
     expect(vueSrc).toMatch(/width:\s*180px/);
     expect(vueSrc).toMatch(/min-height:\s*260px/);
@@ -40,8 +40,14 @@ describe('PackListCardTile (SC-PACK-228/249/251/254)', () => {
     expect(vueSrc).toMatch(/task-set-card-tasks\.svg/);
     expect(vueSrc).not.toMatch(/border-color:\s*var\(--q-secondary\)/);
     expect(vueSrc).not.toMatch(/transform:\s*scale/);
-    expect(vueSrc).toMatch(/--pack-list-border-hover:\s*#212121/);
-    expect(vueSrc).toMatch(/\.body--dark[\s\S]*--pack-list-border-hover:\s*#bdbdbd/);
+    // Shared --pack-card-* hover (SC-PACK-255); list aliases border-hover.
+    expect(vueSrc).toMatch(/--pack-list-border-hover:\s*var\(--pack-card-border-hover\)/);
+    expect(vueSrc).not.toMatch(/--pack-list-action-outline/);
+    // Reject mock-only hardcodes as token values (comments may mention them historically).
+    expect(vueSrc).not.toMatch(/--pack-list-[a-z-]+:\s*#2f2f2f/);
+    expect(vueSrc).not.toMatch(/--pack-list-[a-z-]+:\s*#aeaeae/);
+    expect(vueSrc).not.toMatch(/border-color:\s*#aeaeae/);
+    expect(vueSrc).not.toMatch(/background:\s*#2f2f2f/);
     // Spec-locked type sizes (CSS px).
     expect(vueSrc).toMatch(/\.pack-list-tile__title[\s\S]*font-size:\s*15px/);
     expect(vueSrc).toMatch(/\.pack-list-tile__description[\s\S]*font-size:\s*12px/);
@@ -68,9 +74,7 @@ describe('PackListCardTile (SC-PACK-228/249/251/254)', () => {
     expect(messages.content.packCardSetsOverflow).toBe('ещё {k}');
     // Overflow must not share row gap (Spec sets→overflow ~4–6).
     expect(vueSrc).toMatch(/pack-list-tile__sets-list/);
-    expect(vueSrc).toMatch(
-      /\.pack-list-tile__overflow[\s\S]*margin-top:\s*5px/,
-    );
+    expect(vueSrc).toMatch(/\.pack-list-tile__overflow[\s\S]*margin-top:\s*5px/);
 
     const wrapper = mount(PackListCardTile, {
       props: {
@@ -207,6 +211,40 @@ describe('PackListCardTile (SC-PACK-228/249/251/254)', () => {
       true,
     );
     expect(vueSrc).toMatch(/\.pack-list-tile__actions[\s\S]*border-top:\s*1px\s+solid/);
+  });
+
+  it('SC-PACK-255: shared --pack-card-* chrome; muted = opacity 0.72 + dashed', () => {
+    const appScss = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../css/app.scss'),
+      'utf8',
+    );
+    expect(appScss).toMatch(/\.pack-card-grid[\s\S]*--pack-card-bg:\s*#ffffff/);
+    expect(appScss).toMatch(/--pack-card-fg:\s*rgba\(0,\s*0,\s*0,\s*0\.87\)/);
+    expect(appScss).toMatch(/--pack-card-muted:\s*rgba\(0,\s*0,\s*0,\s*0\.7\)/);
+    expect(appScss).toMatch(/--pack-card-border:\s*rgba\(0,\s*0,\s*0,\s*0\.14\)/);
+    expect(appScss).toMatch(/--pack-card-border-hover:\s*#212121/);
+    expect(appScss).toMatch(/--pack-card-shadow:/);
+    expect(appScss).toMatch(/--pack-card-shadow-hover:/);
+    expect(appScss).toMatch(/--pack-card-splitter:\s*rgba\(0,\s*0,\s*0,\s*0\.08\)/);
+    expect(appScss).toMatch(/--pack-card-action-h:\s*30px/);
+    expect(appScss).toMatch(/body\.body--dark\s+\.pack-card-grid[\s\S]*--pack-card-bg:\s*#2a2a2a/);
+    expect(appScss).toMatch(/body\.body--dark[\s\S]*--pack-card-border-hover:\s*#bdbdbd/);
+
+    expect(vueSrc).toMatch(/--pack-list-bg:\s*var\(--pack-card-bg\)/);
+    expect(vueSrc).toMatch(/--pack-list-border:\s*var\(--pack-card-border\)/);
+    expect(vueSrc).toMatch(/--pack-list-action-h:\s*var\(--pack-card-action-h\)/);
+    expect(vueSrc).toMatch(
+      /\.q-btn--outline:before[\s\S]*border-color:\s*var\(--pack-card-border\)/,
+    );
+    expect(vueSrc).toMatch(
+      /\.pack-list-tile--muted[\s\S]*opacity:\s*0\.72[\s\S]*border-style:\s*dashed/,
+    );
+
+    const wrapper = mount(PackListCardTile, {
+      props: { title: 'Soft pack', muted: true },
+      global: { stubs },
+    });
+    expect(wrapper.classes()).toContain('pack-list-tile--muted');
   });
 
   it('emits open on body click; leading/actions stop propagation', async () => {

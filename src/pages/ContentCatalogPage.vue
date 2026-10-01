@@ -111,7 +111,7 @@
             no-caps
             class="full-width"
             icon="visibility_off"
-            :label="$t('content.unpublish')"
+            :label="$t('content.taskSetCardUnpublish')"
             :data-test-id="`packs-unpublish-${item.id}`"
             :loading="content.loading"
             @click.stop="confirmUnpublish(item.id)"
@@ -123,7 +123,7 @@
             no-caps
             class="full-width"
             icon="visibility"
-            :label="$t('content.republish')"
+            :label="$t('content.taskSetCardRepublish')"
             :data-test-id="`packs-republish-${item.id}`"
             :loading="content.loading"
             @click.stop="onRepublish(item.id)"

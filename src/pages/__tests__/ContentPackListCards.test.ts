@@ -329,7 +329,13 @@ describe('catalog + task-set cards (SC-PACK-228/229/249…254)', () => {
     expect(unpubBtn.exists()).toBe(true);
     expect(unpubBtn.attributes('data-outline')).toBe('1');
     expect(unpubBtn.attributes('data-icon')).toBe('visibility_off');
-    expect(unpubBtn.text()).toContain('content.unpublish');
+    expect(unpubBtn.text()).toContain('content.taskSetCardUnpublish');
+    // Confirm / header keep long keys — card actions use short «Снять».
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.taskSetCardUnpublish).toBe('Снять');
+    expect(messages.content.taskSetCardRepublish).toBe('Вернуть');
+    expect(messages.content.unpublish).toBe('Снять с публикации');
+    expect(messages.content.republish).toBe('Опубликовать снова');
 
     // Body open → Edit for pack-level draft.
     await wrapper.find('[data-test-id="packs-row-pub1"]').trigger('click');

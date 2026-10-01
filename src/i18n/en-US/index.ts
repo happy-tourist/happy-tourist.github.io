@@ -232,14 +232,15 @@ export default {
     taskSetCardDiff2: 'Средние:',
     taskSetCardDiff3: 'Сложные:',
     /**
-     * SC-PACK-241/243: short soft-unpublish / republish on task-set cards only.
-     * Pack/catalog `unpublish` / `republish` and confirm dialogs stay long.
+     * SC-PACK-241/243/250: short soft-unpublish / republish on task-set **and**
+     * catalog pack cards (`PackListCardTile` `#actions`).
+     * Pack page header + confirm dialogs keep long `unpublish` / `republish`.
      */
     taskSetCardUnpublish: 'Снять',
     taskSetCardRepublish: 'Вернуть',
     /**
-     * SC-PACK-240: short badges on task-set cards only
-     * (page subtitles may keep longer phrases).
+     * SC-PACK-240/251: short badges on task-set cards; catalog revise badge
+     * reuses `needs_revision` «ДОРАБОТАТЬ» (not long `statuses.needs_revision`).
      */
     taskSetCardBadge: {
       unpublished: 'СНЯТО',

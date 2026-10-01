@@ -148,24 +148,24 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Task-set summary chrome (SC-PACK-229/239…248): denser than catalog 150×200. */
+/* Task-set summary chrome (SC-PACK-229/239…248): denser than catalog list tile.
+ * Resting surface/hover/action-h from shared pack-card tokens on the wrap grid (SC-PACK-255). */
 .pack-task-set-tile {
   /* Lead = three 6px dots + 2×2px gaps → 22px (Decision 9 / SC-PACK-244). */
   --pack-ts-lead-w: 22px;
-  --pack-ts-bg: #ffffff;
-  --pack-ts-fg: rgba(0, 0, 0, 0.87);
-  --pack-ts-muted: rgba(0, 0, 0, 0.7);
-  --pack-ts-border: rgba(0, 0, 0, 0.14);
-  /* Soft resting border ~#e1e3e6 sense; hover → near-black (Decision 10). */
-  --pack-ts-border-hover: #212121;
-  --pack-ts-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --pack-ts-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.14);
-  /* Pale / low-contrast dividers (light). */
-  --pack-ts-splitter: rgba(0, 0, 0, 0.08);
+  /* Shared chrome aliases (visual no-op vs former local --pack-ts-* surface). */
+  --pack-ts-bg: var(--pack-card-bg);
+  --pack-ts-fg: var(--pack-card-fg);
+  --pack-ts-muted: var(--pack-card-muted);
+  --pack-ts-border: var(--pack-card-border);
+  --pack-ts-border-hover: var(--pack-card-border-hover);
+  --pack-ts-shadow: var(--pack-card-shadow);
+  --pack-ts-shadow-hover: var(--pack-card-shadow-hover);
+  --pack-ts-splitter: var(--pack-card-splitter);
+  --pack-ts-action-h: var(--pack-card-action-h);
   --pack-ts-dot-1: #43a047;
   --pack-ts-dot-2: #f9a825;
   --pack-ts-dot-3: #e53935;
-  --pack-ts-action-h: 30px;
   /* Spacing retune (SC-PACK-247 / Decision 11): title→stats ~7; divider air ~4–6 total. */
   --pack-ts-title-gap: 7px;
   --pack-ts-row-pad-y: 6px;
@@ -187,17 +187,8 @@ function onBodyClick() {
   flex: 0 0 auto;
 }
 
+/* Difficulty dots only — surface tokens inherit from wrap-grid dark overrides. */
 .body--dark .pack-task-set-tile {
-  --pack-ts-bg: #2a2a2a;
-  --pack-ts-fg: rgba(255, 255, 255, 0.92);
-  --pack-ts-muted: rgba(255, 255, 255, 0.78);
-  --pack-ts-border: rgba(255, 255, 255, 0.22);
-  /* Light-grey hover border — not --q-secondary (Decision 10 / SC-PACK-246). */
-  --pack-ts-border-hover: #bdbdbd;
-  --pack-ts-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --pack-ts-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
-  /* Pale divider on dark. */
-  --pack-ts-splitter: rgba(255, 255, 255, 0.12);
   --pack-ts-dot-1: #66bb6a;
   --pack-ts-dot-2: #ffca28;
   --pack-ts-dot-3: #ef5350;

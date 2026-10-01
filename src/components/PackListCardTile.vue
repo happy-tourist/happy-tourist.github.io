@@ -140,20 +140,21 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Catalog pack cards ~180×260 + set preview (SC-PACK-228/249…251). */
+/* Catalog pack cards ~180×260 + set preview (SC-PACK-228/249…254).
+ * Resting surface/hover/action outline from shared pack-card tokens (SC-PACK-255). */
 .pack-list-tile {
   --pack-list-lead-w: 22px;
-  --pack-list-bg: #ffffff;
-  --pack-list-fg: #232323;
-  --pack-list-muted: #717171;
-  --pack-list-border: rgba(0, 0, 0, 0.12);
-  --pack-list-border-hover: #212121;
-  --pack-list-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --pack-list-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.14);
-  --pack-list-splitter: rgba(0, 0, 0, 0.08);
-  --pack-list-action-outline: rgba(0, 0, 0, 0.22);
-  --pack-list-action-h: 30px;
   --pack-list-revise-fg: #af5a59;
+  /* Shared chrome aliases (Decision 13 — not mock list-only dark bg / action outline). */
+  --pack-list-bg: var(--pack-card-bg);
+  --pack-list-fg: var(--pack-card-fg);
+  --pack-list-muted: var(--pack-card-muted);
+  --pack-list-border: var(--pack-card-border);
+  --pack-list-border-hover: var(--pack-card-border-hover);
+  --pack-list-shadow: var(--pack-card-shadow);
+  --pack-list-shadow-hover: var(--pack-card-shadow-hover);
+  --pack-list-splitter: var(--pack-card-splitter);
+  --pack-list-action-h: var(--pack-card-action-h);
 
   position: relative;
   box-sizing: border-box;
@@ -170,16 +171,8 @@ function onBodyClick() {
   flex: 0 0 auto;
 }
 
+/* Revise badge only — surface tokens inherit from wrap-grid dark overrides. */
 .body--dark .pack-list-tile {
-  --pack-list-bg: #2f2f2f;
-  --pack-list-fg: #ffffff;
-  --pack-list-muted: #979797;
-  --pack-list-border: rgba(255, 255, 255, 0.2);
-  --pack-list-border-hover: #bdbdbd;
-  --pack-list-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --pack-list-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
-  --pack-list-splitter: rgba(255, 255, 255, 0.16);
-  --pack-list-action-outline: #aeaeae;
   --pack-list-revise-fg: #aa4a49;
 }
 
@@ -195,9 +188,11 @@ function onBodyClick() {
   outline: none;
 }
 
+/* Soft-unpub pack: same product sense as task-set muted (opacity + dashed). */
 .pack-list-tile--muted {
   opacity: 0.72;
   color: var(--pack-list-muted);
+  border-style: dashed;
 }
 
 .pack-list-tile__chrome {
@@ -272,6 +267,7 @@ function onBodyClick() {
   /* Spec title 15–16 (CSS px; lock vs rem/root drift). */
   font-size: 15px;
   line-height: 1.2;
+  text-align: center;
   text-transform: uppercase;
   word-break: break-word;
   overflow: hidden;
@@ -288,6 +284,7 @@ function onBodyClick() {
   font-size: 12px;
   font-weight: 400;
   line-height: 1.2;
+  text-align: center;
   word-break: break-word;
   overflow: hidden;
   display: -webkit-box;
@@ -391,8 +388,8 @@ function onBodyClick() {
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* Spec stacked action gap ~4–6. */
-  gap: 4px;
+  /* Spec stacked action gap ~4–6 (mid mock rhythm). */
+  gap: 5px;
   /* Body pb 8 + mt 0 → overflow→divider air ~8 (Spec 8–10). */
   margin-top: 0;
   padding: 8px 12px 10px;
@@ -422,6 +419,7 @@ function onBodyClick() {
 }
 
 .pack-list-tile__actions :deep(.q-btn--outline:before) {
-  border-color: var(--pack-list-action-outline);
+  /* Action outline = shared card border (Decision 5/13 — not list-only mock outline). */
+  border-color: var(--pack-card-border);
 }
 </style>
