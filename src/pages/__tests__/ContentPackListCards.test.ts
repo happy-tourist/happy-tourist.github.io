@@ -119,7 +119,7 @@ const stubs = {
   PackTaskSetCardTile: false,
 };
 
-describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
+describe('catalog + task-set cards (SC-PACK-228/229/249…254)', () => {
   beforeEach(() => {
     authState.user = { id: 'u1', anonymous: false };
     authState.isStaff = false;
@@ -256,7 +256,7 @@ describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
     ).toBe(true);
   });
 
-  it('SC-PACK-249: catalog card shows ≤4 sets + overflow; muted soft-unpub/neverLive rows', async () => {
+  it('SC-PACK-249: catalog card shows ≤4 published sets + overflow; omits soft-unpub/neverLive', async () => {
     contentState.catalog = [
       {
         id: 'pub1',
@@ -275,7 +275,9 @@ describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
           { id: 'c', ordinal: 3, taskCount: 12, inCatalog: true },
           { id: 'd', ordinal: 4, taskCount: 8, inCatalog: true },
           { id: 'e', ordinal: 5, taskCount: 4, inCatalog: true },
-          { id: 'f', ordinal: 6, taskCount: 2, inCatalog: true, neverLive: true },
+          { id: 'f', ordinal: 6, taskCount: 2, inCatalog: true },
+          { id: 'g', ordinal: 7, taskCount: 1, inCatalog: true },
+          { id: 'ghost', ordinal: 8, taskCount: 9, inCatalog: true, neverLive: true },
         ],
       },
     ];
@@ -285,9 +287,10 @@ describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
 
     const card = wrapper.find('[data-test-id="packs-row-pub1"]');
     expect(card.exists()).toBe(true);
+    // 6 published (a,c,d,e,f,g) → ≤4 rows + overflow; soft-unpub/neverLive omitted.
     expect(card.findAll('[data-testid="pack-list-set-row"]')).toHaveLength(4);
     expect(card.find('[data-testid="pack-list-sets-overflow"]').exists()).toBe(true);
-    expect(card.findAll('.pack-list-tile__set-row--muted').length).toBeGreaterThanOrEqual(1);
+    expect(card.findAll('.pack-list-tile__set-row--muted')).toHaveLength(0);
     expect(card.find('[data-testid="pack-list-set-icon"]').attributes('data-icon')).toBe(
       'task-set-card-tasks',
     );
@@ -334,6 +337,32 @@ describe('catalog + task-set cards (SC-PACK-228/229/249…251)', () => {
       name: 'content-pack-edit',
       params: { id: 'pub1' },
     });
+  });
+
+  it('soft-unpublished catalog pack uses tile muted chrome', async () => {
+    authState.isStaff = true;
+    contentState.catalog = [
+      {
+        id: 'soft1',
+        title: 'Soft pack',
+        description: 'Desc',
+        blocked: false,
+        hasLive: true,
+        inCatalog: false,
+        createdBy: 'u1',
+        moderationStatus: 'unpublished',
+        isMine: true,
+        isFavorite: false,
+        taskSetsPreview: [],
+      },
+    ];
+
+    const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
+    await flushPromises();
+
+    const card = wrapper.find('[data-test-id="packs-row-soft1"]');
+    expect(card.exists()).toBe(true);
+    expect(card.classes()).toContain('pack-list-tile--muted');
   });
 
   it('SC-PACK-251: revise badge short ДОРАБОТАТЬ red-outline; title uppercase CSS', async () => {

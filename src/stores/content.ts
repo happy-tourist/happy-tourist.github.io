@@ -48,8 +48,9 @@ export interface ContentPackSummary {
   isContributor?: boolean;
   isFavorite?: boolean;
   /**
-   * Full lightweight set preview for catalog card (SC-PACK-249/252).
-   * Client shows ≤4 + overflow; missing → treat as [].
+   * Full lightweight set preview for catalog card (SC-PACK-249/252/254).
+   * API may include soft-unpub / neverLive; `PackListCardTile` filters
+   * published-only, remaps display ordinal, shows ≤4 + overflow. Missing → [].
    */
   taskSetsPreview?: PackTaskSetPreview[];
 }

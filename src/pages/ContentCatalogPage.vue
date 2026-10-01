@@ -39,7 +39,7 @@
     <div v-else-if="!filteredPacks.length" class="text-muted">
       {{ listFilter === 'all' ? $t('content.emptyCatalog') : $t('content.emptyFiltered') }}
     </div>
-    <!-- SC-PACK-228/249…251: ~180×260 — star TL, status TR, set preview, outline+icon actions -->
+    <!-- SC-PACK-228/249…254: ~180×260 — star TL, status TR, published-only set preview, outline+icon actions -->
     <div v-else class="pack-card-grid" data-testid="packs-card-grid">
       <PackListCardTile
         v-for="item in filteredPacks"
@@ -48,6 +48,7 @@
         :description="item.description || ''"
         :task-sets-preview="item.taskSetsPreview ?? []"
         clickable
+        :muted="Boolean(item.hasLive && item.inCatalog === false)"
         :test-id="`packs-row-${item.id}`"
         @open="onRowClick(item)"
       >

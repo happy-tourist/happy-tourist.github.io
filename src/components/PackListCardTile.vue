@@ -33,26 +33,28 @@
         <slot name="caption" />
       </div>
 
-      <!-- Set preview: non-navigating rows (bubble to whole-card open) — SC-PACK-249. -->
+      <!-- Published-only set preview (Decision 11); non-navigating — SC-PACK-249/254. -->
       <div v-if="visibleSets.length" class="pack-list-tile__sets" data-testid="pack-list-sets">
-        <div
-          v-for="s in visibleSets"
-          :key="s.id"
-          class="pack-list-tile__set-row"
-          :class="{ 'pack-list-tile__set-row--muted': isMutedSet(s) }"
-          data-testid="pack-list-set-row"
-        >
-          <span class="pack-list-tile__lead" aria-hidden="true">
-            <span
-              class="pack-list-tile__set-icon"
-              data-testid="pack-list-set-icon"
-              data-icon="task-set-card-tasks"
-            />
-          </span>
-          <span class="pack-list-tile__set-label">{{
-            $t('content.taskSetLabel', { n: s.ordinal })
-          }}</span>
-          <span class="pack-list-tile__set-count">{{ s.taskCount }}</span>
+        <!-- Rows in own flex so gap does not inflate sets→overflow (Spec ~4–6). -->
+        <div class="pack-list-tile__sets-list">
+          <div
+            v-for="s in visibleSets"
+            :key="s.id"
+            class="pack-list-tile__set-row"
+            data-testid="pack-list-set-row"
+          >
+            <span class="pack-list-tile__lead" aria-hidden="true">
+              <span
+                class="pack-list-tile__set-icon"
+                data-testid="pack-list-set-icon"
+                data-icon="task-set-card-tasks"
+              />
+            </span>
+            <span class="pack-list-tile__set-label">{{
+              $t('content.taskSetLabel', { n: s.displayOrdinal })
+            }}</span>
+            <span class="pack-list-tile__set-count">{{ s.taskCount }}</span>
+          </div>
         </div>
         <div
           v-if="overflowCount > 0"
@@ -85,8 +87,9 @@ const props = withDefaults(
     /** Catalog pack description (truncated). */
     description?: string;
     /**
-     * Lightweight set preview from list API (SC-PACK-249/252).
-     * Full array; tile shows ≤4 + overflow.
+     * Lightweight set preview from list API (SC-PACK-249/252/254).
+     * Full array (may include soft-unpub / neverLive); tile filters published-only,
+     * remaps display ordinal 1…N, shows ≤4 + overflow.
      */
     taskSetsPreview?: PackTaskSetPreview[];
     clickable?: boolean;
@@ -115,15 +118,21 @@ const iconMaskVars = {
 
 const hasDescription = computed(() => Boolean(props.description?.trim()));
 
-const preview = computed(() => props.taskSetsPreview ?? []);
+/** Published-only rows: inCatalog && !neverLive (Decision 11 / SC-PACK-254). */
+const publishedPreview = computed(() =>
+  (props.taskSetsPreview ?? []).filter((s) => s.inCatalog === true && s.neverLive !== true),
+);
 
-const visibleSets = computed(() => preview.value.slice(0, MAX_VISIBLE_SETS));
+type VisibleSetRow = PackTaskSetPreview & { displayOrdinal: number };
 
-const overflowCount = computed(() => Math.max(0, preview.value.length - MAX_VISIBLE_SETS));
+const visibleSets = computed((): VisibleSetRow[] =>
+  publishedPreview.value.slice(0, MAX_VISIBLE_SETS).map((s, i) => ({
+    ...s,
+    displayOrdinal: i + 1,
+  })),
+);
 
-function isMutedSet(s: PackTaskSetPreview): boolean {
-  return s.inCatalog === false || s.neverLive === true;
-}
+const overflowCount = computed(() => Math.max(0, publishedPreview.value.length - MAX_VISIBLE_SETS));
 
 function onBodyClick() {
   emit('open');
@@ -137,8 +146,6 @@ function onBodyClick() {
   --pack-list-bg: #ffffff;
   --pack-list-fg: #232323;
   --pack-list-muted: #717171;
-  --pack-list-set-label: #4a4a4a;
-  --pack-list-set-count: #1d1d1d;
   --pack-list-border: rgba(0, 0, 0, 0.12);
   --pack-list-border-hover: #212121;
   --pack-list-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -147,7 +154,6 @@ function onBodyClick() {
   --pack-list-action-outline: rgba(0, 0, 0, 0.22);
   --pack-list-action-h: 30px;
   --pack-list-revise-fg: #af5a59;
-  --pack-list-row-muted-opacity: 0.72;
 
   position: relative;
   box-sizing: border-box;
@@ -168,8 +174,6 @@ function onBodyClick() {
   --pack-list-bg: #2f2f2f;
   --pack-list-fg: #ffffff;
   --pack-list-muted: #979797;
-  --pack-list-set-label: #a2a2a2;
-  --pack-list-set-count: #d4d4d4;
   --pack-list-border: rgba(255, 255, 255, 0.2);
   --pack-list-border-hover: #bdbdbd;
   --pack-list-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
@@ -199,9 +203,9 @@ function onBodyClick() {
 .pack-list-tile__chrome {
   position: relative;
   flex: 0 0 auto;
-  /* Mock / Spec: top pad ~12; reserved band when no badge. */
+  /* Mock / Spec: top pad ~12; pb keeps status→title air ~8–10. */
   min-height: 2rem;
-  padding: 12px 12px 0;
+  padding: 12px 12px 6px;
 }
 
 .pack-list-tile__leading {
@@ -241,12 +245,13 @@ function onBodyClick() {
   background: transparent !important;
   color: var(--pack-list-revise-fg) !important;
   border: 1px solid var(--pack-list-revise-fg) !important;
-  /* Spec badge 9–10 @ 16px root → 0.625rem. */
-  font-size: 0.625rem;
+  /* Spec badge 9–10. */
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.1;
   min-height: 18px;
+  max-height: 20px;
   padding: 2px 6px;
   border-radius: 999px;
 }
@@ -258,14 +263,14 @@ function onBodyClick() {
   flex-direction: column;
   align-items: stretch;
   /* Spec pad root x 12–16; body pb feeds overflow→divider air ~8–10. */
-  padding: 4px 12px 8px;
+  padding: 2px 12px 8px;
   text-align: center;
 }
 
 .pack-list-tile__title {
   font-weight: 700;
-  /* Spec title 15–16 @ 16px root. */
-  font-size: 0.9375rem;
+  /* Spec title 15–16 (CSS px; lock vs rem/root drift). */
+  font-size: 15px;
   line-height: 1.2;
   text-transform: uppercase;
   word-break: break-word;
@@ -280,7 +285,7 @@ function onBodyClick() {
 .pack-list-tile__description {
   margin-top: 5px;
   /* Spec subtitle 11–12. */
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.2;
   word-break: break-word;
@@ -294,7 +299,7 @@ function onBodyClick() {
 
 .pack-list-tile__caption {
   margin-top: 0.2rem;
-  font-size: 0.75rem;
+  font-size: 12px;
   line-height: 1.2;
   color: var(--pack-list-muted);
   overflow: hidden;
@@ -309,9 +314,15 @@ function onBodyClick() {
   margin-top: 12px;
   display: flex;
   flex-direction: column;
+  text-align: left;
+  min-width: 0;
+}
+
+.pack-list-tile__sets-list {
+  display: flex;
+  flex-direction: column;
   /* Spec set row gap ~8–12. */
   gap: 10px;
-  text-align: left;
   min-width: 0;
 }
 
@@ -323,12 +334,8 @@ function onBodyClick() {
   min-height: 18px;
   min-width: 0;
   /* Spec set label/count 11–12. */
-  font-size: 0.75rem;
+  font-size: 12px;
   line-height: 1.2;
-}
-
-.pack-list-tile__set-row--muted {
-  opacity: var(--pack-list-row-muted-opacity);
 }
 
 .pack-list-tile__lead {
@@ -343,7 +350,8 @@ function onBodyClick() {
   display: inline-block;
   width: 14px;
   height: 14px;
-  color: var(--pack-list-muted);
+  /* Decision 12: set.icon.ink = title.fg */
+  color: var(--pack-list-fg);
   background-color: currentColor;
   -webkit-mask: var(--pack-list-icon-tasks) center / contain no-repeat;
   mask: var(--pack-list-icon-tasks) center / contain no-repeat;
@@ -355,21 +363,24 @@ function onBodyClick() {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
-  color: var(--pack-list-set-label);
+  /* Decision 12: set.label.fg = title.fg */
+  color: var(--pack-list-fg);
   font-weight: 400;
 }
 
 .pack-list-tile__set-count {
   font-variant-numeric: tabular-nums;
-  color: var(--pack-list-set-count);
+  /* Decision 12: set.count.fg = title.fg */
+  color: var(--pack-list-fg);
   font-weight: 600;
   text-align: right;
 }
 
 .pack-list-tile__overflow {
-  /* Spec sets→overflow ~4–6. */
-  margin-top: 4px;
-  font-size: 0.75rem;
+  /* Spec sets→overflow ~4–6; indent under label column (after lead). */
+  margin-top: 5px;
+  padding-left: calc(var(--pack-list-lead-w) + 0.3rem);
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.2;
   color: var(--pack-list-muted);
@@ -397,7 +408,7 @@ function onBodyClick() {
   max-height: 32px;
   padding: 0 0.35rem;
   /* Spec button 11–12. */
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
   color: var(--pack-list-fg);
@@ -405,7 +416,9 @@ function onBodyClick() {
 }
 
 .pack-list-tile__actions :deep(.q-btn .q-icon) {
+  /* Spec actions ~18; ink = currentColor → title.fg. */
   font-size: 18px;
+  color: currentColor;
 }
 
 .pack-list-tile__actions :deep(.q-btn--outline:before) {

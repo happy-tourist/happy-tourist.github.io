@@ -31,7 +31,7 @@ const sixSets: PackTaskSetPreview[] = [
   { id: 's6', ordinal: 6, taskCount: 2, inCatalog: true },
 ];
 
-describe('PackListCardTile (SC-PACK-228/249/251)', () => {
+describe('PackListCardTile (SC-PACK-228/249/251/254)', () => {
   it('SC-PACK-228: resting ~180×260 with uppercase title, description, set preview chrome', () => {
     expect(vueSrc).toMatch(/width:\s*180px/);
     expect(vueSrc).toMatch(/min-height:\s*260px/);
@@ -42,6 +42,10 @@ describe('PackListCardTile (SC-PACK-228/249/251)', () => {
     expect(vueSrc).not.toMatch(/transform:\s*scale/);
     expect(vueSrc).toMatch(/--pack-list-border-hover:\s*#212121/);
     expect(vueSrc).toMatch(/\.body--dark[\s\S]*--pack-list-border-hover:\s*#bdbdbd/);
+    // Spec-locked type sizes (CSS px).
+    expect(vueSrc).toMatch(/\.pack-list-tile__title[\s\S]*font-size:\s*15px/);
+    expect(vueSrc).toMatch(/\.pack-list-tile__description[\s\S]*font-size:\s*12px/);
+    expect(vueSrc).toMatch(/\.pack-list-status-badge--revise[\s\S]*font-size:\s*10px/);
 
     const wrapper = mount(PackListCardTile, {
       props: {
@@ -60,8 +64,13 @@ describe('PackListCardTile (SC-PACK-228/249/251)', () => {
     expect(wrapper.find('[data-testid="pack-list-sets"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-249: shows ≤4 set rows + overflow «ещё K»; lead icon; set-row click opens card', async () => {
+  it('SC-PACK-249: shows ≤4 published set rows + overflow «ещё K»; lead icon; set-row click opens card', async () => {
     expect(messages.content.packCardSetsOverflow).toBe('ещё {k}');
+    // Overflow must not share row gap (Spec sets→overflow ~4–6).
+    expect(vueSrc).toMatch(/pack-list-tile__sets-list/);
+    expect(vueSrc).toMatch(
+      /\.pack-list-tile__overflow[\s\S]*margin-top:\s*5px/,
+    );
 
     const wrapper = mount(PackListCardTile, {
       props: {
@@ -74,25 +83,82 @@ describe('PackListCardTile (SC-PACK-228/249/251)', () => {
 
     const rows = wrapper.findAll('[data-testid="pack-list-set-row"]');
     expect(rows).toHaveLength(4);
+    expect(wrapper.find('.pack-list-tile__sets-list').exists()).toBe(true);
     expect(wrapper.find('[data-testid="pack-list-sets-overflow"]').text()).toContain(
       'content.packCardSetsOverflow',
     );
     expect(wrapper.find('[data-testid="pack-list-set-icon"]').attributes('data-icon')).toBe(
       'task-set-card-tasks',
     );
-    // Soft-unpub / neverLive rows muted.
-    const mutedPreview: PackTaskSetPreview[] = [
-      { id: 'a', ordinal: 1, taskCount: 1, inCatalog: true },
-      { id: 'b', ordinal: 2, taskCount: 2, inCatalog: false },
-      { id: 'c', ordinal: 3, taskCount: 3, inCatalog: true, neverLive: true },
+
+    // Published-only overflow: soft-unpub / neverLive must not inflate «ещё K».
+    // 6 published + 2 non-published → still overflow 2 (not 4).
+    const mixedOverflow: PackTaskSetPreview[] = [
+      ...sixSets,
+      { id: 'soft', ordinal: 7, taskCount: 9, inCatalog: false },
+      { id: 'ghost', ordinal: 8, taskCount: 1, inCatalog: true, neverLive: true },
     ];
-    await wrapper.setProps({ taskSetsPreview: mutedPreview });
-    const mutedRows = wrapper.findAll('.pack-list-tile__set-row--muted');
-    expect(mutedRows).toHaveLength(2);
+    await wrapper.setProps({ taskSetsPreview: mixedOverflow });
+    expect(wrapper.findAll('[data-testid="pack-list-set-row"]')).toHaveLength(4);
+    expect(wrapper.find('[data-testid="pack-list-sets-overflow"]').exists()).toBe(true);
+    expect(wrapper.findAll('.pack-list-tile__set-row--muted')).toHaveLength(0);
 
     // Set-row click bubbles → whole-card open (not a separate nav target).
     await wrapper.find('[data-testid="pack-list-set-row"]').trigger('click');
     expect(wrapper.emitted('open')).toHaveLength(1);
+  });
+
+  it('SC-PACK-254: omits soft-unpub/neverLive; display ordinal among published; set ink = title.fg', () => {
+    // Decision 12: label/count/icon use title.fg (--pack-list-fg), not muted greys.
+    expect(vueSrc).toMatch(/\.pack-list-tile__set-label[\s\S]*color:\s*var\(--pack-list-fg\)/);
+    expect(vueSrc).toMatch(/\.pack-list-tile__set-count[\s\S]*color:\s*var\(--pack-list-fg\)/);
+    expect(vueSrc).toMatch(/\.pack-list-tile__set-icon[\s\S]*color:\s*var\(--pack-list-fg\)/);
+    expect(vueSrc).not.toMatch(/--pack-list-set-label:/);
+    expect(vueSrc).not.toMatch(/--pack-list-set-count:/);
+    expect(vueSrc).not.toMatch(/pack-list-tile__set-row--muted/);
+    expect(vueSrc).not.toMatch(/--pack-list-row-muted-opacity/);
+
+    const mixed: PackTaskSetPreview[] = [
+      { id: 'soft', ordinal: 1, taskCount: 2, inCatalog: false },
+      { id: 'pub', ordinal: 2, taskCount: 48, inCatalog: true },
+      { id: 'ghost', ordinal: 3, taskCount: 3, inCatalog: true, neverLive: true },
+    ];
+
+    const tCalls: Array<{ key: string; values?: Record<string, unknown> }> = [];
+    const wrapper = mount(PackListCardTile, {
+      props: {
+        title: 'География мира',
+        taskSetsPreview: mixed,
+        clickable: true,
+      },
+      global: {
+        stubs,
+        mocks: {
+          $t: (key: string, values?: Record<string, unknown>) => {
+            if (values !== undefined) {
+              tCalls.push({ key, values });
+            } else {
+              tCalls.push({ key });
+            }
+            const n = values?.n;
+            if (key === 'content.taskSetLabel' && typeof n === 'number') {
+              return `Набор заданий #${n}`;
+            }
+            return key;
+          },
+        },
+      },
+    });
+
+    const rows = wrapper.findAll('[data-testid="pack-list-set-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.text()).toContain('48');
+    // Display ordinal among published-only is 1 (not API ordinal 2).
+    expect(rows[0]!.find('.pack-list-tile__set-label').text()).toBe('Набор заданий #1');
+    expect(tCalls.some((c) => c.key === 'content.taskSetLabel' && c.values?.n === 1)).toBe(true);
+    expect(tCalls.some((c) => c.key === 'content.taskSetLabel' && c.values?.n === 2)).toBe(false);
+    expect(wrapper.findAll('.pack-list-tile__set-row--muted')).toHaveLength(0);
+    expect(wrapper.find('[data-testid="pack-list-sets-overflow"]').exists()).toBe(false);
   });
 
   it('SC-PACK-251: title uses uppercase CSS; revise badge class supported in status slot', () => {
