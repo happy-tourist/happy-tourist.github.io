@@ -99,11 +99,12 @@ const emit = defineEmits<{
 
 /** CSS mask URLs for capacity leads + status badge icons (ink via currentColor). */
 const iconMaskVars = {
-  '--map-list-icon-players': `url(${iconPlayers})`,
-  '--map-list-icon-tourists': `url(${iconTourists})`,
-  '--map-list-icon-pending': `url(${iconBadgePending})`,
-  '--map-list-icon-unpublished': `url(${iconBadgeUnpublished})`,
-  '--map-list-icon-draft': `url(${iconBadgeDraft})`,
+  // Quote url() so Vite-inlined data: SVG URLs stay valid CSS masks (SC-MAP-68).
+  '--map-list-icon-players': `url("${iconPlayers}")`,
+  '--map-list-icon-tourists': `url("${iconTourists}")`,
+  '--map-list-icon-pending': `url("${iconBadgePending}")`,
+  '--map-list-icon-unpublished': `url("${iconBadgeUnpublished}")`,
+  '--map-list-icon-draft': `url("${iconBadgeDraft}")`,
 };
 
 function onBodyClick() {
@@ -206,6 +207,9 @@ function onBodyClick() {
   min-height: 18px;
   padding: 2px 6px;
   border-radius: 999px;
+  /* Soft pills — kill Quasar default primary fill before tone classes. */
+  background: transparent;
+  color: inherit;
 }
 
 .map-list-tile__status :deep(.map-list-status-badge--muted),
@@ -349,6 +353,8 @@ function onBodyClick() {
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+  /* Spec stats-label weight 400–500 (vs count 600). */
+  font-weight: 500;
 }
 
 .map-list-tile__stat-count {

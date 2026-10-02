@@ -264,4 +264,16 @@ describe('PackListCardTile (SC-PACK-228/249/251/254/255)', () => {
     await wrapper.find('[data-test-id="action-btn"]').trigger('click');
     expect(wrapper.emitted('open')).toHaveLength(1);
   });
+
+  it('SC-MAP-68 drive-by: iconMaskVars quote Vite mask url() for set-row icon', () => {
+    expect(vueSrc).toMatch(/url\("\$\{iconTasks\}"\)/);
+    expect(vueSrc).not.toMatch(/url\(\$\{iconTasks\}\)/);
+
+    const wrapper = mount(PackListCardTile, {
+      props: { title: 'Mask pack', taskSetsPreview: sixSets.slice(0, 1) },
+      global: { stubs },
+    });
+    const style = wrapper.attributes('style') ?? '';
+    expect(style).toMatch(/--pack-list-icon-tasks:\s*url\("/);
+  });
 });

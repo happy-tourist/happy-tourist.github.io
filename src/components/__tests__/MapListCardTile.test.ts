@@ -45,7 +45,7 @@ const appScss = readFileSync(
   'utf8',
 );
 
-describe('MapListCardTile (SC-MAP-55/66/67)', () => {
+describe('MapListCardTile (SC-MAP-55/66/67/68)', () => {
   const getWrapper = () =>
     mount(MapListCardTile, {
       props: {
@@ -173,5 +173,33 @@ describe('MapListCardTile (SC-MAP-55/66/67)', () => {
     );
     expect(messages.content.taskSetCardUnpublish).toBe('Снять');
     expect(messages.content.taskSetCardRepublish).toBe('Вернуть');
+  });
+
+  it('SC-MAP-68: iconMaskVars quote Vite mask url() so data: SVGs stay valid', () => {
+    // Source must use url("${imported}") — unquoted url(data:image/svg+xml,…) is invalid CSS.
+    expect(vueSrc).toMatch(/url\("\$\{iconPlayers\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconTourists\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgePending\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgeUnpublished\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgeDraft\}"\)/);
+    expect(vueSrc).not.toMatch(
+      /url\(\$\{icon(?:Players|Tourists|BadgePending|BadgeUnpublished|BadgeDraft)\}\)/,
+    );
+
+    const wrapper = getWrapper();
+    const style = wrapper.attributes('style') ?? '';
+    for (const key of [
+      '--map-list-icon-players',
+      '--map-list-icon-tourists',
+      '--map-list-icon-pending',
+      '--map-list-icon-unpublished',
+      '--map-list-icon-draft',
+    ]) {
+      expect(style).toContain(`${key}:`);
+    }
+    // Computed custom properties must start with quoted url("…
+    expect(style).toMatch(/--map-list-icon-players:\s*url\("/);
+    expect(style).toMatch(/--map-list-icon-tourists:\s*url\("/);
+    expect(style).toMatch(/--map-list-icon-draft:\s*url\("/);
   });
 });

@@ -113,7 +113,8 @@ const emit = defineEmits<{
 }>();
 
 const iconMaskVars = {
-  '--pack-list-icon-tasks': `url(${iconTasks})`,
+  // Quote url() so Vite-inlined data: SVG URLs stay valid CSS masks (SC-MAP-68).
+  '--pack-list-icon-tasks': `url("${iconTasks}")`,
 };
 
 const hasDescription = computed(() => Boolean(props.description?.trim()));

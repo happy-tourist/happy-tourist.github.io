@@ -88,6 +88,8 @@ function onCellClick(index: number) {
   pointer-events: none;
   cursor: default;
   background: #3a3a3a;
+  /* Slight cell rounding (map-card mock / list preview). */
+  border-radius: 1px;
 }
 
 .map-grid-preview--interactive .map-grid-preview__cell {

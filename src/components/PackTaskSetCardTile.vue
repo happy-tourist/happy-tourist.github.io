@@ -117,11 +117,12 @@ const { t } = useI18n();
 
 /** CSS mask URLs for total-row + status badge icons (ink via currentColor). */
 const iconMaskVars = {
-  '--pack-ts-icon-tasks': `url(${iconTasks})`,
-  '--pack-ts-icon-revise': `url(${iconBadgeRevise})`,
-  '--pack-ts-icon-pending': `url(${iconBadgePending})`,
-  '--pack-ts-icon-unpublished': `url(${iconBadgeUnpublished})`,
-  '--pack-ts-icon-draft': `url(${iconBadgeDraft})`,
+  // Quote url() so Vite-inlined data: SVG URLs stay valid CSS masks (SC-MAP-68).
+  '--pack-ts-icon-tasks': `url("${iconTasks}")`,
+  '--pack-ts-icon-revise': `url("${iconBadgeRevise}")`,
+  '--pack-ts-icon-pending': `url("${iconBadgePending}")`,
+  '--pack-ts-icon-unpublished': `url("${iconBadgeUnpublished}")`,
+  '--pack-ts-icon-draft': `url("${iconBadgeDraft}")`,
 };
 
 const difficultyRows = computed(() => [
@@ -239,6 +240,9 @@ function onBodyClick() {
   min-height: 18px;
   padding: 2px 6px;
   border-radius: 999px;
+  /* Soft pills — kill Quasar default primary fill before tone classes. */
+  background: transparent;
+  color: inherit;
 }
 
 .pack-task-set-tile__status :deep(.pack-task-set-status-badge--muted) {
@@ -438,8 +442,17 @@ function onBodyClick() {
   max-height: 32px;
   padding: 0 0.4rem;
   font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
   /* Mock: pale outline + dark label (not brand primary tint). */
   color: var(--pack-ts-fg);
+  white-space: nowrap;
+}
+
+.pack-task-set-tile__actions :deep(.q-btn .q-icon) {
+  /* Action icon ~18; ink = currentColor → action.fg (parity Map/PackList). */
+  font-size: 18px;
+  color: currentColor;
 }
 
 .pack-task-set-tile__actions :deep(.q-btn--outline:before) {

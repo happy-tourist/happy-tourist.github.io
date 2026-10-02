@@ -365,4 +365,23 @@ describe('PackTaskSetCardTile (SC-PACK-229/239…248)', () => {
     await wrapper.find('[data-test-id="set-edit"]').trigger('click');
     expect(wrapper.emitted('open')).toHaveLength(1);
   });
+
+  it('SC-MAP-68 drive-by: iconMaskVars quote Vite mask url() for task-set icons', () => {
+    expect(vueSrc).toMatch(/url\("\$\{iconTasks\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgeDraft\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgePending\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgeUnpublished\}"\)/);
+    expect(vueSrc).toMatch(/url\("\$\{iconBadgeRevise\}"\)/);
+    expect(vueSrc).not.toMatch(
+      /url\(\$\{icon(?:Tasks|BadgeDraft|BadgePending|BadgeUnpublished|BadgeRevise)\}\)/,
+    );
+
+    const wrapper = mount(PackTaskSetCardTile, {
+      props: { title: 'Set', totalCount: 1 },
+      global: { stubs },
+    });
+    const style = wrapper.attributes('style') ?? '';
+    expect(style).toMatch(/--pack-ts-icon-tasks:\s*url\("/);
+    expect(style).toMatch(/--pack-ts-icon-draft:\s*url\("/);
+  });
 });
