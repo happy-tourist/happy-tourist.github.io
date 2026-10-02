@@ -456,6 +456,9 @@ export default {
     previewAria: 'Мини-превью карты',
     editorGridAria: 'Поле карты 10 на 10',
     seatConfig: '{players}×{tourists}',
+    /** Map list card capacity rows (SC-MAP-55) — uppercase product sense. */
+    mapCardPlayers: 'ИГРОКОВ:',
+    mapCardTourists: 'ТУРИСТОВ:',
     draftOnly: 'Черновик',
     unpublishedByStaff: 'Снято с публикации',
     unpublish: 'Снять с публикации',

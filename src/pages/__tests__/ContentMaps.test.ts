@@ -234,9 +234,17 @@ const stubs = {
   'q-item-section': { template: '<div><slot /></div>' },
   'q-item-label': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable', 'to', 'loading'],
+    props: {
+      label: { type: String, default: undefined },
+      disable: { type: Boolean, default: false },
+      to: { type: [String, Object], default: undefined },
+      loading: { type: Boolean, default: false },
+      icon: { type: String, default: undefined },
+      outline: { type: Boolean, default: false },
+      dense: { type: Boolean, default: false },
+    },
     template:
-      '<button type="button" :disabled="disable || undefined" v-bind="$attrs">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :disabled="disable || undefined" :data-icon="icon || undefined" :data-outline="outline ? \'1\' : \'\'" @click="$attrs.onClick?.($event)">{{ label }}<slot /></button>',
   },
   'q-banner': {
     template: '<div class="q-banner-stub"><slot /><slot name="action" /></div>',
@@ -335,13 +343,15 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
       global: { stubs },
     });
 
-  it('SC-MAP-06: approved map row shows preview, author, and players×tourists', async () => {
+  it('SC-MAP-06: approved map card shows preview and players/tourists rows, not author', async () => {
     mapsState.list = [{ ...approvedMap }];
     wrapper = getMapsListWrapper();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('Alice');
-    expect(wrapper.text()).toContain('maps.seatConfig');
+    expect(wrapper.text()).not.toContain('Alice');
+    expect(wrapper.text()).toContain('maps.mapCardPlayers');
+    expect(wrapper.text()).toContain('maps.mapCardTourists');
+    expect(wrapper.text()).not.toContain('maps.seatConfig');
     expect(wrapper.find('.map-preview-stub').exists()).toBe(true);
     expect(wrapper.find('.map-preview-stub').attributes('data-grid-len')).toBe('100');
   });
@@ -351,7 +361,8 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     wrapper = getMapsListWrapper();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('maps.draftOnly');
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.draft');
+    expect(wrapper.text()).not.toContain('maps.draftOnly');
     await wrapper.find('[data-test-id="maps-row-m-draft"]').trigger('click');
     await flushPromises();
     expect(routerPush).toHaveBeenCalledWith({
@@ -422,14 +433,17 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.find('.map-preview-stub').attributes('data-interactive')).toBe('false');
   });
 
-  it('SC-MAP-21: soft-unpublished labeled for staff; non-staff cannot open', async () => {
+  it('SC-MAP-21: soft-unpublished short СНЯТО + muted; non-staff cannot open', async () => {
     mapsState.list = [{ ...softMap }];
     authState.isStaff = false;
     wrapper = getMapsListWrapper();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('maps.unpublishedByStaff');
-    await wrapper.find('[data-test-id="maps-row-m-soft"]').trigger('click');
+    const softCard = wrapper.find('[data-test-id="maps-row-m-soft"]');
+    expect(softCard.classes()).toContain('map-list-tile--muted');
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
+    expect(wrapper.text()).not.toContain('maps.unpublishedByStaff');
+    await softCard.trigger('click');
     await flushPromises();
     expect(routerPush).not.toHaveBeenCalled();
 
@@ -437,8 +451,12 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     authState.isStaff = true;
     wrapper = getMapsListWrapper();
     await flushPromises();
-    expect(wrapper.text()).toContain('maps.unpublishedByStaff');
-    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.republish'))).toBe(true);
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
+    const republish = wrapper.find('[data-test-id="maps-republish"]');
+    expect(republish.exists()).toBe(true);
+    expect(republish.text()).toBe('content.taskSetCardRepublish');
+    expect(republish.attributes('data-outline')).toBe('1');
+    expect(republish.attributes('data-icon')).toBe('visibility');
   });
 
   it('SC-MAP-24: author my-moderation lists pending map and links to editor', async () => {
@@ -490,7 +508,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(true);
   });
 
-  it('SC-MAP-31/32: pending and needs_revision badges on Maps list', async () => {
+  it('SC-MAP-31/32: pending and needs_revision short badges on Maps list', async () => {
     mapsState.list = [
       { ...approvedMap, id: 'm-pend', moderationStatus: 'pending', createdBy: 'u1' },
       {
@@ -505,11 +523,13 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
 
     expect(wrapper.find('[data-test-id="maps-status-m-pend"]').text()).toContain(
-      'content.statuses.pending',
+      'content.taskSetCardBadge.pending',
     );
     expect(wrapper.find('[data-test-id="maps-status-m-nr"]').text()).toContain(
-      'content.statuses.needs_revision',
+      'content.taskSetCardBadge.needs_revision',
     );
+    expect(wrapper.text()).not.toContain('content.statuses.pending');
+    expect(wrapper.text()).not.toContain('content.statuses.needs_revision');
   });
 
   it('SC-MAP-33: moderation filter shows only own open items', async () => {
@@ -626,7 +646,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
 
     expect(wrapper.find('[data-test-id="maps-status-m-cancel"]').text()).toContain(
-      'maps.draftOnly',
+      'content.taskSetCardBadge.draft',
     );
 
     await wrapper.find('[data-test-id="maps-filter-drafts"]').trigger('click');
@@ -646,7 +666,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     wrapper = getMapsListWrapper();
     await flushPromises();
     expect(wrapper.find('[data-test-id="maps-status-m-shared"]').text()).toContain(
-      'maps.draftOnly',
+      'content.taskSetCardBadge.draft',
     );
     wrapper.unmount();
 
@@ -663,6 +683,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     await flushPromises();
     expect(wrapper.find('[data-test-id="maps-status-m-shared"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('maps.statusInCatalog');
+    expect(wrapper.text()).not.toContain('content.taskSetCardBadge.draft');
     expect(wrapper.text()).not.toContain('maps.draftOnly');
   });
 });
@@ -714,13 +735,15 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-MAP-45: published map has no in_catalog badge', async () => {
+  it('SC-MAP-45: published map has no in_catalog / published badge', async () => {
     mapsState.list = [{ ...approvedMap, moderationStatus: 'in_catalog' }];
     wrapper = getMapsListWrapper();
     await flushPromises();
     expect(wrapper.find('[data-test-id="maps-row-m-approved"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="maps-status-m-approved"]').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('maps.statusInCatalog');
+    expect(wrapper.text()).not.toContain('ОПУБЛИКОВАНО');
+    expect(wrapper.text()).not.toContain('content.statuses.in_catalog');
   });
 
   it('SC-MAP-46/47: published map row opens View without paint tools; shows author and seats', async () => {
@@ -1018,7 +1041,7 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
     }
   });
 
-  it('SC-MAP-55: maps list renders card grid with mini preview, capacity, and bottom Edit text', async () => {
+  it('SC-MAP-55: maps list renders card grid with mini preview, capacity rows, and bottom Edit', async () => {
     mapsState.list = [{ ...approvedMap, createdBy: 'u1' }];
     wrapper = getMapsListWrapper();
     await flushPromises();
@@ -1030,19 +1053,85 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
 
     const preview = card.find('.map-preview-stub');
     expect(preview.exists()).toBe(true);
-    expect(card.text()).toContain('maps.seatConfig');
-    expect(card.text()).toContain('Alice');
+    expect(card.text()).toContain('maps.mapCardPlayers');
+    expect(card.text()).toContain('maps.mapCardTourists');
+    expect(card.text()).not.toContain('Alice');
+    expect(card.text()).not.toContain('maps.seatConfig');
 
-    // Preview appears before capacity text in card DOM
+    // Preview appears before capacity rows in card DOM
     const html = card.html();
-    expect(html.indexOf('map-preview-stub')).toBeLessThan(html.indexOf('maps.seatConfig'));
+    expect(html.indexOf('map-preview-stub')).toBeLessThan(html.indexOf('map-list-players'));
 
     const editBtn = card.find('[data-test-id="maps-author-edit"]');
     expect(editBtn.exists()).toBe(true);
     expect(editBtn.text()).toBe('content.edit');
     expect(editBtn.classes()).toContain('full-width');
+    expect(editBtn.attributes('data-outline')).toBe('1');
+    expect(editBtn.attributes('data-icon')).toBe('edit');
     // Actions sit below capacity (border-top actions region)
-    expect(html.indexOf('maps.seatConfig')).toBeLessThan(html.indexOf('maps-author-edit'));
+    expect(html.indexOf('map-list-tourists')).toBeLessThan(html.indexOf('maps-author-edit'));
+  });
+
+  it('SC-MAP-66: status badge overlays preview with short copy', async () => {
+    mapsState.list = [
+      { ...draftMap, moderationStatus: 'draft' },
+      { ...approvedMap, id: 'm-pend', moderationStatus: 'pending', createdBy: 'u1' },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    const draftCard = wrapper.find('[data-test-id="maps-row-m-draft"]');
+    const draftStatus = draftCard.find('[data-test-id="maps-status-m-draft"]');
+    expect(draftStatus.exists()).toBe(true);
+    expect(draftStatus.text()).toContain('content.taskSetCardBadge.draft');
+    // Overlay lives inside preview host (not a body strip below).
+    expect(
+      draftCard
+        .find('.map-list-tile__preview')
+        .find('[data-test-id="maps-status-m-draft"]')
+        .exists(),
+    ).toBe(true);
+
+    expect(wrapper.find('[data-test-id="maps-status-m-pend"]').text()).toContain(
+      'content.taskSetCardBadge.pending',
+    );
+
+    // Published in-catalog: no overlay host / badge (SC-MAP-45).
+    mapsState.list = [{ ...approvedMap, createdBy: 'u1' }];
+    wrapper.unmount();
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    const published = wrapper.find('[data-test-id="maps-row-m-approved"]');
+    expect(published.find('[data-testid="map-list-status"]').exists()).toBe(false);
+    expect(published.find('[data-test-id="maps-status-m-approved"]').exists()).toBe(false);
+  });
+
+  it('SC-MAP-67: soft-unpub muted dashed; staff short outline Снять/Вернуть; confirm keeps long maps.unpublish', async () => {
+    mapsState.list = [{ ...approvedMap, createdBy: 'u1' }, { ...softMap }];
+    authState.isStaff = true;
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="maps-row-m-soft"]').classes()).toContain(
+      'map-list-tile--muted',
+    );
+
+    const unpublish = wrapper.find('[data-test-id="maps-unpublish"]');
+    expect(unpublish.exists()).toBe(true);
+    expect(unpublish.text()).toBe('content.taskSetCardUnpublish');
+    expect(unpublish.attributes('data-outline')).toBe('1');
+    expect(unpublish.attributes('data-icon')).toBe('visibility_off');
+
+    const republish = wrapper.find('[data-test-id="maps-republish"]');
+    expect(republish.exists()).toBe(true);
+    expect(republish.text()).toBe('content.taskSetCardRepublish');
+    expect(republish.attributes('data-outline')).toBe('1');
+
+    await unpublish.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('maps.unpublishConfirmTitle');
+    expect(wrapper.text()).toContain('maps.unpublishConfirm');
+    expect(wrapper.findAll('button').some((b) => b.text().includes('maps.unpublish'))).toBe(true);
   });
 
   it('SC-MAP-56: editor column is centered and seat selects are usable width', async () => {

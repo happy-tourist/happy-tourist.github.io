@@ -39,64 +39,89 @@
     <div v-else-if="!filteredMaps.length" class="text-muted">
       {{ listFilter === 'all' ? $t('maps.empty') : $t('maps.emptyFiltered') }}
     </div>
-    <!-- SC-MAP-55 / D20: card grid — mini preview, players×tourists, bottom text actions -->
+    <!-- SC-MAP-55/66/67: card grid — preview overlay status, capacity rows, outline actions -->
     <div v-else class="pack-card-grid" data-testid="maps-card-grid" data-test-id="maps-card-grid">
       <MapListCardTile
         v-for="item in filteredMaps"
         :key="item.id"
         :grid="item.grid"
-        :author="item.authorDisplayName || $t('content.authorUser')"
-        :capacity="
-          $t('maps.seatConfig', {
-            players: item.players,
-            tourists: item.touristsPerPlayer,
-          })
-        "
+        :players="item.players"
+        :tourists-per-player="item.touristsPerPlayer"
         :preview-aria="$t('maps.previewAria')"
         clickable
+        :muted="isSoftUnpublished(item)"
         :test-id="`maps-row-${item.id}`"
         @open="onRowClick(item)"
       >
-        <template #status>
+        <!-- Omit empty #status so published cards have no overlay host (SC-MAP-45/66). -->
+        <template v-if="hasMapCardStatus(item)" #status>
           <q-badge
-            v-if="statusBadge(item)"
-            :color="statusBadgeColor(item)"
+            v-if="isSoftUnpublished(item)"
             dense
+            class="pack-task-set-status-badge pack-task-set-status-badge--muted"
             :data-test-id="`maps-status-${item.id}`"
           >
+            <span
+              class="pack-task-set-status-icon pack-task-set-status-icon--unpublished"
+              aria-hidden="true"
+            />
+            {{ $t('content.taskSetCardBadge.unpublished') }}
+          </q-badge>
+          <q-badge
+            v-else-if="isReviseStatus(item)"
+            dense
+            outline
+            class="pack-list-status-badge--revise"
+            :data-test-id="`maps-status-${item.id}`"
+          >
+            {{ $t('content.taskSetCardBadge.needs_revision') }}
+          </q-badge>
+          <q-badge
+            v-else
+            dense
+            class="pack-task-set-status-badge"
+            :class="statusBadgeToneClass(item)"
+            :data-test-id="`maps-status-${item.id}`"
+          >
+            <span
+              class="pack-task-set-status-icon"
+              :class="statusBadgeIconClass(item)"
+              aria-hidden="true"
+            />
             {{ statusBadge(item) }}
           </q-badge>
         </template>
-        <template #actions>
+        <!-- Omit empty #actions so pale divider / slim chrome appear only when controls exist. -->
+        <template v-if="hasMapCardActions(item)" #actions>
           <q-btn
             v-if="showAuthorEdit(item)"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="primary"
+            icon="edit"
             :label="$t('content.edit')"
             data-test-id="maps-author-edit"
             @click.stop="onAuthorEdit(item.id)"
           />
           <q-btn
             v-if="showStaffEdit(item)"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="secondary"
+            icon="edit"
             :label="$t('maps.staffEdit')"
             data-test-id="maps-staff-edit"
             @click.stop="onStaffEdit(item.id)"
           />
           <q-btn
             v-else-if="showStaffEditBlocked(item)"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="secondary"
+            icon="edit"
             :label="$t('maps.staffEdit')"
             disable
             data-test-id="maps-staff-edit-blocked"
@@ -105,24 +130,26 @@
           </q-btn>
           <q-btn
             v-if="auth.isStaff && item.hasLive && item.inCatalog === true"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="warning"
-            :label="$t('maps.unpublish')"
+            icon="visibility_off"
+            :label="$t('content.taskSetCardUnpublish')"
             :loading="maps.loading"
+            data-test-id="maps-unpublish"
             @click.stop="confirmUnpublish(item.id)"
           />
           <q-btn
             v-if="auth.isStaff && item.hasLive && item.inCatalog === false"
-            flat
+            outline
             dense
             no-caps
             class="full-width"
-            color="primary"
-            :label="$t('maps.republish')"
+            icon="visibility"
+            :label="$t('content.taskSetCardRepublish')"
             :loading="maps.loading"
+            data-test-id="maps-republish"
             @click.stop="onRepublish(item.id)"
           />
         </template>
@@ -245,27 +272,47 @@ function onFilterClick(value: MapsListFilter, identityOnly: boolean) {
   listFilter.value = value;
 }
 
+/** Soft-unpub muted + СНЯТО badge (same product sense as pack cards). */
+function isSoftUnpublished(item: MapSummary): boolean {
+  return Boolean(item.hasLive && item.inCatalog === false);
+}
+
+function isReviseStatus(item: MapSummary): boolean {
+  return item.moderationStatus === 'needs_revision';
+}
+
+/** True when a short status pill should overlay the preview (omit empty #status). */
+function hasMapCardStatus(item: MapSummary): boolean {
+  return isSoftUnpublished(item) || isReviseStatus(item) || Boolean(statusBadge(item));
+}
+
+/**
+ * Short card badges (SC-MAP-31/32/45/66) — `content.taskSetCardBadge.*`, not long
+ * `content.statuses.*` / `maps.draftOnly` / `maps.unpublishedByStaff` on the pill.
+ * Soft-unpub + revise rendered separately (icon/tone helpers).
+ */
 function statusBadge(item: MapSummary): string {
+  if (isSoftUnpublished(item) || isReviseStatus(item)) return '';
   const status = item.moderationStatus;
-  if (status === 'pending') return t('content.statuses.pending');
-  if (status === 'needs_revision') return t('content.statuses.needs_revision');
+  if (status === 'pending') return t('content.taskSetCardBadge.pending');
   if (status === 'draft' || (!item.hasLive && status !== 'unpublished')) {
-    return t('maps.draftOnly');
-  }
-  if (status === 'unpublished' || (item.hasLive && item.inCatalog === false)) {
-    return t('maps.unpublishedByStaff');
+    return t('content.taskSetCardBadge.draft');
   }
   // SC-MAP-45: published / in_catalog rows have no status badge
   return '';
 }
 
-function statusBadgeColor(item: MapSummary): string {
-  const status = item.moderationStatus;
-  if (status === 'pending') return 'orange';
-  if (status === 'needs_revision') return 'warning';
-  if (status === 'draft' || !item.hasLive) return 'grey';
-  if (status === 'unpublished' || item.inCatalog === false) return 'grey';
-  return 'grey';
+/** Soft muted / pending amber pills (task-set product sense; not Quasar solid fills). */
+function statusBadgeToneClass(item: MapSummary): string {
+  return item.moderationStatus === 'pending'
+    ? 'pack-task-set-status-badge--pending'
+    : 'pack-task-set-status-badge--muted';
+}
+
+/** Custom SVG badge icons via CSS mask classes (reuse task-set badge family). */
+function statusBadgeIconClass(item: MapSummary): string {
+  if (item.moderationStatus === 'pending') return 'pack-task-set-status-icon--pending';
+  return 'pack-task-set-status-icon--draft';
 }
 
 function hasOpenAuthorRequest(item: MapSummary): boolean {
@@ -286,6 +333,16 @@ function showAuthorEdit(item: MapSummary): boolean {
   if (auth.isStaff || isGuest.value) return false;
   if (!item.hasLive || item.inCatalog === false) return false;
   return Boolean(uid.value) && item.createdBy === uid.value;
+}
+
+/** True when at least one outline card action would render (avoid empty actions chrome). */
+function hasMapCardActions(item: MapSummary): boolean {
+  return (
+    showAuthorEdit(item) ||
+    showStaffEdit(item) ||
+    showStaffEditBlocked(item) ||
+    (auth.isStaff && item.hasLive)
+  );
 }
 
 function confirmUnpublish(mapId: string) {
