@@ -903,6 +903,14 @@ export const useContentStore = defineStore('content', () => {
           stagedRevisionId: data.stagedRevisionId ?? addTaskSet.value.stagedRevisionId ?? null,
         };
       }
+      // SC-PACK-268: keep unified list draft mark in sync without waiting for remount refetch.
+      if (data.moderationStatus === 'draft' || data.moderationStatus === 'cancelled') {
+        catalog.value = catalog.value.map((p) =>
+          p.id === packId
+            ? { ...p, moderationStatus: 'draft', openRequestType: 'task_set' }
+            : p,
+        );
+      }
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -947,6 +955,41 @@ export const useContentStore = defineStore('content', () => {
         };
       }
       return data.request;
+    } catch (e) {
+      error.value = mapContentError(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  /** D11 / SC-PACK-266: discard never-live add-task-set draft (not staff-open). */
+  async function discardAddTaskSetDraft(packId: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const { data } = await client.http.post<{
+        ok: boolean;
+        packId: string;
+        discardedRequestId: string;
+      }>(`/api/content/packs/${packId}/add-task-set/discard`);
+      if (addTaskSet.value) {
+        addTaskSet.value = {
+          ...addTaskSet.value,
+          draft: {
+            title: addTaskSet.value.draft.title,
+            description: addTaskSet.value.draft.description,
+            taskSets: [],
+          },
+          pendingRequestId: null,
+          moderationStatus: null,
+          stagedRevisionId: null,
+        };
+      }
+      catalog.value = catalog.value.map((p) =>
+        p.id === packId ? { ...p, moderationStatus: 'in_catalog', openRequestType: null } : p,
+      );
+      return data;
     } catch (e) {
       error.value = mapContentError(e);
       throw e;
@@ -1446,6 +1489,7 @@ export const useContentStore = defineStore('content', () => {
     loadAddTaskSet,
     saveAddTaskSet,
     submitAddTaskSet,
+    discardAddTaskSetDraft,
     acquireEditLock,
     refreshEditLock,
     releaseEditLock,

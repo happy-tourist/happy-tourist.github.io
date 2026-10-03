@@ -172,6 +172,12 @@ vi.mock('@/stores/content', async (importOriginal) => {
       loadAddTaskSet,
       loadModeration,
       loadStaffPreview,
+      saveAddTaskSet: vi.fn().mockResolvedValue({
+        draft: { title: 'T', description: '', taskSets: [] },
+        pendingRequestId: null,
+        moderationStatus: null,
+      }),
+      discardAddTaskSetDraft: vi.fn().mockResolvedValue({ ok: true }),
       addToCollection: vi.fn(),
       removeFromCollection: vi.fn(),
       saveDraft: vi.fn(),

@@ -29,51 +29,64 @@ const draftBody: PackContent = {
   ],
 };
 
-const { contentState, authState, loadDraft, saveDraft, loadAddTaskSet, loadLivePack } = vi.hoisted(
-  () => {
-    const contentState = {
-      error: null as string | null,
-      loading: false,
-      saving: false,
-      pack: {
-        id: 'p1',
-        title: 'My Pack',
-        description: '',
-        blocked: false,
-        hasLive: false,
-        createdBy: 'u1',
-        inCatalog: true,
-      },
-      draft: null as PackContent | null,
-      staffEditTarget: null as 'live' | 'working' | null,
-      moderationStatus: null as string | null,
-      addTaskSet: null as null | {
-        pack: { id: string; title: string };
-        liveCards: { id: string; content: string; description: string }[];
-        draft: { title: string; description: string; taskSets: PackContent['taskSets'] };
-        pendingRequestId: string | null;
-        moderationStatus: string;
-        foreignPending: boolean;
-        stagedRevisionId: string | null;
-      },
-      taskHasCascadeGap: () => false,
-      pruneCascadeGaps: vi.fn(),
-    };
-    const authState = {
-      user: { id: 'u1', anonymous: false } as { id: string; anonymous: boolean } | null,
-      needsEmailVerification: false,
-      isStaff: false,
-    };
-    return {
-      contentState,
-      authState,
-      loadDraft: vi.fn(),
-      saveDraft: vi.fn(),
-      loadAddTaskSet: vi.fn(),
-      loadLivePack: vi.fn(),
-    };
-  },
-);
+const {
+  contentState,
+  authState,
+  loadDraft,
+  saveDraft,
+  loadAddTaskSet,
+  loadLivePack,
+  saveAddTaskSet,
+  discardAddTaskSetDraft,
+} = vi.hoisted(() => {
+  const contentState = {
+    error: null as string | null,
+    loading: false,
+    saving: false,
+    pack: {
+      id: 'p1',
+      title: 'My Pack',
+      description: '',
+      blocked: false,
+      hasLive: false,
+      createdBy: 'u1',
+      inCatalog: true,
+    },
+    draft: null as PackContent | null,
+    staffEditTarget: null as 'live' | 'working' | null,
+    moderationStatus: null as string | null,
+    addTaskSet: null as null | {
+      pack: { id: string; title: string };
+      liveCards: { id: string; content: string; description: string }[];
+      draft: { title: string; description: string; taskSets: PackContent['taskSets'] };
+      pendingRequestId: string | null;
+      moderationStatus: string | null;
+      foreignPending: boolean;
+      stagedRevisionId: string | null;
+    },
+    taskHasCascadeGap: () => false,
+    pruneCascadeGaps: vi.fn(),
+  };
+  const authState = {
+    user: { id: 'u1', anonymous: false } as { id: string; anonymous: boolean } | null,
+    needsEmailVerification: false,
+    isStaff: false,
+  };
+  return {
+    contentState,
+    authState,
+    loadDraft: vi.fn(),
+    saveDraft: vi.fn(),
+    loadAddTaskSet: vi.fn(),
+    loadLivePack: vi.fn(),
+    saveAddTaskSet: vi.fn().mockResolvedValue({
+      draft: { title: 'T', description: '', taskSets: [] },
+      pendingRequestId: 'r-draft',
+      moderationStatus: 'draft',
+    }),
+    discardAddTaskSetDraft: vi.fn().mockResolvedValue({ ok: true }),
+  };
+});
 
 const routeState = vi.hoisted(() => ({
   params: { id: 'p1', taskSetId: 'ts1' },
@@ -111,6 +124,8 @@ vi.mock('@/stores/content', async (importOriginal) => {
       saveDraft,
       loadAddTaskSet,
       loadLivePack,
+      saveAddTaskSet,
+      discardAddTaskSetDraft,
       acquireEditLock: vi.fn(),
       refreshEditLock: vi.fn(),
       releaseEditLock: vi.fn(),

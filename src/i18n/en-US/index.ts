@@ -290,6 +290,13 @@ export default {
     addTaskSetLiveCardsHint: 'Слоты можно заполнять только существующими карточками набора:',
     addTaskSetForeignPending: 'Сейчас на модерации набор заданий другого автора.',
     addTaskSetTooltip: 'Добавьте хотя бы одну карточку-ответ',
+    /** D11 / SC-PACK-266: top delete never-live add-task-set draft. */
+    deleteAddTaskSetDraft: 'Удалить черновик',
+    deleteAddTaskSetDraftTitle: 'Удалить черновик набора заданий?',
+    deleteAddTaskSetDraftConfirm:
+      'Черновик нового набора заданий будет удалён. Опубликованный набор и его наборы заданий не изменятся.',
+    /** Author-facing draft mark on add-task-set (SC-PACK-264/267). */
+    addTaskSetDraftStatus: 'Черновик',
     staffEditSubtitle: 'Правки staff сохраняются сразу, без очереди модерации',
     backToLive: 'К набору',
     tasksSaveHint:

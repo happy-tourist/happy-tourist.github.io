@@ -33,6 +33,19 @@
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local">
+      <!-- D11 / SC-PACK-266: top delete never-live draft (above add/CSV/list) -->
+      <div v-if="canDeleteDraft" class="q-mb-md">
+        <q-btn
+          color="negative"
+          outline
+          icon="delete"
+          :label="$t('content.deleteAddTaskSetDraft')"
+          data-testid="delete-add-task-set-draft"
+          :loading="content.loading"
+          @click="draftDeleteConfirmOpen = true"
+        />
+      </div>
+
       <!-- SC-PACK-261: no top live answer grid; live cards only in dialog pool + CSV -->
       <!-- SC-PACK-258…262 / D5: add → CSV → list; compose in dialog -->
       <div v-if="canComposeTasks" class="q-mb-md">
@@ -175,11 +188,30 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <q-dialog v-model="draftDeleteConfirmOpen">
+      <q-card style="min-width: 280px">
+        <q-card-section>
+          <div class="text-h6">{{ $t('content.deleteAddTaskSetDraftTitle') }}</div>
+          <div class="q-mt-sm">{{ $t('content.deleteAddTaskSetDraftConfirm') }}</div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="$t('content.gateDismiss')" v-close-popup />
+          <q-btn
+            color="negative"
+            :label="$t('content.deleteAddTaskSetDraft')"
+            data-testid="confirm-delete-add-task-set-draft"
+            :loading="content.loading"
+            @click="doDeleteDraft"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import type { QForm } from 'quasar';
@@ -200,6 +232,8 @@ import {
   type TaskSlot,
 } from '@/stores/content';
 
+const AUTOSAVE_MS = 800;
+
 const auth = useAuthStore();
 const content = useContentStore();
 const route = useRoute();
@@ -219,11 +253,16 @@ const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingTaskId = ref<string | null>(null);
 const taskComposeOpen = ref(false);
+const draftDeleteConfirmOpen = ref(false);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const threadMessages = ref<ModerationMessage[]>([]);
 /** D3 / SC-PACK-234: pristine snapshot after load / successful submit. */
 const submitBaseline = ref<string | null>(null);
+/** Quiet autosave fingerprint — distinct from Submit dirty baseline (D10). */
+const autosaveBaseline = ref<string | null>(null);
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressAutosave = false;
 const taskForm = reactive<{
   question: string;
   difficulty: Difficulty;
@@ -265,7 +304,17 @@ const statusLabel = computed(() => {
   if (status === 'needs_revision' || status === 'rejected') {
     return t('content.taskSetStatusMarks.needs_revision');
   }
+  if (status === 'draft' || status === 'cancelled') {
+    return t('content.addTaskSetDraftStatus');
+  }
   return '';
+});
+
+/** D11 / SC-PACK-266: top delete when retained never-live draft (not staff-open). */
+const canDeleteDraft = computed(() => {
+  if (readOnly.value || state.value?.foreignPending) return false;
+  const status = state.value?.moderationStatus;
+  return status === 'draft' || status === 'cancelled';
 });
 
 const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answerCardId)));
@@ -282,7 +331,7 @@ const meetsMinima = computed(() => {
   );
 });
 
-/** D3 / SC-PACK-234: dirty vs load baseline. */
+/** D3 / SC-PACK-234: dirty vs load baseline (Submit stays disabled after restore until further edit). */
 const isDirty = computed(() => isEditorContentDirty(local.value, submitBaseline.value));
 
 const canSubmit = computed(() => {
@@ -312,6 +361,57 @@ const submitHint = computed(() => {
   if (!isDirty.value) return t('content.submitHintNotDirty');
   return '';
 });
+
+function clearAutosaveTimer() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+}
+
+/** First put needs ≥1 task; later puts may persist empty (remove last task — SC-PACK-264). */
+function canAutosaveDraft(): boolean {
+  if (!local.value || readOnly.value) return false;
+  if (local.value.tasks?.length > 0) return true;
+  const status = state.value?.moderationStatus;
+  if (status === 'draft' || status === 'cancelled') return true;
+  // In-flight first save may not have status yet; still allow empty follow-up put.
+  return Boolean(state.value?.pendingRequestId || state.value?.stagedRevisionId);
+}
+
+function scheduleAutosave() {
+  if (suppressAutosave || !canAutosaveDraft()) return;
+  clearAutosaveTimer();
+  autosaveTimer = setTimeout(() => {
+    void flushAutosave();
+  }, AUTOSAVE_MS);
+}
+
+async function flushAutosave() {
+  clearAutosaveTimer();
+  if (!packId.value || !canAutosaveDraft() || !local.value) return;
+  if (!isEditorContentDirty(local.value, autosaveBaseline.value)) return;
+  const snapshot = JSON.parse(JSON.stringify(local.value)) as TaskSet;
+  try {
+    const body: {
+      title?: string;
+      description?: string;
+      taskSets: TaskSet[];
+    } = { taskSets: [snapshot] };
+    if (state.value?.draft.title !== undefined) body.title = state.value.draft.title;
+    if (state.value?.draft.description !== undefined) {
+      body.description = state.value.draft.description;
+    }
+    await content.saveAddTaskSet(packId.value, body, { quiet: true });
+    // Baseline = what we persisted; if local changed during await, schedule again.
+    autosaveBaseline.value = fingerprintEditorContent(snapshot);
+    if (isEditorContentDirty(local.value, autosaveBaseline.value)) {
+      scheduleAutosave();
+    }
+  } catch {
+    /* error in store; keep dirty for retry */
+  }
+}
 
 function checkGate(): boolean {
   if (auth.user?.anonymous) {
@@ -421,12 +521,15 @@ function onAddOrUpdateTask() {
   }
   taskComposeOpen.value = false;
   resetTaskForm();
+  // D10 / SC-PACK-264: quiet persist on any dirty change.
+  void flushAutosave();
 }
 
 function onTasksCsvAppend(tasks: ContentTask[]) {
   if (readOnly.value || !tasks.length) return;
   const set = ensureLocalSet();
   set.tasks.push(...tasks);
+  void flushAutosave();
 }
 
 function removeTask(taskId: string) {
@@ -435,6 +538,22 @@ function removeTask(taskId: string) {
   if (editingTaskId.value === taskId) {
     taskComposeOpen.value = false;
     resetTaskForm();
+  }
+  // Immediate persist so leave/reload does not restore a deleted task (SC-PACK-264/265).
+  void flushAutosave();
+}
+
+async function doDeleteDraft() {
+  if (!packId.value || !canDeleteDraft.value) return;
+  try {
+    clearAutosaveTimer();
+    await content.discardAddTaskSetDraft(packId.value);
+    draftDeleteConfirmOpen.value = false;
+    await content.loadAddTaskSet(packId.value);
+    syncFromState({ refreshBaseline: true });
+    await loadThread();
+  } catch {
+    /* error in store */
   }
 }
 
@@ -503,8 +622,10 @@ function syncFromState(opts?: { refreshBaseline?: boolean }) {
     local.value = null;
     liveCards.value = [];
     submitBaseline.value = null;
+    autosaveBaseline.value = null;
     return;
   }
+  suppressAutosave = true;
   liveCards.value = data.liveCards ?? [];
   const first = data.draft.taskSets[0];
   local.value = first
@@ -516,14 +637,19 @@ function syncFromState(opts?: { refreshBaseline?: boolean }) {
         tasks: [],
       };
   if (opts?.refreshBaseline || submitBaseline.value == null) {
+    // D10: after load/restore draft, Submit disabled until further edit.
     submitBaseline.value = fingerprintEditorContent(local.value);
   }
+  autosaveBaseline.value = fingerprintEditorContent(local.value);
+  suppressAutosave = false;
 }
 
 async function load() {
   if (!packId.value) return;
   if (!checkGate()) return;
+  clearAutosaveTimer();
   submitBaseline.value = null;
+  autosaveBaseline.value = null;
   try {
     await content.loadAddTaskSet(packId.value);
     syncFromState({ refreshBaseline: true });
@@ -537,4 +663,15 @@ async function load() {
 
 onMounted(load);
 watch(packId, load);
+watch(
+  local,
+  () => {
+    scheduleAutosave();
+  },
+  { deep: true },
+);
+onBeforeUnmount(() => {
+  // SC-PACK-265: do not drop a pending debounce on leave — flush last dirty draft.
+  void flushAutosave();
+});
 </script>

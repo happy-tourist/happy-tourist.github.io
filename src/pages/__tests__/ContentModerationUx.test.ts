@@ -201,6 +201,12 @@ vi.mock('@/stores/content', async (importOriginal) => {
       loadModeration,
       postModerationMessage,
       saveDraft: vi.fn(),
+      saveAddTaskSet: vi.fn().mockResolvedValue({
+        draft: { title: 'T', description: '', taskSets: [] },
+        pendingRequestId: null,
+        moderationStatus: null,
+      }),
+      discardAddTaskSetDraft: vi.fn().mockResolvedValue({ ok: true }),
       submitPack: vi.fn(),
       submitAddTaskSet: vi.fn(),
       cancelRequest: vi.fn(),
