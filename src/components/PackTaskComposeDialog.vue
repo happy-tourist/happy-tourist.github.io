@@ -78,10 +78,9 @@
             <q-chip
               v-for="card in answerCards"
               :key="card.id"
-              :clickable="!readOnly && Boolean(card.content.trim()) && !isCardPlaced(card.id)"
-              :outline="!isCardPlaced(card.id)"
-              :color="isCardPlaced(card.id) ? 'primary' : undefined"
-              :disable="readOnly || !card.content.trim() || isCardPlaced(card.id)"
+              :clickable="!readOnly && Boolean(card.content.trim())"
+              outline
+              :disable="readOnly || !card.content.trim()"
               data-testid="task-compose-answer-chip"
               @click="pickAnswer(card.id)"
             >
@@ -171,10 +170,6 @@ function onCancel() {
   emit('cancel');
 }
 
-function isCardPlaced(cardId: string) {
-  return props.formSlots.some((s) => s.answerCardId === cardId);
-}
-
 function slotLabel(slot: TaskSlot) {
   if (!slot.answerCardId) {
     return t('content.slotEmpty');
@@ -206,7 +201,7 @@ function clearSlot(slot: TaskSlot) {
 }
 
 function pickAnswer(cardId: string) {
-  if (props.readOnly || isCardPlaced(cardId)) return;
+  if (props.readOnly) return;
   const idx = props.formSlots.findIndex((s) => !s.answerCardId);
   if (idx < 0) return;
   emit(

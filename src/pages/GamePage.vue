@@ -85,9 +85,9 @@
               v-for="card in game.answerCards"
               :key="`peek-ans-${card.id}`"
               :clickable="isPeekOwner"
-              :outline="!isAnswerPlaced(card.id)"
-              :color="isAnswerPlaced(card.id) ? 'primary' : undefined"
-              :disable="!isPeekOwner || isAnswerPlaced(card.id)"
+              outline
+              :disable="!isPeekOwner"
+              data-testid="peek-answer-chip"
               @click="onPeekAnswerClick(card.id)"
             >
               {{ card.content || card.id }}
@@ -1298,16 +1298,12 @@ function answerCardLabel(answerCardId: string): string {
   return card?.content || answerCardId;
 }
 
-function isAnswerPlaced(answerCardId: string): boolean {
-  return peekSlotPlacements.value.includes(answerCardId);
-}
-
 function firstEmptyPeekSlot(): number {
   return peekSlotPlacements.value.findIndex((id) => !id);
 }
 
 function onPeekAnswerClick(answerCardId: string) {
-  if (!isPeekOwner.value || isAnswerPlaced(answerCardId)) {
+  if (!isPeekOwner.value) {
     return;
   }
   const slotIndex = firstEmptyPeekSlot();

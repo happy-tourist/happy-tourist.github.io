@@ -218,12 +218,13 @@ describe('soft-unpublish UI (SC-PACK-120…125)', () => {
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.unpublish'))).toBe(
-      true,
-    );
-    expect(wrapper.findAll('button').some((b) => b.text().includes('content.republish'))).toBe(
-      true,
-    );
+    // Catalog card actions use short labels (SC-PACK-250); confirm dialog keeps long keys.
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardUnpublish')),
+    ).toBe(true);
+    expect(
+      wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardRepublish')),
+    ).toBe(true);
     expect(wrapper.text()).toContain('content.unpublishedByStaff');
   });
 

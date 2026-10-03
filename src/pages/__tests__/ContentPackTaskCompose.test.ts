@@ -153,9 +153,14 @@ const stubs = {
     template: '<div class="q-select-stub" />',
   },
   'q-chip': {
-    props: ['disable', 'outline', 'clickable'],
+    props: {
+      disable: Boolean,
+      outline: Boolean,
+      clickable: Boolean,
+      color: String,
+    },
     template:
-      '<button type="button" class="q-chip-stub" :disabled="disable" data-testid="task-compose-answer-chip" @click="$emit(\'click\')"><slot /></button>',
+      '<button type="button" class="q-chip-stub" :disabled="disable" :data-outline="outline ? \'true\' : \'false\'" :data-color="color || \'\'" :data-clickable="clickable ? \'true\' : \'false\'" data-testid="task-compose-answer-chip" @click="$emit(\'click\')"><slot /></button>',
   },
   'q-space': true,
   'q-dialog': {
@@ -339,6 +344,43 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(loadLivePack).toHaveBeenCalled();
     expect(wrapper.find('[data-testid="add-task-question"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="task-compose-dialog"]').exists()).toBe(false);
+  });
+
+  it('SC-PACK-263: same answer card fills multiple slots; chip stays available without used chrome', async () => {
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    expect(dialog.exists()).toBe(true);
+
+    await dialog.find('[data-testid="task-compose-add-slot"]').trigger('click');
+    await flushPromises();
+
+    let slots = dialog.findAll('[data-testid="peek-slot-like"]');
+    expect(slots.length).toBeGreaterThanOrEqual(2);
+
+    const chips = dialog.findAll('[data-testid="task-compose-answer-chip"]');
+    const parisChip = chips.find((c) => c.text().includes('Paris'));
+    expect(parisChip).toBeTruthy();
+
+    await parisChip!.trigger('click');
+    await flushPromises();
+    await parisChip!.trigger('click');
+    await flushPromises();
+
+    slots = dialog.findAll('[data-testid="peek-slot-like"]');
+    const filledLabels = slots
+      .filter((s) => s.classes().includes('peek-slot-like--filled'))
+      .map((s) => s.text());
+    expect(filledLabels.filter((t) => t.includes('Paris')).length).toBeGreaterThanOrEqual(2);
+
+    expect(parisChip!.attributes('disabled')).toBeUndefined();
+    expect(parisChip!.attributes('data-outline')).toBe('true');
+    expect(parisChip!.attributes('data-color')).toBe('');
+    expect(parisChip!.attributes('data-clickable')).toBe('true');
   });
 });
 

@@ -101,8 +101,14 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46, SC-PIECE-52)', () => {
             props: ['label', 'flat', 'color', 'disable'],
           },
           QChip: {
-            template: '<button class="q-chip-stub" @click="$emit(\'click\')"><slot /></button>',
-            props: ['clickable', 'outline', 'color', 'disable'],
+            template:
+              '<button class="q-chip-stub" :disabled="disable" :data-outline="outline ? \'true\' : \'false\'" :data-color="color || \'\'" @click="$emit(\'click\')"><slot /></button>',
+            props: {
+              clickable: Boolean,
+              outline: Boolean,
+              color: String,
+              disable: Boolean,
+            },
           },
           QIcon: { template: '<i />', props: ['name', 'size'] },
           QBanner: { template: '<div><slot /></div>' },
@@ -199,6 +205,62 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46, SC-PIECE-52)', () => {
     expect(wrapper.text()).toContain('Вопрос для всех');
     expect(wrapper.text()).toContain('game.peekSpectatorHint');
     expect(wrapper.text()).not.toContain('game.peekSubmit');
+    wrapper.unmount();
+  });
+
+  it('SC-BOARD-49: same answer card may fill multiple peek slots without used chrome', async () => {
+    const game = seedPlayingSeat(2);
+    game.openPeek = {
+      sessionId: 's1',
+      pieceId: '0',
+      row: 3,
+      col: 3,
+      taskId: 't1',
+      question: 'Повтори ответ',
+      difficulty: 1,
+      reward: 1,
+      placements: ['', ''],
+    };
+    const sendPeekPlace = vi
+      .spyOn(game, 'sendPeekPlace')
+      .mockImplementation((slotIndex, answerCardId) => {
+        if (!game.openPeek) return false;
+        const next = [...game.openPeek.placements];
+        next[slotIndex] = answerCardId ?? '';
+        game.openPeek = { ...game.openPeek, placements: next };
+        return true;
+      });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const chips = wrapper.findAll('[data-testid="peek-answer-chip"]');
+    expect(chips.length).toBeGreaterThan(0);
+    const firstChip = chips[0]!;
+
+    await firstChip.trigger('click');
+    await flushPromises();
+    await firstChip.trigger('click');
+    await flushPromises();
+
+    expect(sendPeekPlace).toHaveBeenCalledTimes(2);
+    expect(sendPeekPlace).toHaveBeenNthCalledWith(1, 0, 'a1');
+    expect(sendPeekPlace).toHaveBeenNthCalledWith(2, 1, 'a1');
+    expect(game.openPeek.placements).toEqual(['a1', 'a1']);
+
+    expect(firstChip.attributes('disabled')).toBeUndefined();
+    expect(firstChip.attributes('data-outline')).toBe('true');
+    expect(firstChip.attributes('data-color')).toBe('');
+
+    const filledSlots = wrapper.findAll('.peek-slot--filled');
+    expect(filledSlots).toHaveLength(2);
+    expect(filledSlots.every((s) => s.text().includes('Четыре'))).toBe(true);
+
+    await filledSlots[0]!.trigger('click');
+    await flushPromises();
+    expect(sendPeekPlace).toHaveBeenCalledWith(0, '');
+    expect(game.openPeek.placements).toEqual(['', 'a1']);
+
     wrapper.unmount();
   });
 });
