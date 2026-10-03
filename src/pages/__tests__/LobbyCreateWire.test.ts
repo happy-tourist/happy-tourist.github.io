@@ -536,11 +536,17 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     expect(wrapper.find('[data-test-id="lobby-room-r1"]').exists()).toBe(true);
     expect(wrapper.find('.map-grid-preview-stub').exists()).toBe(true);
     // Seats use chosen maxSeats (2), not map players (4); no players×tourists caption.
-    expect(wrapper.find('[data-test-id="lobby-room-seats"]').text()).toContain('lobby.capacity');
+    expect(wrapper.find('[data-test-id="lobby-room-seats-count"]').text()).toContain(
+      'lobby.capacity',
+    );
+    expect(wrapper.find('[data-test-id="lobby-room-seats-label"]').text()).toContain(
+      'lobby.roomCardSeatsFew',
+    );
     expect(wrapper.find('[data-test-id="lobby-room-map-capacity"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test-id="lobby-room-tourists"]').text()).toContain(
+    expect(wrapper.find('[data-test-id="lobby-room-tourists-label"]').text()).toContain(
       'lobby.roomCardTouristsFew',
     );
+    expect(wrapper.find('[data-test-id="lobby-room-tourists-count"]').text()).toBe('3');
     expect(wrapper.text()).not.toMatch(/\+\s*3/);
     expect(wrapper.find('[data-test-id="lobby-room-pack-title"]').text()).toContain('Математика');
     const sets = wrapper.find('[data-test-id="lobby-room-sets"]');

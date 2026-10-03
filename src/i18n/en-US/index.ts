@@ -113,10 +113,14 @@ export default {
     packSetsCaption: '{pack} · {sets}',
     /** Lobby room card join (SC-LOBBY-25/33). */
     join: 'Войти',
-    /** Tourists row without leading «+» (SC-LOBBY-25); Russian plural forms. */
-    roomCardTouristsOne: '{n} ТУРИСТ',
-    roomCardTouristsFew: '{n} ТУРИСТА',
-    roomCardTouristsMany: '{n} ТУРИСТОВ',
+    /** Seats label declined by maxSeats (SC-LOBBY-25/36); count cell uses `capacity`. */
+    roomCardSeatsOne: 'Место',
+    roomCardSeatsFew: 'Места',
+    roomCardSeatsMany: 'Мест',
+    /** Tourists label declined by touristsPerPlayer; count = bare n, no «+» (SC-LOBBY-25/36). */
+    roomCardTouristsOne: 'Турист',
+    roomCardTouristsFew: 'Туриста',
+    roomCardTouristsMany: 'Туристов',
     /** Short set ordinal on ~180 card (SC-LOBBY-26); create modal keeps content.taskSetLabel. */
     roomCardTaskSetLabel: 'Набор #{n}',
     /** Phase badge on map preview (SC-LOBBY-34). */

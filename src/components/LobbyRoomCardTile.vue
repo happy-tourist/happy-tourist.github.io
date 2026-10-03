@@ -47,9 +47,18 @@
               data-icon="lobby-room-card-seats"
             />
           </span>
-          <span class="lobby-room-tile__stat-text">{{
-            $t('lobby.capacity', { seats, maxSeats })
-          }}</span>
+          <span
+            class="lobby-room-tile__stat-label"
+            data-test-id="lobby-room-seats-label"
+            data-testid="lobby-room-seats-label"
+            >{{ $t(seatsLabelKey) }}</span
+          >
+          <span
+            class="lobby-room-tile__stat-count"
+            data-test-id="lobby-room-seats-count"
+            data-testid="lobby-room-seats-count"
+            >{{ $t('lobby.capacity', { seats, maxSeats }) }}</span
+          >
         </div>
         <div
           v-if="touristsPerPlayer != null"
@@ -70,9 +79,18 @@
               data-icon="map-card-tourists"
             />
           </span>
-          <span class="lobby-room-tile__stat-text lobby-room-tile__stat-text--muted">{{
-            touristsLabel
-          }}</span>
+          <span
+            class="lobby-room-tile__stat-label"
+            data-test-id="lobby-room-tourists-label"
+            data-testid="lobby-room-tourists-label"
+            >{{ $t(touristsLabelKey) }}</span
+          >
+          <span
+            class="lobby-room-tile__stat-count"
+            data-test-id="lobby-room-tourists-count"
+            data-testid="lobby-room-tourists-count"
+            >{{ touristsPerPlayer }}</span
+          >
         </div>
       </div>
 
@@ -136,7 +154,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
 
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import iconSeats from '@/assets/content/lobby-room-card-seats.svg';
@@ -176,8 +193,6 @@ const emit = defineEmits<{
   open: [];
 }>();
 
-const { t } = useI18n();
-
 /** CSS mask URLs — quote url() so Vite data: SVG stays valid (SC-MAP-68). */
 const iconMaskVars = {
   '--lobby-room-icon-seats': `url("${iconSeats}")`,
@@ -185,20 +200,49 @@ const iconMaskVars = {
   '--lobby-room-icon-tasks': `url("${iconTasks}")`,
 };
 
-const touristsLabel = computed(() => {
+/** Russian plural form index: one / few / many (SC-LOBBY-25/36). */
+function ruPluralForm(n: number): 'one' | 'few' | 'many' {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) {
+    return 'one';
+  }
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+    return 'few';
+  }
+  return 'many';
+}
+
+/** Seats noun key declined by maxSeats (Место / Места / Мест). */
+const seatsLabelKey = computed(() => {
+  const n = Number(props.maxSeats);
+  if (!Number.isFinite(n)) {
+    return 'lobby.roomCardSeatsMany';
+  }
+  const form = ruPluralForm(n);
+  if (form === 'one') {
+    return 'lobby.roomCardSeatsOne';
+  }
+  if (form === 'few') {
+    return 'lobby.roomCardSeatsFew';
+  }
+  return 'lobby.roomCardSeatsMany';
+});
+
+/** Tourists noun key declined by touristsPerPlayer (Турист / Туриста / Туристов). */
+const touristsLabelKey = computed(() => {
   const n = props.touristsPerPlayer;
   if (typeof n !== 'number') {
     return '';
   }
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) {
-    return t('lobby.roomCardTouristsOne', { n });
+  const form = ruPluralForm(n);
+  if (form === 'one') {
+    return 'lobby.roomCardTouristsOne';
   }
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
-    return t('lobby.roomCardTouristsFew', { n });
+  if (form === 'few') {
+    return 'lobby.roomCardTouristsFew';
   }
-  return t('lobby.roomCardTouristsMany', { n });
+  return 'lobby.roomCardTouristsMany';
 });
 
 const visibleSets = computed(() =>
@@ -345,23 +389,20 @@ function onBodyClick() {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  font-size: 0.78rem;
-  line-height: 1.2;
-  font-weight: 700;
   color: var(--lobby-room-fg);
 }
 
 .lobby-room-tile__stat-row {
-  /* Spec: seats/tourists = centered icon+text block (not full-width left grid). */
+  /* SC-LOBBY-36: same full-width metric grid as set rows (lead | label | count). */
   display: grid;
-  grid-template-columns: var(--lobby-room-lead-w) auto;
+  grid-template-columns: var(--lobby-room-lead-w) minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 0.3rem;
-  width: max-content;
-  max-width: 100%;
-  margin-inline: auto;
+  width: 100%;
   min-width: 0;
   padding: var(--lobby-room-row-pad-y) 0;
+  font-size: 0.68rem;
+  line-height: 1.2;
 }
 
 .lobby-room-tile__lead {
@@ -408,20 +449,30 @@ function onBodyClick() {
   mask-image: var(--lobby-room-icon-tasks);
 }
 
-.lobby-room-tile__stat-text {
+.lobby-room-tile__stat-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 700;
+  font-weight: 500;
+  color: var(--lobby-room-muted);
+  text-align: left;
 }
 
-.lobby-room-tile__stat-text--muted {
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--lobby-room-muted);
+/* Spec colors: seats → title.fg; tourists labels stay muted. */
+.lobby-room-tile__stat-row[data-testid='lobby-room-seats'] .lobby-room-tile__stat-label {
+  color: var(--lobby-room-fg);
+}
+
+.lobby-room-tile__stat-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--lobby-room-fg);
+  text-align: right;
+}
+
+.lobby-room-tile__stat-row[data-testid='lobby-room-seats'] .lobby-room-tile__stat-count {
+  font-weight: 700;
 }
 
 .lobby-room-tile__divider {
@@ -476,7 +527,8 @@ function onBodyClick() {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 400;
-  color: var(--lobby-room-muted);
+  /* Pack/task-set chrome (Decision 12): set.label.fg = title.fg, not muted. */
+  color: var(--lobby-room-fg);
   text-align: left;
 }
 

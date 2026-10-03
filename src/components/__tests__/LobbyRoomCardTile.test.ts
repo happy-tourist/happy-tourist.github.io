@@ -35,7 +35,7 @@ const appScss = readFileSync(
   'utf8',
 );
 
-describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35)', () => {
+describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35/36)', () => {
   let wrapper: ReturnType<typeof mount> | null = null;
 
   afterEach(() => {
@@ -67,11 +67,14 @@ describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35)', () => {
       global: { stubs },
     });
 
-  it('SC-LOBBY-25: map preview, seats/maxSeats, tourists without plus (not players×tourists)', () => {
+  it('SC-LOBBY-25: map preview, seats/maxSeats count, tourists bare n without plus', () => {
     expect(messages.lobby.capacity).toBe('{seats} / {maxSeats}');
-    expect(messages.lobby.roomCardTouristsOne).toBe('{n} ТУРИСТ');
-    expect(messages.lobby.roomCardTouristsFew).toBe('{n} ТУРИСТА');
-    expect(messages.lobby.roomCardTouristsMany).toBe('{n} ТУРИСТОВ');
+    expect(messages.lobby.roomCardSeatsOne).toBe('Место');
+    expect(messages.lobby.roomCardSeatsFew).toBe('Места');
+    expect(messages.lobby.roomCardSeatsMany).toBe('Мест');
+    expect(messages.lobby.roomCardTouristsOne).toBe('Турист');
+    expect(messages.lobby.roomCardTouristsFew).toBe('Туриста');
+    expect(messages.lobby.roomCardTouristsMany).toBe('Туристов');
     expect(vueSrc).toMatch(/lobby-room-card-seats\.svg/);
     expect(vueSrc).toMatch(/map-card-tourists\.svg/);
     expect(vueSrc).not.toMatch(/mapCapacityCaption/);
@@ -82,26 +85,28 @@ describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35)', () => {
     expect(wrapper.find('[data-testid="lobby-room-map-preview"]').exists()).toBe(true);
 
     const seats = wrapper.find('[data-testid="lobby-room-seats"]');
-    expect(seats.text()).toContain('lobby.capacity');
+    expect(seats.find('[data-testid="lobby-room-seats-label"]').text()).toContain(
+      'lobby.roomCardSeatsFew',
+    );
+    expect(seats.find('[data-testid="lobby-room-seats-count"]').text()).toContain('lobby.capacity');
     // maxSeats=2 (chosen), not map players=4 from scenario.
-    expect(seats.text()).not.toContain('4');
+    expect(seats.find('[data-testid="lobby-room-seats-count"]').text()).not.toContain('4');
     expect(wrapper.find('[data-testid="lobby-room-seats-icon"]').attributes('data-icon')).toBe(
       'lobby-room-card-seats',
     );
 
     const tourists = wrapper.find('[data-testid="lobby-room-tourists"]');
-    expect(tourists.text()).toContain('lobby.roomCardTouristsFew');
-    expect(tourists.text()).not.toMatch(/^\+/);
+    expect(tourists.find('[data-testid="lobby-room-tourists-label"]').text()).toContain(
+      'lobby.roomCardTouristsFew',
+    );
+    expect(tourists.find('[data-testid="lobby-room-tourists-count"]').text()).toBe('3');
+    expect(tourists.text()).not.toMatch(/\+/);
     expect(wrapper.text()).not.toMatch(/\+\s*3/);
     expect(wrapper.find('[data-testid="lobby-room-tourists-icon"]').attributes('data-icon')).toBe(
       'map-card-tourists',
     );
     expect(wrapper.find('[data-testid="lobby-room-divider-capacity"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="lobby-room-map-capacity"]').exists()).toBe(false);
-    // Visual Spec: seats/tourists = centered icon+text block.
-    expect(vueSrc).toMatch(
-      /\.lobby-room-tile__stat-row[\s\S]*margin-inline:\s*auto[\s\S]*width:\s*max-content|width:\s*max-content[\s\S]*margin-inline:\s*auto/,
-    );
     expect(vueSrc).toMatch(/previewSize:\s*156/);
 
     const html = wrapper.html();
@@ -121,6 +126,122 @@ describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35)', () => {
     expect(noTourists.find('[data-testid="lobby-room-tourists"]').exists()).toBe(false);
     expect(noTourists.find('[data-testid="lobby-room-divider-capacity"]').exists()).toBe(false);
     noTourists.unmount();
+  });
+
+  it('SC-LOBBY-36: seats/tourists metric rows match set-row grid; plural by maxSeats / touristsPerPlayer', () => {
+    // Same column rhythm as set rows — not centered max-content cluster.
+    expect(vueSrc).toMatch(
+      /\.lobby-room-tile__stat-row[\s\S]*grid-template-columns:\s*var\(--lobby-room-lead-w\)\s+minmax\(0,\s*1fr\)\s+auto/,
+    );
+    expect(vueSrc).toMatch(
+      /\.lobby-room-tile__set-row[\s\S]*grid-template-columns:\s*var\(--lobby-room-lead-w\)\s+minmax\(0,\s*1fr\)\s+auto/,
+    );
+    expect(vueSrc).not.toMatch(/width:\s*max-content/);
+    expect(vueSrc).not.toMatch(/margin-inline:\s*auto/);
+    expect(vueSrc).toMatch(/lobby-room-seats-label/);
+    expect(vueSrc).toMatch(/lobby-room-seats-count/);
+    expect(vueSrc).toMatch(/lobby-room-tourists-label/);
+    expect(vueSrc).toMatch(/lobby-room-tourists-count/);
+
+    const pluralCases: Array<{
+      maxSeats: number;
+      touristsPerPlayer: number;
+      seatsKey: string;
+      touristsKey: string;
+    }> = [
+      {
+        maxSeats: 1,
+        touristsPerPlayer: 1,
+        seatsKey: 'lobby.roomCardSeatsOne',
+        touristsKey: 'lobby.roomCardTouristsOne',
+      },
+      {
+        maxSeats: 2,
+        touristsPerPlayer: 2,
+        seatsKey: 'lobby.roomCardSeatsFew',
+        touristsKey: 'lobby.roomCardTouristsFew',
+      },
+      {
+        maxSeats: 5,
+        touristsPerPlayer: 5,
+        seatsKey: 'lobby.roomCardSeatsMany',
+        touristsKey: 'lobby.roomCardTouristsMany',
+      },
+    ];
+
+    for (const c of pluralCases) {
+      const w = mount(LobbyRoomCardTile, {
+        props: {
+          grid: GRID,
+          seats: 1,
+          maxSeats: c.maxSeats,
+          touristsPerPlayer: c.touristsPerPlayer,
+          taskSetLabels: [{ taskSetId: 's1', taskCount: 10 }],
+          testId: `lobby-room-plural-${c.maxSeats}`,
+        },
+        global: { stubs },
+      });
+      expect(w.find('[data-testid="lobby-room-seats-label"]').text()).toContain(c.seatsKey);
+      expect(w.find('[data-testid="lobby-room-tourists-label"]').text()).toContain(c.touristsKey);
+      expect(w.find('[data-testid="lobby-room-tourists-count"]').text()).toBe(
+        String(c.touristsPerPlayer),
+      );
+      expect(w.find('[data-testid="lobby-room-seats"]').classes()).toContain(
+        'lobby-room-tile__stat-row',
+      );
+      expect(w.find('[data-testid="lobby-room-tourists"]').classes()).toContain(
+        'lobby-room-tile__stat-row',
+      );
+      expect(w.find('[data-testid="lobby-room-set-row"]').classes()).toContain(
+        'lobby-room-tile__set-row',
+      );
+      w.unmount();
+    }
+
+    // Rendered labels with real RU catalog via $t mock values.
+    const tCalls: Array<{ key: string; values?: Record<string, unknown> }> = [];
+    wrapper = mount(LobbyRoomCardTile, {
+      props: {
+        grid: GRID,
+        seats: 2,
+        maxSeats: 2,
+        touristsPerPlayer: 3,
+        taskSetLabels: [{ taskSetId: 's1', taskCount: 48 }],
+        testId: 'lobby-room-metric',
+      },
+      global: {
+        stubs,
+        mocks: {
+          $t: (key: string, values?: Record<string, unknown>) => {
+            tCalls.push(values !== undefined ? { key, values } : { key });
+            if (key === 'lobby.capacity') {
+              const seats = typeof values?.seats === 'number' ? values.seats : '';
+              const maxSeats =
+                typeof values?.maxSeats === 'number' || typeof values?.maxSeats === 'string'
+                  ? values.maxSeats
+                  : '';
+              return `${seats} / ${maxSeats}`;
+            }
+            if (key === 'lobby.roomCardSeatsFew') {
+              return 'Места';
+            }
+            if (key === 'lobby.roomCardTouristsFew') {
+              return 'Туриста';
+            }
+            if (key === 'lobby.roomCardTaskSetLabel' && typeof values?.n === 'number') {
+              return `Набор #${values.n}`;
+            }
+            return key;
+          },
+        },
+      },
+    });
+    expect(wrapper.find('[data-testid="lobby-room-seats-label"]').text()).toBe('Места');
+    expect(wrapper.find('[data-testid="lobby-room-seats-count"]').text()).toBe('2 / 2');
+    expect(wrapper.find('[data-testid="lobby-room-tourists-label"]').text()).toBe('Туриста');
+    expect(wrapper.find('[data-testid="lobby-room-tourists-count"]').text()).toBe('3');
+    expect(wrapper.text()).not.toMatch(/ТУРИСТ/);
+    expect(tCalls.some((c) => c.key === 'lobby.capacity')).toBe(true);
   });
 
   it('SC-LOBBY-26: pack title uppercase chrome; set rows with taskCount; no set author', () => {
@@ -158,8 +279,11 @@ describe('LobbyRoomCardTile (SC-LOBBY-25/26/33/34/35)', () => {
                   : '';
               return `${seats} / ${maxSeats}`;
             }
-            if (typeof values?.n === 'number' && key.startsWith('lobby.roomCardTourists')) {
-              return `${values.n} Т`;
+            if (key === 'lobby.roomCardSeatsFew') {
+              return 'Места';
+            }
+            if (key === 'lobby.roomCardTouristsFew') {
+              return 'Туриста';
             }
             return key;
           },
