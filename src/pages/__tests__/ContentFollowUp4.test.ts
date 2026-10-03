@@ -376,7 +376,11 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     const wrapper = shallowMount(ContentCatalogPage, { global: { stubs } });
     await flushPromises();
 
-    const unpub = wrapper.findAll('button').find((b) => b.text().includes('content.unpublish'));
+    // Catalog cards use short unpublish label (taskSetCardUnpublish), not long content.unpublish.
+    const unpub = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('content.taskSetCardUnpublish'));
+    expect(unpub).toBeTruthy();
     await unpub!.trigger('click');
     await flushPromises();
     expect(unpublishPack).not.toHaveBeenCalled();
@@ -537,15 +541,30 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     ).toBe(true);
   });
 
-  it('SC-PACK-133/222: AddTaskSet answer tiles use playing-card chrome (not rectangular q-btn)', async () => {
+  it('SC-PACK-261/260: AddTaskSet has no top live answer grid; chips live in compose dialog', async () => {
     authState.user = { id: 'u1', anonymous: false };
-    const wrapper = shallowMount(ContentPackAddTaskSetPage, { global: { stubs } });
+    const wrapper = shallowMount(ContentPackAddTaskSetPage, {
+      global: {
+        stubs: {
+          ...stubs,
+          PackTaskComposeDialog: false,
+          'q-chip': {
+            template:
+              '<button type="button" data-testid="task-compose-answer-chip"><slot /></button>',
+          },
+        },
+      },
+    });
     await flushPromises();
 
-    const tiles = wrapper.findAll('.pack-answer-tile-stub');
-    expect(tiles.some((c) => c.text().includes('A'))).toBe(true);
-    expect(tiles.some((c) => c.text().includes('B'))).toBe(true);
-    const tileBtns = wrapper.findAll('button').filter((b) => b.text() === 'A' || b.text() === 'B');
-    expect(tileBtns.length).toBe(0);
+    expect(wrapper.find('[data-testid="live-answer-card-grid"]').exists()).toBe(false);
+    expect(wrapper.findAll('.pack-answer-tile-stub').length).toBe(0);
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const chips = wrapper.findAll('[data-testid="task-compose-answer-chip"]');
+    expect(chips.some((c) => c.text().includes('A'))).toBe(true);
+    expect(chips.some((c) => c.text().includes('B'))).toBe(true);
   });
 });

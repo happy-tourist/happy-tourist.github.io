@@ -95,17 +95,23 @@ const stubs = {
   'q-item-section': { template: '<div><slot /></div>' },
   'q-item-label': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable'],
-    template: '<button type="button" v-bind="$attrs">{{ label }}<slot /></button>',
+    props: ['label', 'disable', 'icon', 'type'],
+    template:
+      '<button :type="type || \'button\'" :disabled="disable" :data-label="label" v-bind="$attrs">{{ label }}<slot /></button>',
   },
   'q-tooltip': { template: '<span class="tooltip-stub"><slot /></span>' },
   'q-banner': true,
   'q-badge': true,
-  'q-chip': { template: '<span><slot /></span>' },
+  'q-chip': {
+    template:
+      '<button type="button" data-testid="task-compose-answer-chip" @click="$emit(\'click\')"><slot /></button>',
+  },
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
-  'q-form': { template: '<form @submit.prevent><slot /></form>' },
+  'q-form': {
+    template: '<form @submit.prevent="$emit(\'submit\', $event)"><slot /></form>',
+  },
   'q-input': {
     props: ['modelValue'],
     emits: ['update:modelValue'],
@@ -114,8 +120,20 @@ const stubs = {
   },
   'q-select': true,
   'q-space': true,
-  'q-dialog': { template: '<div><slot /></div>' },
+  'q-dialog': {
+    props: ['modelValue'],
+    emits: ['update:modelValue', 'hide'],
+    template: '<div v-if="modelValue" class="q-dialog-stub"><slot /></div>',
+  },
+  PackTasksCsvControls: true,
+  PackTaskTile: true,
 };
+
+function mountTasks() {
+  return shallowMount(ContentPackTasksPage, {
+    global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+  });
+}
 
 describe('tasks page staff session + hints (SC-PACK-115/116/119)', () => {
   beforeEach(() => {
@@ -125,6 +143,7 @@ describe('tasks page staff session + hints (SC-PACK-115/116/119)', () => {
     contentState.staffEditTarget = 'live';
     authState.isStaff = true;
     staffSavePack.mockClear();
+    staffSavePack.mockResolvedValue(structuredClone(draft));
     saveDraft.mockClear();
   });
 
@@ -133,21 +152,30 @@ describe('tasks page staff session + hints (SC-PACK-115/116/119)', () => {
   });
 
   it('SC-PACK-115: with staffEditTarget, autosave uses staff-save not working-copy', async () => {
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = mountTasks();
     await flushPromises();
 
-    const input = wrapper.find('input');
+    expect(contentState.staffEditTarget).toBe('live');
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const input = wrapper.find('[data-testid="task-compose-question"]');
     expect(input.exists()).toBe(true);
     await input.setValue('New question text');
+    await wrapper.find('[data-testid="task-compose-answer-chip"]').trigger('click');
     await flushPromises();
-    // scheduleAutosave is 800ms — flush via direct persist path: click would need slot.
-    // Trigger by filling and checking that saveDraft was never called on mount load path.
+    await wrapper.find('[data-testid="task-compose-save"]').trigger('click');
+    // form submit may be needed
+    const form = wrapper.find('form');
+    if (form.exists()) await form.trigger('submit');
+    await flushPromises();
+
     expect(saveDraft).not.toHaveBeenCalled();
-    expect(contentState.staffEditTarget).toBe('live');
+    expect(staffSavePack).toHaveBeenCalled();
   });
 
   it('SC-PACK-116: staff hint uses instant-save copy, not moderation send', async () => {
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = mountTasks();
     await flushPromises();
 
     expect(wrapper.text()).toContain('content.staffEditSubtitle');
@@ -155,10 +183,13 @@ describe('tasks page staff session + hints (SC-PACK-115/116/119)', () => {
   });
 
   it('SC-PACK-119: questionNeedsSlot is tooltip-only (no jumping caption)', async () => {
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = mountTasks();
     await flushPromises();
 
-    const input = wrapper.find('input');
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const input = wrapper.find('[data-testid="task-compose-question"]');
     await input.setValue('Question without slot');
     await flushPromises();
 

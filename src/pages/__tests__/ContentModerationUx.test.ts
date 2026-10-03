@@ -366,8 +366,9 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     const replyInput = wrapper.find('input[aria-label="content.reply"]');
     expect(replyInput.exists()).toBe(true);
     await replyInput.setValue('Will fix');
+    // Task compose is a dialog now — only the moderation reply form stays on the page.
     const forms = wrapper.findAll('form');
-    expect(forms.length).toBeGreaterThanOrEqual(2);
+    expect(forms.length).toBeGreaterThanOrEqual(1);
     await forms[forms.length - 1]!.trigger('submit.prevent');
     await flushPromises();
     expect(postModerationMessage).toHaveBeenCalledWith('p1', 'Will fix');

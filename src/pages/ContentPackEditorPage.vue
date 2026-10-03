@@ -113,42 +113,16 @@
         </q-card-section>
       </q-card>
 
-      <q-card flat bordered class="q-mb-md">
-        <q-card-section>
-          <q-form class="q-gutter-md" @submit.prevent="onAddOrUpdateCard">
-            <q-input
-              v-model="cardForm.content"
-              outlined
-              dense
-              :label="$t('content.cardContent')"
-              :disable="cardsReadOnly"
-            />
-            <q-input
-              v-model="cardForm.description"
-              outlined
-              dense
-              :label="$t('content.cardDescription')"
-              :disable="cardsReadOnly"
-            />
-            <div class="row q-gutter-sm">
-              <q-btn
-                type="submit"
-                color="primary"
-                :label="editingCardId ? $t('content.saveCard') : $t('content.addCard')"
-                :loading="content.saving"
-                :disable="cardsReadOnly || !cardForm.content.trim()"
-              />
-              <q-btn
-                v-if="editingCardId"
-                flat
-                :label="$t('content.cancelEditCard')"
-                :disable="cardsReadOnly"
-                @click="resetCardForm"
-              />
-            </div>
-          </q-form>
-        </q-card-section>
-      </q-card>
+      <div v-if="!cardsReadOnly" class="q-mb-md">
+        <q-btn
+          color="primary"
+          outline
+          icon="add"
+          :label="$t('content.addCard')"
+          data-testid="add-answer-card"
+          @click="openCreateCard"
+        />
+      </div>
 
       <div
         v-if="local.answerCards.length"
@@ -375,6 +349,46 @@
       </q-card>
     </q-dialog>
 
+    <!-- SC-PACK-256/257: answer create/edit in dialog (fields only, no tile preview) -->
+    <q-dialog v-model="answerComposeOpen" @hide="onAnswerComposeHide">
+      <q-card style="min-width: 320px; max-width: 480px" data-testid="answer-compose-dialog">
+        <q-card-section>
+          <div class="text-h6">
+            {{ editingCardId ? $t('content.editCard') : $t('content.addCard') }}
+          </div>
+        </q-card-section>
+        <q-card-section>
+          <q-form class="q-gutter-md" @submit.prevent="onAddOrUpdateCard">
+            <q-input
+              v-model="cardForm.content"
+              outlined
+              dense
+              :label="$t('content.cardContent')"
+              data-testid="answer-compose-content"
+            />
+            <q-input
+              v-model="cardForm.description"
+              outlined
+              dense
+              :label="$t('content.cardDescription')"
+              data-testid="answer-compose-description"
+            />
+            <q-card-actions align="right" class="q-pa-none">
+              <q-btn flat :label="$t('content.cancelEditCard')" @click="cancelCardCompose" />
+              <q-btn
+                type="submit"
+                color="primary"
+                :label="editingCardId ? $t('content.saveCard') : $t('content.addCard')"
+                :loading="content.saving"
+                :disable="!cardForm.content.trim()"
+                data-testid="answer-compose-save"
+              />
+            </q-card-actions>
+          </q-form>
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
     <q-dialog v-model="deleteConfirmOpen">
       <q-card style="min-width: 280px">
         <q-card-section>
@@ -481,6 +495,7 @@ const local = ref<PackContent | null>(null);
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingCardId = ref<string | null>(null);
+const answerComposeOpen = ref(false);
 const cardForm = reactive({ content: '', description: '' });
 const answersCsvFileInput = ref<HTMLInputElement | null>(null);
 const csvImportError = ref<string | null>(null);
@@ -721,6 +736,21 @@ function resetCardForm() {
   cardForm.description = '';
 }
 
+function openCreateCard() {
+  if (cardsReadOnly.value) return;
+  resetCardForm();
+  answerComposeOpen.value = true;
+}
+
+function cancelCardCompose() {
+  answerComposeOpen.value = false;
+  resetCardForm();
+}
+
+function onAnswerComposeHide() {
+  resetCardForm();
+}
+
 function onExportAnswersCsv() {
   if (answersExportDisabled.value || !local.value) return;
   const base = sanitizePackCsvFilename(local.value.title);
@@ -772,13 +802,15 @@ async function onAnswersCsvFile(file: File) {
 }
 
 function startEditCard(card: AnswerCard) {
+  if (cardsReadOnly.value) return;
   editingCardId.value = card.id;
   cardForm.content = card.content;
   cardForm.description = card.description;
+  answerComposeOpen.value = true;
 }
 
 async function onAddOrUpdateCard() {
-  if (!local.value || readOnly.value) return;
+  if (!local.value || readOnly.value || cardsReadOnly.value) return;
   const text = cardForm.content.trim();
   if (!text) return;
 
@@ -800,6 +832,7 @@ async function onAddOrUpdateCard() {
       description: cardForm.description,
     });
   }
+  answerComposeOpen.value = false;
   resetCardForm();
   await flushAutosave();
   if (cascadeTaskIds.length && local.value) {

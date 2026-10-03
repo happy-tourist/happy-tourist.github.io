@@ -123,8 +123,9 @@ vi.mock('@/stores/content', async (importOriginal) => {
 const stubs = {
   'q-page': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable'],
-    template: '<button type="button" v-bind="$attrs">{{ label }}<slot /></button>',
+    props: ['label', 'disable', 'icon'],
+    template:
+      '<button type="button" :data-label="label" :data-icon="icon" v-bind="$attrs">{{ label }}<slot /></button>',
   },
   'q-tooltip': { template: '<span><slot /></span>' },
   'q-banner': true,
@@ -135,8 +136,15 @@ const stubs = {
   'q-form': { template: '<form @submit.prevent><slot /></form>' },
   'q-input': true,
   'q-select': true,
+  'q-chip': {
+    template: '<button type="button" data-testid="task-compose-answer-chip"><slot /></button>',
+  },
   'q-space': true,
-  'q-dialog': { template: '<div><slot /></div>' },
+  'q-dialog': {
+    props: ['modelValue'],
+    emits: ['update:modelValue', 'hide'],
+    template: '<div v-if="modelValue" class="q-dialog-stub"><slot /></div>',
+  },
   PackTasksCsvControls: {
     name: 'PackTasksCsvControls',
     template: '<div data-testid="pack-tasks-csv-controls" />',
@@ -147,6 +155,10 @@ const stubs = {
 
 const appScss = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), '../../css/app.scss'),
+  'utf8',
+);
+const composeDialogSrc = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../../components/PackTaskComposeDialog.vue'),
   'utf8',
 );
 const tasksPageSrc = readFileSync(
@@ -178,7 +190,9 @@ describe('ContentPackTasksPage CSV hide (SC-PACK-235/236)', () => {
   });
 
   it('SC-PACK-235: live view-only does not render PackTasksCsvControls', async () => {
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = shallowMount(ContentPackTasksPage, {
+      global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+    });
     await flushPromises();
 
     expect(loadLivePack).toHaveBeenCalled();
@@ -192,7 +206,9 @@ describe('ContentPackTasksPage CSV hide (SC-PACK-235/236)', () => {
     contentState.staffEditTarget = 'live';
     contentState.draft = structuredClone(liveBody);
 
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = shallowMount(ContentPackTasksPage, {
+      global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+    });
     await flushPromises();
 
     expect(wrapper.find('[data-testid="pack-tasks-csv-controls"]').exists()).toBe(true);
@@ -200,30 +216,43 @@ describe('ContentPackTasksPage CSV hide (SC-PACK-235/236)', () => {
 });
 
 describe('compose slot chrome (SC-PACK-237)', () => {
-  it('Tasks + AddTaskSet compose rows use peek-slot-like chrome with peek sizes', () => {
-    expect(tasksPageSrc).toMatch(/data-testid="compose-slot-row"/);
-    expect(tasksPageSrc).toMatch(/peek-slot-like/);
-    expect(tasksPageSrc).toMatch(/peek-slot-like--filled/);
-    expect(addTaskSetSrc).toMatch(/data-testid="compose-slot-row"/);
-    expect(addTaskSetSrc).toMatch(/peek-slot-like/);
-    expect(addTaskSetSrc).not.toMatch(/<q-chip[\s\S]*taskForm\.slots/);
+  it('task compose dialog uses peek-slot-like chrome with peek sizes (not page-level slot-picker-grid)', () => {
+    expect(composeDialogSrc).toMatch(/data-testid="compose-slot-row"/);
+    expect(composeDialogSrc).toMatch(/peek-slot-like/);
+    expect(composeDialogSrc).toMatch(/peek-slot-like--filled/);
+    expect(composeDialogSrc).toMatch(/justify-center/);
+    expect(composeDialogSrc).toMatch(/task-compose-answer-pool/);
+    expect(composeDialogSrc).not.toMatch(/data-testid="slot-picker-grid"/);
+    expect(composeDialogSrc).not.toMatch(/<PackAnswerCardTile/);
+    expect(tasksPageSrc).not.toMatch(/data-testid="slot-picker-grid"/);
+    expect(addTaskSetSrc).not.toMatch(/data-testid="slot-picker-grid"/);
+    expect(addTaskSetSrc).not.toMatch(/data-testid="live-answer-card-grid"/);
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-width:\s*72px/s);
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-height:\s*40px/s);
     expect(appScss).toMatch(/\.peek-slot-like--filled\s*\{[^}]*border-style:\s*solid/s);
   });
 
-  it('staff Edit compose surface mounts peek-slot-like slots', async () => {
+  it('staff Edit: slot chrome appears inside open task compose dialog', async () => {
     authState.isStaff = true;
     contentState.staffEditTarget = 'live';
     contentState.draft = structuredClone(liveBody);
 
-    const wrapper = shallowMount(ContentPackTasksPage, { global: { stubs } });
+    const wrapper = shallowMount(ContentPackTasksPage, {
+      global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+    });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="compose-slot-row"]').exists()).toBe(false);
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
     await flushPromises();
 
     const row = wrapper.find('[data-testid="compose-slot-row"]');
     expect(row.exists()).toBe(true);
+    expect(row.classes()).toContain('justify-center');
     const slots = row.findAll('[data-testid="peek-slot-like"]');
     expect(slots.length).toBeGreaterThan(0);
     expect(slots[0]!.classes()).toContain('peek-slot-like');
+    expect(wrapper.find('[data-testid="task-compose-answer-pool"]').exists()).toBe(true);
   });
 });

@@ -63,94 +63,17 @@
     <div v-if="content.loading && !local" class="text-muted">{{ $t('content.loading') }}</div>
 
     <template v-else-if="local && taskSet">
-      <q-card v-if="!viewOnly" flat bordered class="q-mb-md">
-        <q-card-section>
-          <q-form class="q-gutter-md" @submit.prevent="onAddOrUpdateTask">
-            <q-input
-              v-model="taskForm.question"
-              outlined
-              dense
-              :label="$t('content.question')"
-              :disable="readOnly"
-            />
-            <q-select
-              v-model="taskForm.difficulty"
-              :options="difficultyOptions"
-              emit-value
-              map-options
-              outlined
-              dense
-              :label="$t('content.difficultyLabel')"
-              :disable="readOnly"
-            />
-            <div class="row items-center q-mb-xs">
-              <div class="text-caption">{{ $t('content.slots') }}</div>
-              <q-space />
-              <q-btn
-                flat
-                dense
-                round
-                icon="remove"
-                :disable="readOnly || taskForm.slots.length <= 1"
-                @click="removeFormSlot"
-              />
-              <q-btn flat dense round icon="add" :disable="readOnly" @click="addFormSlot" />
-            </div>
-            <div class="peek-slot-like-row q-mb-sm" data-testid="compose-slot-row">
-              <div
-                v-for="slot in taskForm.slots"
-                :key="slot.id"
-                class="peek-slot-like"
-                :class="{
-                  'peek-slot-like--filled': Boolean(slot.answerCardId),
-                  'peek-slot-like--interactive': !readOnly && Boolean(slot.answerCardId),
-                }"
-                data-testid="peek-slot-like"
-                @click="slot.answerCardId && clearFormSlot(slot)"
-              >
-                <span v-if="slot.answerCardId" class="peek-slot-like__label">{{
-                  slotLabel(slot)
-                }}</span>
-                <span v-else class="peek-slot-like__empty">{{ slotLabel(slot) }}</span>
-              </div>
-            </div>
-            <div class="text-caption q-mb-xs">{{ $t('content.answerTiles') }}</div>
-            <div class="pack-card-grid q-mb-md" data-testid="slot-picker-grid">
-              <PackAnswerCardTile
-                v-for="card in local.answerCards"
-                :key="card.id"
-                :content="card.content"
-                :description="card.description"
-                selectable
-                :disabled="readOnly || !card.content.trim()"
-                :selected="taskForm.slots.some((s) => s.answerCardId === card.id)"
-                @select="fillNextFormSlot(card.id)"
-              />
-            </div>
-            <div class="row q-gutter-sm">
-              <q-btn
-                type="submit"
-                color="primary"
-                :label="editingTaskId ? $t('content.saveTask') : $t('content.addTask')"
-                :loading="content.saving"
-                :disable="readOnly || !canSaveQuestion"
-              >
-                <!-- SC-PACK-119: tooltip instead of jumping caption -->
-                <q-tooltip v-if="!canSaveQuestion && taskForm.question.trim()">
-                  {{ $t('content.questionNeedsSlot') }}
-                </q-tooltip>
-              </q-btn>
-              <q-btn
-                v-if="editingTaskId"
-                flat
-                :label="$t('content.cancelEditTask')"
-                :disable="readOnly"
-                @click="resetTaskForm"
-              />
-            </div>
-          </q-form>
-        </q-card-section>
-      </q-card>
+      <!-- SC-PACK-258…262 / D5: add → CSV → list; compose in dialog -->
+      <div v-if="canComposeTasks" class="q-mb-md">
+        <q-btn
+          color="primary"
+          outline
+          icon="add"
+          :label="$t('content.addTask')"
+          data-testid="add-task-question"
+          @click="openCreateTask"
+        />
+      </div>
 
       <PackTasksCsvControls
         v-if="!viewOnly"
@@ -169,7 +92,7 @@
           :question="task.question"
           :difficulty="task.difficulty"
           :slot-labels="taskSlotLabels(task)"
-          :editable="!viewOnly && !readOnly"
+          :editable="canComposeTasks"
           :cascade-gap="content.taskHasCascadeGap(task.id)"
           :fallback-question="$t('content.taskN', { n: ti + 1 })"
           @edit="startEditTask(task)"
@@ -193,6 +116,22 @@
         {{ staffMode ? $t('content.staffEditSubtitle') : $t('content.tasksSaveHint') }}
       </div>
     </template>
+
+    <!-- SC-PACK-258…260: task create/edit in peek-like dialog -->
+    <PackTaskComposeDialog
+      v-model="taskComposeOpen"
+      :editing="Boolean(editingTaskId)"
+      v-model:question="taskForm.question"
+      v-model:difficulty="taskForm.difficulty"
+      v-model:form-slots="taskForm.slots"
+      :answer-cards="local?.answerCards ?? []"
+      :read-only="readOnly"
+      :saving="content.saving"
+      :can-save="canSaveQuestion"
+      @save="onAddOrUpdateTask"
+      @cancel="cancelTaskCompose"
+      @hide="onTaskComposeHide"
+    />
 
     <q-dialog v-model="gateOpen" persistent>
       <q-card style="min-width: 280px">
@@ -275,7 +214,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n';
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 
-import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
+import PackTaskComposeDialog from '@/components/PackTaskComposeDialog.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { clearPackSubmitBaseline, ensurePackSubmitBaseline } from '@/lib/editorDirty';
@@ -316,6 +255,7 @@ const local = ref<PackContent | null>(null);
 const gateOpen = ref(false);
 const gateMode = ref<'login' | 'verify'>('login');
 const editingTaskId = ref<string | null>(null);
+const taskComposeOpen = ref(false);
 const taskForm = reactive<{
   question: string;
   difficulty: Difficulty;
@@ -369,13 +309,6 @@ const canUnpublishThisSet = computed(() => {
   return local.value.taskSets.filter((ts) => ts.inCatalog !== false).length > 1;
 });
 
-const difficultyOptions = computed(() =>
-  ([1, 2, 3] as Difficulty[]).map((value) => ({
-    label: t(`content.difficulty.${value}`),
-    value,
-  })),
-);
-
 const gateTitle = computed(() =>
   gateMode.value === 'login' ? t('content.gateLoginTitle') : t('content.gateVerifyTitle'),
 );
@@ -412,6 +345,9 @@ const locked = computed(() => Boolean(content.pack?.blocked) || !local.value?.an
 const readOnly = computed(
   () => viewOnly.value || Boolean(content.pack?.blocked) || Boolean(gateOpen.value) || locked.value,
 );
+
+/** SC-PACK-258/D5: add + Edit compose only when not view-only and not locked. */
+const canComposeTasks = computed(() => !viewOnly.value && !readOnly.value);
 
 const tasksGateHint = computed(() => {
   if (!local.value?.answerCards.length) {
@@ -520,7 +456,23 @@ function resetTaskForm() {
   taskForm.slots = [{ id: newLocalId('slot'), answerCardId: null }];
 }
 
+function openCreateTask() {
+  if (!canComposeTasks.value) return;
+  resetTaskForm();
+  taskComposeOpen.value = true;
+}
+
+function cancelTaskCompose() {
+  taskComposeOpen.value = false;
+  resetTaskForm();
+}
+
+function onTaskComposeHide() {
+  resetTaskForm();
+}
+
 function startEditTask(task: ContentTask) {
+  if (!canComposeTasks.value) return;
   editingTaskId.value = task.id;
   taskForm.question = task.question;
   taskForm.difficulty = task.difficulty;
@@ -528,29 +480,7 @@ function startEditTask(task: ContentTask) {
   if (!taskForm.slots.length) {
     taskForm.slots = [{ id: newLocalId('slot'), answerCardId: null }];
   }
-}
-
-function addFormSlot() {
-  if (readOnly.value) return;
-  taskForm.slots.push({ id: newLocalId('slot'), answerCardId: null });
-}
-
-function removeFormSlot() {
-  if (readOnly.value || taskForm.slots.length <= 1) return;
-  taskForm.slots.pop();
-}
-
-function clearFormSlot(slot: TaskSlot) {
-  if (readOnly.value) return;
-  slot.answerCardId = null;
-}
-
-function fillNextFormSlot(cardId: string) {
-  if (readOnly.value) return;
-  const empty = taskForm.slots.find((s) => !s.answerCardId);
-  if (empty) {
-    empty.answerCardId = cardId;
-  }
+  taskComposeOpen.value = true;
 }
 
 function slotLabel(slot: TaskSlot) {
@@ -594,6 +524,7 @@ async function onAddOrUpdateTask() {
       slots,
     });
   }
+  taskComposeOpen.value = false;
   resetTaskForm();
   await flushAutosave();
 }
@@ -615,6 +546,7 @@ function doDeleteTask() {
   if (idx >= 0) {
     taskSet.value.tasks.splice(idx, 1);
     if (editingTaskId.value === pendingDeleteTaskId.value) {
+      taskComposeOpen.value = false;
       resetTaskForm();
     }
     scheduleAutosave();
