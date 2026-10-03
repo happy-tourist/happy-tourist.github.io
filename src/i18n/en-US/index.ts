@@ -107,10 +107,21 @@ export default {
     catapultDensityFew: 'мало',
     catapultDensityMedium: 'средне',
     catapultDensityMany: 'много',
-    capacity: '{seats}/{maxSeats}',
+    capacity: '{seats} / {maxSeats}',
     mapCapacityCaption: '{players}×{tourists}',
     /** Listing caption: pack theme + ordinal set labels (SC-LOBBY-26; no set author). */
     packSetsCaption: '{pack} · {sets}',
+    /** Lobby room card join (SC-LOBBY-25/33). */
+    join: 'Войти',
+    /** Tourists row without leading «+» (SC-LOBBY-25); Russian plural forms. */
+    roomCardTouristsOne: '{n} ТУРИСТ',
+    roomCardTouristsFew: '{n} ТУРИСТА',
+    roomCardTouristsMany: '{n} ТУРИСТОВ',
+    /** Short set ordinal on ~180 card (SC-LOBBY-26); create modal keeps content.taskSetLabel. */
+    roomCardTaskSetLabel: 'Набор #{n}',
+    /** Phase badge on map preview (SC-LOBBY-34). */
+    roomCardStatusWaiting: 'ОЖИДАНИЕ',
+    roomCardStatusPlaying: 'ИГРА',
   },
   header: {
     lobby: 'Лобби',

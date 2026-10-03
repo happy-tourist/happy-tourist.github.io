@@ -35,73 +35,57 @@
       </template>
     </q-banner>
 
-    <q-list bordered separator class="rounded-borders">
-      <q-item-label header>Доступные игры</q-item-label>
+    <div class="text-subtitle1 q-mb-sm">Доступные игры</div>
 
-      <template v-if="game.listing">
-        <q-item>
-          <q-item-section class="text-muted">Загрузка списка комнат…</q-item-section>
-        </q-item>
-      </template>
-
-      <template v-else-if="!game.rooms.length">
-        <q-item>
-          <q-item-section class="text-muted">Пока нет открытых комнат</q-item-section>
-        </q-item>
-      </template>
-
-      <template v-else>
-        <q-item
-          v-for="room in game.rooms"
-          :key="room.roomId"
-          :clickable="!joining"
-          :disable="joining"
-          v-ripple="!joining"
-          :data-test-id="`lobby-room-${room.roomId}`"
-          @click="onJoin(room.roomId)"
-        >
-          <q-item-section v-if="room.metadata?.mapGrid" avatar>
-            <MapGridPreview
-              :grid="String(room.metadata.mapGrid)"
-              :size="56"
-              :aria-label="$t('maps.previewAria')"
-              data-test-id="lobby-room-map-preview"
-            />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>{{
-              room.metadata?.title || `Комната ${room.roomId.slice(0, 6)}`
-            }}</q-item-label>
-            <q-item-label
-              v-if="roomMapCapacity(room)"
-              caption
-              data-test-id="lobby-room-map-capacity"
-            >
-              {{ roomMapCapacity(room) }}
-            </q-item-label>
-            <q-item-label caption data-test-id="lobby-room-seats">
-              {{
-                $t('lobby.capacity', {
-                  seats: room.metadata?.seats ?? 0,
-                  maxSeats: room.metadata?.maxSeats ?? '—',
-                })
-              }}
-              <span v-if="room.metadata?.status"> · {{ room.metadata.status }}</span>
-            </q-item-label>
-            <q-item-label
-              v-if="roomPackSetsCaption(room)"
-              caption
-              data-test-id="lobby-room-pack-sets"
-            >
-              {{ roomPackSetsCaption(room) }}
-            </q-item-label>
-          </q-item-section>
-          <q-item-section side>
-            <q-btn flat dense color="primary" label="Войти" :loading="joining" :disable="joining" />
-          </q-item-section>
-        </q-item>
-      </template>
-    </q-list>
+    <div v-if="game.listing" class="text-muted">Загрузка списка комнат…</div>
+    <div v-else-if="!game.rooms.length" class="text-muted">Пока нет открытых комнат</div>
+    <div
+      v-else
+      class="pack-card-grid"
+      data-test-id="lobby-rooms-grid"
+      data-testid="lobby-rooms-grid"
+    >
+      <LobbyRoomCardTile
+        v-for="room in game.rooms"
+        :key="room.roomId"
+        :grid="room.metadata?.mapGrid ? String(room.metadata.mapGrid) : ''"
+        :seats="room.metadata?.seats ?? 0"
+        :max-seats="room.metadata?.maxSeats ?? '—'"
+        :tourists-per-player="room.metadata?.touristsPerPlayer ?? null"
+        :pack-title="room.metadata?.packTitle || ''"
+        :task-set-labels="room.metadata?.taskSetLabels ?? []"
+        :preview-aria="$t('maps.previewAria')"
+        :clickable="!joining"
+        :disabled="joining"
+        :test-id="`lobby-room-${room.roomId}`"
+        @open="onJoin(room.roomId)"
+      >
+        <template v-if="roomCardStatusLabel(room)" #status>
+          <q-badge
+            dense
+            class="lobby-room-status-badge"
+            :class="roomCardStatusToneClass(room)"
+            :data-test-id="`lobby-room-status-${room.roomId}`"
+          >
+            {{ roomCardStatusLabel(room) }}
+          </q-badge>
+        </template>
+        <template #actions>
+          <q-btn
+            outline
+            dense
+            no-caps
+            class="full-width"
+            :label="$t('lobby.join')"
+            :loading="joining"
+            :disable="joining"
+            data-test-id="lobby-room-join-btn"
+            data-testid="lobby-room-join-btn"
+            @click.stop="onJoin(room.roomId)"
+          />
+        </template>
+      </LobbyRoomCardTile>
+    </div>
 
     <q-dialog v-model="createModalOpen" persistent>
       <q-card style="min-width: 320px; max-width: 480px; width: 92vw">
@@ -312,6 +296,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import type { RoomAvailable } from '@colyseus/sdk';
 
+import LobbyRoomCardTile from '@/components/LobbyRoomCardTile.vue';
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useContentStore, contentErrorI18nKey, type TaskSet } from '@/stores/content';
@@ -525,26 +510,22 @@ function selectAllTaskSets() {
   createTaskSetIds.value = publishedTaskSets.value.map((ts) => ts.id);
 }
 
-function roomMapCapacity(room: RoomAvailable<GameRoomMeta>): string | null {
-  // Listing capacity uses room maxSeats (chosen at create), not map.players (SC-LOBBY-25).
-  const players =
-    typeof room.metadata?.maxSeats === 'number' ? room.metadata.maxSeats : room.metadata?.players;
-  const tourists = room.metadata?.touristsPerPlayer;
-  if (typeof players !== 'number' || typeof tourists !== 'number') {
-    return null;
+function roomCardStatusLabel(room: RoomAvailable<GameRoomMeta>): string | null {
+  const status = room.metadata?.status;
+  if (status === 'waiting') {
+    return t('lobby.roomCardStatusWaiting');
   }
-  return t('lobby.mapCapacityCaption', { players, tourists });
+  if (status === 'playing') {
+    return t('lobby.roomCardStatusPlaying');
+  }
+  return null;
 }
 
-function roomPackSetsCaption(room: RoomAvailable<GameRoomMeta>): string | null {
-  const packTitle = room.metadata?.packTitle;
-  const labels = room.metadata?.taskSetLabels;
-  if (!packTitle || !Array.isArray(labels) || !labels.length) {
-    return null;
-  }
-  // SC-LOBBY-26: pack title + ordinal set labels; never surface task-set author.
-  const sets = labels.map((_, i) => t('content.taskSetLabel', { n: i + 1 })).join(', ');
-  return t('lobby.packSetsCaption', { pack: packTitle, sets });
+function roomCardStatusToneClass(room: RoomAvailable<GameRoomMeta>): string {
+  // Waiting = soft muted pill; playing = soft pending/amber (SC-LOBBY-34).
+  return room.metadata?.status === 'playing'
+    ? 'lobby-room-status-badge--pending'
+    : 'lobby-room-status-badge--muted';
 }
 
 async function onConfirmCreate() {

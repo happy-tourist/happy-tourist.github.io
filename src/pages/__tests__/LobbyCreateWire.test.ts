@@ -1,7 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import LobbyPage from '@/pages/LobbyPage.vue';
+
+const lobbyPageSrc = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), '../LobbyPage.vue'),
+  'utf8',
+);
 
 const { authState, gameState, mapsState, contentState, routerPush } = vi.hoisted(() => {
   const routerPush = vi.fn().mockResolvedValue(undefined);
@@ -129,10 +138,13 @@ const stubs = {
   'q-item-section': { template: '<div><slot /></div>' },
   'q-item-label': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable', 'loading', 'to'],
+    props: ['label', 'disable', 'loading', 'to', 'outline', 'dense'],
     emits: ['click'],
     template:
-      '<button type="button" v-bind="$attrs" :disabled="disable" @click="$emit(\'click\')">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :disabled="disable" :data-outline="outline ? \'1\' : \'\'" @click="$emit(\'click\')">{{ label }}<slot /></button>',
+  },
+  'q-badge': {
+    template: '<span v-bind="$attrs"><slot /></span>',
   },
   'q-banner': true,
   'q-dialog': {
@@ -486,9 +498,15 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     expect(gameState.createGame).not.toHaveBeenCalled();
   });
 
-  it('SC-LOBBY-25/26: listing shows map preview, room maxSeats capacity, pack/set ordinals without set author', async () => {
+  it('SC-LOBBY-25/26/33/34: card listing — preview, capacity, pack/sets, outline join, waiting status', async () => {
     const messages = (await import('@/i18n/en-US')).default;
     expect(messages.content.taskSetLabel).toBe('Набор заданий #{n}');
+    expect(messages.lobby.roomCardTaskSetLabel).toBe('Набор #{n}');
+    expect(messages.lobby.roomCardStatusWaiting).toBe('ОЖИДАНИЕ');
+    expect(messages.lobby.roomCardStatusPlaying).toBe('ИГРА');
+    expect(messages.lobby.join).toBe('Войти');
+    expect(lobbyPageSrc).toMatch(/pack-card-grid/);
+    expect(lobbyPageSrc).toMatch(/LobbyRoomCardTile/);
 
     gameState.rooms = [
       {
@@ -498,29 +516,149 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
         metadata: {
           title: 'Tourist',
           status: 'waiting',
-          seats: 1,
+          seats: 2,
           maxSeats: 2,
           mapGrid: '1'.repeat(100),
           players: 4,
           touristsPerPlayer: 3,
           packTitle: 'Математика',
-          taskSetLabels: [{ taskSetId: 's1', authorDisplayName: 'Мария' }],
+          taskSetLabels: [
+            { taskSetId: 's1', authorDisplayName: 'Мария', taskCount: 48 },
+            { taskSetId: 's2', authorDisplayName: 'Иван', taskCount: 32 },
+          ],
         },
       },
     ];
     wrapper = mount(LobbyPage, { global: { stubs } });
     await flushPromises();
 
+    expect(wrapper.find('[data-test-id="lobby-rooms-grid"]').classes()).toContain('pack-card-grid');
     expect(wrapper.find('[data-test-id="lobby-room-r1"]').exists()).toBe(true);
     expect(wrapper.find('.map-grid-preview-stub').exists()).toBe(true);
-    // Capacity caption uses chosen maxSeats (2), not map players (4).
-    expect(wrapper.find('[data-test-id="lobby-room-map-capacity"]').text()).toContain(
-      'lobby.mapCapacityCaption',
+    // Seats use chosen maxSeats (2), not map players (4); no players×tourists caption.
+    expect(wrapper.find('[data-test-id="lobby-room-seats"]').text()).toContain('lobby.capacity');
+    expect(wrapper.find('[data-test-id="lobby-room-map-capacity"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="lobby-room-tourists"]').text()).toContain(
+      'lobby.roomCardTouristsFew',
     );
-    const packSets = wrapper.find('[data-test-id="lobby-room-pack-sets"]');
-    expect(packSets.text()).toContain('lobby.packSetsCaption');
-    expect(packSets.text()).not.toContain('Мария');
+    expect(wrapper.text()).not.toMatch(/\+\s*3/);
+    expect(wrapper.find('[data-test-id="lobby-room-pack-title"]').text()).toContain('Математика');
+    const sets = wrapper.find('[data-test-id="lobby-room-sets"]');
+    expect(sets.text()).toContain('lobby.roomCardTaskSetLabel');
+    expect(sets.text()).toContain('48');
+    expect(sets.text()).toContain('32');
+    expect(sets.text()).not.toContain('Мария');
+    expect(sets.text()).not.toContain('Иван');
     expect(wrapper.text()).not.toContain('Мария');
-    expect(wrapper.text()).toContain('lobby.capacity');
+    const joinBtn = wrapper.find('[data-test-id="lobby-room-join-btn"]');
+    expect(joinBtn.exists()).toBe(true);
+    expect(joinBtn.text()).toContain('lobby.join');
+    // Outline join (not primary fill) — LobbyPage wires `outline` on the control.
+    expect(lobbyPageSrc).toMatch(/<q-btn\s+outline[\s\S]*?data-test-id="lobby-room-join-btn"/);
+    expect(wrapper.find('[data-test-id="lobby-room-status-r1"]').text()).toContain(
+      'lobby.roomCardStatusWaiting',
+    );
+  });
+
+  it('SC-LOBBY-34: playing room shows short ИГРА status on card', async () => {
+    gameState.rooms = [
+      {
+        roomId: 'r-play',
+        clients: 2,
+        maxClients: 8,
+        metadata: {
+          status: 'playing',
+          seats: 2,
+          maxSeats: 2,
+          mapGrid: '1'.repeat(100),
+          touristsPerPlayer: 2,
+          packTitle: 'Pack',
+          taskSetLabels: [{ taskSetId: 's1', taskCount: 10 }],
+        },
+      },
+    ];
+    wrapper = mount(LobbyPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="lobby-room-status-r-play"]').text()).toContain(
+      'lobby.roomCardStatusPlaying',
+    );
+  });
+
+  it('SC-LOBBY-35: listing card caps set rows at 4 with overflow', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.content.packCardSetsOverflow).toBe('ещё {k}');
+
+    gameState.rooms = [
+      {
+        roomId: 'r-overflow',
+        clients: 1,
+        maxClients: 8,
+        metadata: {
+          status: 'waiting',
+          seats: 1,
+          maxSeats: 2,
+          mapGrid: '1'.repeat(100),
+          touristsPerPlayer: 2,
+          packTitle: 'Pack',
+          taskSetLabels: Array.from({ length: 6 }, (_, i) => ({
+            taskSetId: `s${i + 1}`,
+            authorDisplayName: `Author${i + 1}`,
+            taskCount: (i + 1) * 10,
+          })),
+        },
+      },
+    ];
+    wrapper = mount(LobbyPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-testid="lobby-room-set-row"]')).toHaveLength(4);
+    expect(wrapper.find('[data-test-id="lobby-room-sets-overflow"]').text()).toContain(
+      'content.packCardSetsOverflow',
+    );
+    expect(wrapper.text()).not.toContain('Author5');
+  });
+
+  it('SC-LOBBY-19: join busy-lock ignores re-entrant card + button clicks', async () => {
+    const joinGate: {
+      resolve: (value: { roomId: string }) => void;
+    } = {
+      resolve: () => {
+        /* assigned below */
+      },
+    };
+    gameState.joinGame = vi.fn(
+      () =>
+        new Promise<{ roomId: string }>((resolve) => {
+          joinGate.resolve = resolve;
+        }),
+    );
+    gameState.rooms = [
+      {
+        roomId: 'r-busy',
+        clients: 1,
+        maxClients: 8,
+        metadata: {
+          status: 'waiting',
+          seats: 1,
+          maxSeats: 2,
+          mapGrid: '1'.repeat(100),
+          touristsPerPlayer: 2,
+          packTitle: 'Pack',
+          taskSetLabels: [{ taskSetId: 's1', taskCount: 10 }],
+        },
+      },
+    ];
+    wrapper = mount(LobbyPage, { global: { stubs } });
+    await flushPromises();
+
+    await wrapper.find('[data-test-id="lobby-room-r-busy"]').trigger('click');
+    await wrapper.find('[data-test-id="lobby-room-join-btn"]').trigger('click');
+    await wrapper.find('[data-test-id="lobby-room-r-busy"]').trigger('click');
+    await flushPromises();
+
+    expect(gameState.joinGame).toHaveBeenCalledTimes(1);
+    joinGate.resolve({ roomId: 'r-busy' });
+    await flushPromises();
   });
 });

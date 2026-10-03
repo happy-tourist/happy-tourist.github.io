@@ -50,6 +50,7 @@ const stubs = {
     template: '<a v-bind="$attrs" :data-to="JSON.stringify(to)">{{ label }}<slot /></a>',
   },
   'q-banner': true,
+  'q-badge': true,
   'q-dialog': { template: '<div><slot /></div>' },
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
@@ -58,6 +59,7 @@ const stubs = {
   'q-select': true,
   'q-space': true,
   MapGridPreview: true,
+  LobbyRoomCardTile: true,
 };
 
 describe('lobby packs entry / header chrome (SC-PACK-41 / SC-BRAND-15)', () => {

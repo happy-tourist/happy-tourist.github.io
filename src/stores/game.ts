@@ -14,7 +14,10 @@ const TOURIST_RECONNECT_KEY = 'ht-tourist-reconnect';
 
 export interface GameRoomTaskSetLabel {
   taskSetId: string;
-  authorDisplayName: string;
+  /** Optional for API compat; lobby card MUST NOT surface author (SC-LOBBY-26). */
+  authorDisplayName?: string;
+  /** Create-time task count for this set in the room snapshot (SC-LOBBY-32). */
+  taskCount?: number;
 }
 
 export interface GameRoomMeta {
@@ -32,7 +35,10 @@ export interface GameRoomMeta {
   touristsPerPlayer?: number;
   /** Selected pack title/theme (SC-LOBBY-26). */
   packTitle?: string;
-  /** Selected task-set ids (+ optional author for API compat); UI shows ordinals (SC-LOBBY-26). */
+  /**
+   * Selected task sets (+ optional author for API compat; + taskCount SC-LOBBY-32).
+   * UI shows ordinals + counts, never author (SC-LOBBY-26).
+   */
   taskSetLabels?: GameRoomTaskSetLabel[];
   [key: string]: unknown;
 }
