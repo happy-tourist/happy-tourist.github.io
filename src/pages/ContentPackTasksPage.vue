@@ -217,7 +217,6 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import PackTaskComposeDialog from '@/components/PackTaskComposeDialog.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
-import { clearPackSubmitBaseline, ensurePackSubmitBaseline } from '@/lib/editorDirty';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -370,6 +369,9 @@ const tasksStatusLabel = computed(() => {
   if (status === 'pending') return t('content.taskSetStatusMarks.pending');
   if (status === 'needs_revision' || status === 'rejected') {
     return t('content.taskSetStatusMarks.needs_revision');
+  }
+  if (status === 'draft' || status === 'cancelled') {
+    return t('content.addTaskSetDraftStatus');
   }
   if (content.pack?.hasLive || staffMode.value) {
     return t('content.taskSetStatusMarks.published');
@@ -610,10 +612,6 @@ async function load() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(payload)) as PackContent;
     suppressAutosave = false;
-    // D3: seed pack Submit baseline for author session (cards↔tasks); staff has no Submit.
-    if (!liveViewMode.value && local.value && packId.value) {
-      ensurePackSubmitBaseline(packId.value, local.value);
-    }
 
     if (!local.value.answerCards.length) {
       await router.replace(
@@ -683,7 +681,6 @@ watch([packId, taskSetId], load);
 onBeforeRouteLeave((to) => {
   if (!packId.value) return;
   if (isStaffEditSessionNavigation(to, packId.value)) return;
-  clearPackSubmitBaseline(packId.value);
   if (!content.staffEditTarget) return;
   void content.releaseEditLock(packId.value).catch(() => {
     /* ignore */

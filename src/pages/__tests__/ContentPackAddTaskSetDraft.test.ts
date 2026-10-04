@@ -33,6 +33,26 @@ const incompleteSet: TaskSet = {
   ],
 };
 
+const readySet: TaskSet = {
+  id: 'ts-ready',
+  authorUserId: 'u1',
+  coauthorLabels: [],
+  tasks: [
+    {
+      id: 't1',
+      question: 'Q1?',
+      difficulty: 1,
+      slots: [{ id: 's1', answerCardId: 'c1' }],
+    },
+    {
+      id: 't2',
+      question: 'Q2?',
+      difficulty: 1,
+      slots: [{ id: 's2', answerCardId: 'c2' }],
+    },
+  ],
+};
+
 const {
   contentState,
   authState,
@@ -61,18 +81,23 @@ const {
     loadAddTaskSet: vi.fn().mockResolvedValue(undefined),
     saveAddTaskSet: vi.fn().mockImplementation(() => {
       if (contentState.addTaskSet) {
+        const prev = contentState.addTaskSet.moderationStatus;
         contentState.addTaskSet = {
           ...contentState.addTaskSet,
-          pendingRequestId: 'r-draft',
-          moderationStatus: 'draft',
+          pendingRequestId: contentState.addTaskSet.pendingRequestId ?? 'r-draft',
+          moderationStatus: prev === 'pending' ? 'draft' : (prev ?? 'draft'),
           stagedRevisionId: 'rev1',
+          hasUnsubmittedChanges: true,
+          canHardDelete: true,
         };
       }
       return Promise.resolve({
         draft: contentState.addTaskSet?.draft,
         pendingRequestId: 'r-draft',
-        moderationStatus: 'draft',
+        moderationStatus: contentState.addTaskSet?.moderationStatus ?? 'draft',
         stagedRevisionId: 'rev1',
+        hasUnsubmittedChanges: true,
+        canHardDelete: true,
       });
     }),
     discardAddTaskSetDraft: vi.fn().mockImplementation(() => {
@@ -87,6 +112,8 @@ const {
           pendingRequestId: null,
           moderationStatus: null,
           stagedRevisionId: null,
+          hasUnsubmittedChanges: false,
+          canHardDelete: false,
         };
       }
       return Promise.resolve({ ok: true, packId: 'p1', discardedRequestId: 'r-draft' });
@@ -120,16 +147,17 @@ vi.mock('@/stores/content', async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    useContentStore: vi.fn(() => ({
-      ...contentState,
-      loadAddTaskSet,
-      saveAddTaskSet,
-      discardAddTaskSetDraft,
-      submitAddTaskSet,
-      cancelRequest: vi.fn(),
-      loadModeration,
-      postModerationMessage: vi.fn(),
-    })),
+    useContentStore: vi.fn(() =>
+      Object.assign(contentState, {
+        loadAddTaskSet,
+        saveAddTaskSet,
+        discardAddTaskSetDraft,
+        submitAddTaskSet,
+        cancelRequest: vi.fn(),
+        loadModeration,
+        postModerationMessage: vi.fn(),
+      }),
+    ),
   };
 });
 
@@ -184,9 +212,12 @@ function seedDraftState(opts?: {
   pendingRequestId?: string | null;
   tasks?: TaskSet['tasks'];
   foreignPending?: boolean;
+  hasUnsubmittedChanges?: boolean;
+  canHardDelete?: boolean;
+  taskSet?: TaskSet;
 }) {
   const taskSets: TaskSet[] = [
-    {
+    opts?.taskSet ?? {
       ...incompleteSet,
       tasks: opts?.tasks ?? incompleteSet.tasks,
     },
@@ -205,6 +236,8 @@ function seedDraftState(opts?: {
       opts && 'moderationStatus' in opts ? (opts.moderationStatus ?? null) : 'draft',
     foreignPending: opts?.foreignPending ?? false,
     stagedRevisionId: 'rev1',
+    hasUnsubmittedChanges: opts?.hasUnsubmittedChanges ?? true,
+    canHardDelete: opts?.canHardDelete ?? true,
   };
 }
 
@@ -213,7 +246,7 @@ const pageSrc = readFileSync(
   'utf8',
 );
 
-describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () => {
+describe('ContentPackAddTaskSetPage draft lifecycle (SC-PACK-264…275)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -224,7 +257,13 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
     contentState.catalog = [];
     authState.user = { id: 'u1', anonymous: false };
     authState.needsEmailVerification = false;
-    seedDraftState({ moderationStatus: null, pendingRequestId: null, tasks: [] });
+    seedDraftState({
+      moderationStatus: null,
+      pendingRequestId: null,
+      tasks: [],
+      hasUnsubmittedChanges: false,
+      canHardDelete: false,
+    });
     loadAddTaskSet.mockImplementation(() => Promise.resolve(undefined));
   });
 
@@ -238,7 +277,13 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
     expect(pageSrc).toMatch(/quiet:\s*true/);
     expect(pageSrc).toMatch(/flushAutosave|scheduleAutosave/);
 
-    seedDraftState({ moderationStatus: null, pendingRequestId: null, tasks: [] });
+    seedDraftState({
+      moderationStatus: null,
+      pendingRequestId: null,
+      tasks: [],
+      hasUnsubmittedChanges: false,
+      canHardDelete: false,
+    });
     const wrapper = mountPage();
     await flushPromises();
 
@@ -261,39 +306,125 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
     expect(state.canSubmit).toBe(false);
   });
 
-  it('SC-PACK-265: reload restores retained draft tasks; Submit disabled until further edit', async () => {
+  it('SC-PACK-265/271: reload restores draft; Submit ready when marker ∧ minima', async () => {
     seedDraftState({
       moderationStatus: 'draft',
       pendingRequestId: 'r-draft',
       tasks: incompleteSet.tasks,
+      hasUnsubmittedChanges: true,
+    });
+    const incomplete = mountPage();
+    await flushPromises();
+    expect(incomplete.text()).toContain('Incomplete?');
+    expect(incomplete.text()).toContain('content.addTaskSetDraftStatus');
+    expect(setupState(incomplete).canSubmit).toBe(false);
+
+    seedDraftState({
+      moderationStatus: 'draft',
+      pendingRequestId: 'r-draft',
+      taskSet: readySet,
+      hasUnsubmittedChanges: true,
+      canHardDelete: true,
+    });
+    const ready = mountPage();
+    await flushPromises();
+    expect(setupState(ready).canSubmit).toBe(true);
+    expect(setupState(ready).hasPersistedDirty).toBe(true);
+  });
+
+  it('SC-PACK-266/274: top delete by canHardDelete for draft and pending', async () => {
+    seedDraftState({
+      moderationStatus: 'draft',
+      pendingRequestId: 'r-draft',
+      canHardDelete: true,
+    });
+    const draftPage = mountPage();
+    await flushPromises();
+    expect(draftPage.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(true);
+    await draftPage.find('[data-testid="delete-add-task-set-draft"]').trigger('click');
+    await flushPromises();
+    const draftState = setupState(draftPage);
+    expect(draftState.draftDeleteConfirmOpen).toBe(true);
+    await (draftState.doDeleteDraft as () => Promise<void>)();
+    await flushPromises();
+    expect(discardAddTaskSetDraft).toHaveBeenCalledWith('p1');
+
+    seedDraftState({
+      moderationStatus: 'pending',
+      pendingRequestId: 'r-open',
+      taskSet: readySet,
+      hasUnsubmittedChanges: false,
+      canHardDelete: true,
+    });
+    const pendingPage = mountPage();
+    await flushPromises();
+    expect(pendingPage.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(true);
+    expect(setupState(pendingPage).readOnly).toBe(false);
+  });
+
+  it('SC-PACK-275: delete hidden when canHardDelete is false', async () => {
+    seedDraftState({
+      moderationStatus: 'draft',
+      pendingRequestId: 'r-draft',
+      canHardDelete: false,
     });
     const wrapper = mountPage();
     await flushPromises();
-
-    expect(loadAddTaskSet).toHaveBeenCalledWith('p1');
-    expect(wrapper.text()).toContain('Incomplete?');
-    expect(wrapper.text()).toContain('content.addTaskSetDraftStatus');
-    const state = setupState(wrapper);
-    expect(state.canSubmit).toBe(false);
-    expect(state.isDirty).toBe(false);
+    expect(wrapper.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-266: top delete + confirm discards draft', async () => {
-    seedDraftState({ moderationStatus: 'draft', pendingRequestId: 'r-draft' });
+  it('SC-PACK-272: own pending stays editable; save shows draft + dirty Submit', async () => {
+    seedDraftState({
+      moderationStatus: 'pending',
+      pendingRequestId: 'r-open',
+      taskSet: readySet,
+      hasUnsubmittedChanges: false,
+      canHardDelete: true,
+    });
     const wrapper = mountPage();
     await flushPromises();
-
-    expect(wrapper.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(true);
-    await wrapper.find('[data-testid="delete-add-task-set-draft"]').trigger('click');
-    await flushPromises();
-
     const state = setupState(wrapper);
-    expect(state.draftDeleteConfirmOpen).toBe(true);
-    await (state.doDeleteDraft as () => Promise<void>)();
+    expect(state.readOnly).toBe(false);
+    expect(state.canSubmit).toBe(false);
+    expect(wrapper.text()).toContain('content.taskSetStatusMarks.pending');
+
+    (state.local as TaskSet).tasks[0]!.question = 'Changed?';
+    await (state.flushAutosave as () => Promise<void>)();
     await flushPromises();
 
-    expect(discardAddTaskSetDraft).toHaveBeenCalledWith('p1');
-    expect(loadAddTaskSet).toHaveBeenCalled();
+    expect(saveAddTaskSet).toHaveBeenCalled();
+    expect(contentState.addTaskSet?.moderationStatus).toBe('draft');
+    expect(contentState.addTaskSet?.hasUnsubmittedChanges).toBe(true);
+
+    seedDraftState({
+      moderationStatus: 'draft',
+      pendingRequestId: 'r-open',
+      taskSet: {
+        ...readySet,
+        tasks: [{ ...readySet.tasks[0]!, question: 'Changed?' }, readySet.tasks[1]!],
+      },
+      hasUnsubmittedChanges: true,
+      canHardDelete: true,
+    });
+    const after = mountPage();
+    await flushPromises();
+    expect(setupState(after).canSubmit).toBe(true);
+    expect(after.text()).toContain('content.addTaskSetDraftStatus');
+  });
+
+  it('SC-PACK-273: dirty needs_revision keeps label/thread and Submit after reload', async () => {
+    seedDraftState({
+      moderationStatus: 'needs_revision',
+      pendingRequestId: 'r-rev',
+      taskSet: readySet,
+      hasUnsubmittedChanges: true,
+      canHardDelete: true,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+    expect(wrapper.text()).toContain('content.taskSetStatusMarks.needs_revision');
+    expect(setupState(wrapper).showModerationThread).toBe(true);
+    expect(setupState(wrapper).canSubmit).toBe(true);
   });
 
   it('SC-PACK-264/265: removing last task still quiet-persists empty draft', async () => {
@@ -301,6 +432,7 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
       moderationStatus: 'draft',
       pendingRequestId: 'r-draft',
       tasks: incompleteSet.tasks,
+      hasUnsubmittedChanges: true,
     });
     const wrapper = mountPage();
     await flushPromises();
@@ -316,8 +448,14 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
     expect(body.taskSets[0]?.tasks).toEqual([]);
   });
 
-  it('SC-PACK-268: delete draft control only for author retained draft (not foreign/pending)', async () => {
-    seedDraftState({ moderationStatus: null, pendingRequestId: null, tasks: [] });
+  it('SC-PACK-268: delete control gated by canHardDelete; foreign pending hidden', async () => {
+    seedDraftState({
+      moderationStatus: null,
+      pendingRequestId: null,
+      tasks: [],
+      hasUnsubmittedChanges: false,
+      canHardDelete: false,
+    });
     const empty = mountPage();
     await flushPromises();
     expect(empty.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(false);
@@ -326,12 +464,13 @@ describe('ContentPackAddTaskSetPage pre-submit draft (SC-PACK-264…268)', () =>
       moderationStatus: 'pending',
       pendingRequestId: 'r-open',
       foreignPending: true,
+      canHardDelete: false,
     });
     const foreign = mountPage();
     await flushPromises();
     expect(foreign.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(false);
 
-    seedDraftState({ moderationStatus: 'draft', pendingRequestId: 'r-draft' });
+    seedDraftState({ moderationStatus: 'draft', pendingRequestId: 'r-draft', canHardDelete: true });
     const authorDraft = mountPage();
     await flushPromises();
     expect(authorDraft.find('[data-testid="delete-add-task-set-draft"]').exists()).toBe(true);

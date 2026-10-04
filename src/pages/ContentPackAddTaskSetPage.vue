@@ -257,9 +257,7 @@ const draftDeleteConfirmOpen = ref(false);
 const replyBody = ref('');
 const replyFormRef = ref<QForm | null>(null);
 const threadMessages = ref<ModerationMessage[]>([]);
-/** D3 / SC-PACK-234: pristine snapshot after load / successful submit. */
-const submitBaseline = ref<string | null>(null);
-/** Quiet autosave fingerprint — distinct from Submit dirty baseline (D10). */
+/** Quiet autosave fingerprint for put dedupe only (D10) — not Submit gate. */
 const autosaveBaseline = ref<string | null>(null);
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressAutosave = false;
@@ -288,12 +286,8 @@ const errorLabel = computed(() => {
   return key ? t(key) : (content.error ?? '');
 });
 
-const readOnly = computed(
-  () =>
-    Boolean(gateOpen.value) ||
-    Boolean(state.value?.foreignPending) ||
-    state.value?.moderationStatus === 'pending',
-);
+/** SC-PACK-272: own pending stays editable (first save withdraws to draft). */
+const readOnly = computed(() => Boolean(gateOpen.value) || Boolean(state.value?.foreignPending));
 
 /** SC-PACK-258/D5: add + Edit compose only when not read-only. */
 const canComposeTasks = computed(() => !readOnly.value);
@@ -310,11 +304,10 @@ const statusLabel = computed(() => {
   return '';
 });
 
-/** D11 / SC-PACK-266: top delete when retained never-live draft (not staff-open). */
+/** D11 / SC-PACK-266/274: top delete when server reports canHardDelete. */
 const canDeleteDraft = computed(() => {
   if (readOnly.value || state.value?.foreignPending) return false;
-  const status = state.value?.moderationStatus;
-  return status === 'draft' || status === 'cancelled';
+  return Boolean(state.value?.canHardDelete);
 });
 
 const hasFilledSlot = computed(() => taskForm.slots.some((s) => Boolean(s.answerCardId)));
@@ -331,12 +324,11 @@ const meetsMinima = computed(() => {
   );
 });
 
-/** D3 / SC-PACK-234: dirty vs load baseline (Submit stays disabled after restore until further edit). */
-const isDirty = computed(() => isEditorContentDirty(local.value, submitBaseline.value));
+/** D13 / SC-PACK-234/271: server persisted unsubmitted-change signal. */
+const hasPersistedDirty = computed(() => Boolean(state.value?.hasUnsubmittedChanges));
 
 const canSubmit = computed(() => {
-  if (readOnly.value || !meetsMinima.value || !isDirty.value) return false;
-  if (state.value?.moderationStatus === 'pending') return false;
+  if (readOnly.value || !meetsMinima.value || !hasPersistedDirty.value) return false;
   return true;
 });
 
@@ -347,7 +339,7 @@ const canCancel = computed(
       state.value?.moderationStatus === 'needs_revision'),
 );
 
-/** SC-PACK-128: thread + reply only for open own request (not fresh create / foreign). */
+/** SC-PACK-128/273: thread + reply for own pending|needs_revision (incl. dirty revise). */
 const showModerationThread = computed(() => {
   if (state.value?.foreignPending || !state.value?.pendingRequestId) return false;
   const status = state.value?.moderationStatus;
@@ -356,9 +348,8 @@ const showModerationThread = computed(() => {
 
 const submitHint = computed(() => {
   if (state.value?.foreignPending) return t('content.addTaskSetForeignPending');
-  if (state.value?.moderationStatus === 'pending') return t('content.statusPendingAuthor');
   if (!meetsMinima.value) return t('content.submitTasksHint');
-  if (!isDirty.value) return t('content.submitHintNotDirty');
+  if (!hasPersistedDirty.value) return t('content.submitHintNotDirty');
   return '';
 });
 
@@ -550,7 +541,7 @@ async function doDeleteDraft() {
     await content.discardAddTaskSetDraft(packId.value);
     draftDeleteConfirmOpen.value = false;
     await content.loadAddTaskSet(packId.value);
-    syncFromState({ refreshBaseline: true });
+    syncFromState();
     await loadThread();
   } catch {
     /* error in store */
@@ -596,7 +587,7 @@ async function onSubmit() {
       ...(state.value?.stagedRevisionId ? { stagedRevisionId: state.value.stagedRevisionId } : {}),
     });
     await content.loadAddTaskSet(packId.value);
-    syncFromState({ refreshBaseline: true });
+    syncFromState();
     await loadThread();
   } catch {
     /* error in store */
@@ -609,19 +600,18 @@ async function onCancel() {
   try {
     await content.cancelRequest(id);
     await content.loadAddTaskSet(packId.value);
-    syncFromState({ refreshBaseline: true });
+    syncFromState();
     await loadThread();
   } catch {
     /* error in store */
   }
 }
 
-function syncFromState(opts?: { refreshBaseline?: boolean }) {
+function syncFromState() {
   const data = content.addTaskSet;
   if (!data) {
     local.value = null;
     liveCards.value = [];
-    submitBaseline.value = null;
     autosaveBaseline.value = null;
     return;
   }
@@ -636,10 +626,7 @@ function syncFromState(opts?: { refreshBaseline?: boolean }) {
         coauthorLabels: [],
         tasks: [],
       };
-  if (opts?.refreshBaseline || submitBaseline.value == null) {
-    // D10: after load/restore draft, Submit disabled until further edit.
-    submitBaseline.value = fingerprintEditorContent(local.value);
-  }
+  // D10: autosave fingerprint only; Submit uses server hasUnsubmittedChanges.
   autosaveBaseline.value = fingerprintEditorContent(local.value);
   suppressAutosave = false;
 }
@@ -648,11 +635,10 @@ async function load() {
   if (!packId.value) return;
   if (!checkGate()) return;
   clearAutosaveTimer();
-  submitBaseline.value = null;
   autosaveBaseline.value = null;
   try {
     await content.loadAddTaskSet(packId.value);
-    syncFromState({ refreshBaseline: true });
+    syncFromState();
     await loadThread();
   } catch {
     if (content.error === 'not_in_collection' || content.error === 'pack_not_public') {

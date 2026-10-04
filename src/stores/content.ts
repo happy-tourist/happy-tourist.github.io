@@ -258,6 +258,10 @@ export interface AddTaskSetState {
   moderationStatus: string | null;
   foreignPending: boolean;
   stagedRevisionId?: string | null;
+  /** D13 / SC-PACK-271: server persisted unsubmitted-change signal for this cycle. */
+  hasUnsubmittedChanges?: boolean;
+  /** D11 / SC-PACK-274: server-derived hard-delete eligibility for never-live cycle. */
+  canHardDelete?: boolean;
 }
 
 function httpErrorCode(e: unknown): string {
@@ -390,6 +394,10 @@ export const useContentStore = defineStore('content', () => {
   const pendingRequestId = ref<string | null>(null);
   const isPendingAuthor = ref(false);
   const moderationStatus = ref<string | null>(null);
+  /** D13 / SC-PACK-234/271: server source of truth for Submit readiness. */
+  const hasUnsubmittedChanges = ref(false);
+  /** D11 / SC-PACK-274: server-derived hard-delete for never-published pack. */
+  const canHardDelete = ref(false);
   /** Compat aliases used by older page helpers. */
   const pendingAnswersAuthorId = ref<string | null>(null);
   const pendingTasksAuthorId = ref<string | null>(null);
@@ -418,7 +426,21 @@ export const useContentStore = defineStore('content', () => {
     pendingRequestId.value = null;
     isPendingAuthor.value = false;
     moderationStatus.value = null;
+    hasUnsubmittedChanges.value = false;
+    canHardDelete.value = false;
     editorKind.value = null;
+  }
+
+  /** Upsert caller-facing catalog row after draft activation / status sync (SC-PACK-270/268). */
+  function patchCatalogAuthorRow(packId: string, patch: Partial<ContentPackSummary>) {
+    const existing = catalog.value.find((p) => p.id === packId);
+    if (existing) {
+      catalog.value = catalog.value.map((p) => (p.id === packId ? { ...p, ...patch } : p));
+      return;
+    }
+    if (pack.value?.id === packId) {
+      catalog.value = [...catalog.value, { ...pack.value, ...patch }];
+    }
   }
 
   /** Drop cascade yellow when gaps are filled or the task is gone. */
@@ -741,12 +763,17 @@ export const useContentStore = defineStore('content', () => {
       const { data } = await client.http.post<{
         pack: ContentPackSummary;
         draft: PackContent;
+        hasUnsubmittedChanges?: boolean;
+        canHardDelete?: boolean;
       }>('/api/content/packs', {
         body: { title, description },
       });
       pack.value = data.pack;
       draft.value = data.draft;
       clearWorkingFlags();
+      // D12 / SC-PACK-269: untouched shell stays off unified list until first save.
+      hasUnsubmittedChanges.value = Boolean(data.hasUnsubmittedChanges);
+      canHardDelete.value = data.canHardDelete !== false;
       return data;
     } catch (e) {
       error.value = mapContentError(e);
@@ -768,12 +795,16 @@ export const useContentStore = defineStore('content', () => {
         isPendingAuthor?: boolean;
         moderationStatus?: string | null;
         editorKind?: PackEditorKind | null;
+        hasUnsubmittedChanges?: boolean;
+        canHardDelete?: boolean;
       }>(`/api/content/packs/${packId}/draft`);
       pack.value = data.pack;
       draft.value = data.draft;
       pendingRequestId.value = data.pendingRequestId ?? null;
       isPendingAuthor.value = Boolean(data.isPendingAuthor);
       moderationStatus.value = data.moderationStatus ?? null;
+      hasUnsubmittedChanges.value = Boolean(data.hasUnsubmittedChanges);
+      canHardDelete.value = Boolean(data.canHardDelete);
       editorKind.value =
         data.editorKind === 'creator' || data.editorKind === 'task_set_author'
           ? data.editorKind
@@ -784,6 +815,8 @@ export const useContentStore = defineStore('content', () => {
       error.value = mapContentError(e);
       draft.value = null;
       editorKind.value = null;
+      hasUnsubmittedChanges.value = false;
+      canHardDelete.value = false;
       throw e;
     } finally {
       loading.value = false;
@@ -801,6 +834,10 @@ export const useContentStore = defineStore('content', () => {
     try {
       const { data } = await client.http.post<{
         draft: PackContent;
+        pendingRequestId?: string | null;
+        moderationStatus?: string | null;
+        hasUnsubmittedChanges?: boolean;
+        canHardDelete?: boolean;
       }>(`/api/content/packs/${packId}/draft`, {
         body: {
           title: body.title,
@@ -810,7 +847,48 @@ export const useContentStore = defineStore('content', () => {
         },
       });
       draft.value = data.draft;
+      if (data.pendingRequestId !== undefined) {
+        pendingRequestId.value = data.pendingRequestId ?? null;
+        isPendingAuthor.value = Boolean(data.pendingRequestId);
+      }
+      if (data.moderationStatus !== undefined) {
+        moderationStatus.value = data.moderationStatus ?? null;
+      }
+      if (data.hasUnsubmittedChanges !== undefined) {
+        hasUnsubmittedChanges.value = Boolean(data.hasUnsubmittedChanges);
+      }
+      if (data.canHardDelete !== undefined) {
+        canHardDelete.value = Boolean(data.canHardDelete);
+      }
       pruneCascadeGaps(data.draft);
+      // SC-PACK-270/272: first semantic save activates author-only draft; pending→draft.
+      const status = moderationStatus.value;
+      if (
+        hasUnsubmittedChanges.value &&
+        (status === 'draft' || status === 'cancelled' || (!pack.value?.hasLive && !status))
+      ) {
+        // Creator path may return moderationStatus=null until first Submit — still author draft.
+        moderationStatus.value = 'draft';
+        patchCatalogAuthorRow(packId, {
+          moderationStatus: 'draft',
+          openRequestType: editorKind.value === 'task_set_author' ? 'task_set' : 'pack',
+          title: data.draft.title,
+          description: data.draft.description,
+        });
+        if (pack.value) {
+          pack.value = {
+            ...pack.value,
+            moderationStatus: 'draft',
+            title: data.draft.title,
+            description: data.draft.description,
+          };
+        }
+      } else if (status === 'needs_revision' || status === 'pending' || status === 'draft') {
+        patchCatalogAuthorRow(packId, {
+          moderationStatus: status,
+          openRequestType: editorKind.value === 'task_set_author' ? 'task_set' : 'pack',
+        });
+      }
       return data.draft;
     } catch (e) {
       error.value = mapContentError(e);
@@ -841,6 +919,11 @@ export const useContentStore = defineStore('content', () => {
       pendingRequestId.value = data.request.id;
       isPendingAuthor.value = true;
       moderationStatus.value = data.request.status;
+      hasUnsubmittedChanges.value = false;
+      patchCatalogAuthorRow(packId, {
+        moderationStatus: 'pending',
+        openRequestType: data.request.type === 'task_set' ? 'task_set' : 'pack',
+      });
       return data.request;
     } catch (e) {
       error.value = mapContentError(e);
@@ -887,6 +970,8 @@ export const useContentStore = defineStore('content', () => {
         pendingRequestId?: string | null;
         moderationStatus?: string | null;
         stagedRevisionId?: string | null;
+        hasUnsubmittedChanges?: boolean;
+        canHardDelete?: boolean;
       }>(`/api/content/packs/${packId}/add-task-set`, {
         body: {
           title: body.title,
@@ -895,21 +980,31 @@ export const useContentStore = defineStore('content', () => {
         },
       });
       if (addTaskSet.value) {
+        const nextHasDirty =
+          data.hasUnsubmittedChanges !== undefined
+            ? Boolean(data.hasUnsubmittedChanges)
+            : Boolean(addTaskSet.value.hasUnsubmittedChanges);
+        const nextCanDelete =
+          data.canHardDelete !== undefined
+            ? Boolean(data.canHardDelete)
+            : Boolean(addTaskSet.value.canHardDelete);
         addTaskSet.value = {
           ...addTaskSet.value,
           draft: data.draft,
           pendingRequestId: data.pendingRequestId ?? null,
           moderationStatus: data.moderationStatus ?? null,
           stagedRevisionId: data.stagedRevisionId ?? addTaskSet.value.stagedRevisionId ?? null,
+          hasUnsubmittedChanges: nextHasDirty,
+          canHardDelete: nextCanDelete,
         };
       }
-      // SC-PACK-268: keep unified list draft mark in sync without waiting for remount refetch.
-      if (data.moderationStatus === 'draft' || data.moderationStatus === 'cancelled') {
-        catalog.value = catalog.value.map((p) =>
-          p.id === packId
-            ? { ...p, moderationStatus: 'draft', openRequestType: 'task_set' }
-            : p,
-        );
+      // SC-PACK-268/272: draft / pending→draft catalog mark without remount refetch.
+      const status = data.moderationStatus;
+      if (status === 'draft' || status === 'cancelled' || status === 'needs_revision') {
+        patchCatalogAuthorRow(packId, {
+          moderationStatus: status === 'cancelled' ? 'draft' : status,
+          openRequestType: 'task_set',
+        });
       }
       return data;
     } catch (e) {
@@ -952,8 +1047,13 @@ export const useContentStore = defineStore('content', () => {
           ...addTaskSet.value,
           pendingRequestId: data.request.id,
           moderationStatus: data.request.status,
+          hasUnsubmittedChanges: false,
         };
       }
+      patchCatalogAuthorRow(packId, {
+        moderationStatus: 'pending',
+        openRequestType: 'task_set',
+      });
       return data.request;
     } catch (e) {
       error.value = mapContentError(e);
@@ -963,7 +1063,7 @@ export const useContentStore = defineStore('content', () => {
     }
   }
 
-  /** D11 / SC-PACK-266: discard never-live add-task-set draft (not staff-open). */
+  /** D11 / SC-PACK-266/274: discard never-published add-task-set cycle. */
   async function discardAddTaskSetDraft(packId: string) {
     loading.value = true;
     error.value = null;
@@ -984,6 +1084,8 @@ export const useContentStore = defineStore('content', () => {
           pendingRequestId: null,
           moderationStatus: null,
           stagedRevisionId: null,
+          hasUnsubmittedChanges: false,
+          canHardDelete: false,
         };
       }
       catalog.value = catalog.value.map((p) =>
@@ -1347,6 +1449,7 @@ export const useContentStore = defineStore('content', () => {
       }
       // Only the change author sees draft on the unified list (not staff viewing the pack).
       if (wasAuthorPending) {
+        hasUnsubmittedChanges.value = true;
         const pid = pack.value?.id;
         if (pid) {
           catalog.value = catalog.value.map((p) =>
@@ -1354,6 +1457,13 @@ export const useContentStore = defineStore('content', () => {
           );
           if (pack.value) {
             pack.value = { ...pack.value, moderationStatus: 'draft' };
+          }
+          if (addTaskSet.value?.pack.id === pid) {
+            addTaskSet.value = {
+              ...addTaskSet.value,
+              moderationStatus: 'draft',
+              hasUnsubmittedChanges: true,
+            };
           }
         }
       }
@@ -1454,6 +1564,8 @@ export const useContentStore = defineStore('content', () => {
     pendingRequestId,
     isPendingAuthor,
     moderationStatus,
+    hasUnsubmittedChanges,
+    canHardDelete,
     pendingAnswersAuthorId,
     pendingTasksAuthorId,
     pendingPackAuthorId,

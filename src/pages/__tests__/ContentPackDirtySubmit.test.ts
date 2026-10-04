@@ -46,6 +46,7 @@ const {
   staffSavePack,
   saveDraft,
   submitPack,
+  deleteUnpublishedPack,
 } = vi.hoisted(() => {
   const contentState = {
     error: null as string | null,
@@ -66,6 +67,8 @@ const {
     moderationStatus: null as string | null,
     pendingRequestId: null as string | null,
     isPendingAuthor: false,
+    hasUnsubmittedChanges: false,
+    canHardDelete: false,
     taskSetHasCascadeGap: () => false,
     taskHasCascadeGap: () => false,
     pruneCascadeGaps: vi.fn(),
@@ -85,6 +88,7 @@ const {
     staffSavePack: vi.fn(),
     saveDraft: vi.fn(),
     submitPack: vi.fn(),
+    deleteUnpublishedPack: vi.fn(),
   };
 });
 
@@ -112,23 +116,24 @@ vi.mock('@/stores/content', async (importOriginal) => {
   const actual: any = await importOriginal();
   return {
     ...actual,
-    useContentStore: vi.fn(() => ({
-      ...contentState,
-      loadDraft,
-      loadStaffEdit,
-      acquireEditLock,
-      refreshEditLock: vi.fn(),
-      releaseEditLock: vi.fn(),
-      staffSavePack,
-      saveDraft,
-      loadModeration: vi.fn().mockResolvedValue({ messages: [] }),
-      postModerationMessage: vi.fn(),
-      submitPack,
-      cancelRequest: vi.fn(),
-      deleteUnpublishedPack: vi.fn(),
-      unpublishTaskSet: vi.fn(),
-      republishTaskSet: vi.fn(),
-    })),
+    useContentStore: vi.fn(() =>
+      Object.assign(contentState, {
+        loadDraft,
+        loadStaffEdit,
+        acquireEditLock,
+        refreshEditLock: vi.fn(),
+        releaseEditLock: vi.fn(),
+        staffSavePack,
+        saveDraft,
+        loadModeration: vi.fn().mockResolvedValue({ messages: [] }),
+        postModerationMessage: vi.fn(),
+        submitPack,
+        cancelRequest: vi.fn(),
+        deleteUnpublishedPack,
+        unpublishTaskSet: vi.fn(),
+        republishTaskSet: vi.fn(),
+      }),
+    ),
   };
 });
 
@@ -141,7 +146,7 @@ const stubs = {
   'q-btn': {
     props: ['label', 'disable', 'icon'],
     template:
-      '<button type="button" :disabled="disable" :data-label="label" @click="$emit(\'click\')"><slot />{{ label }}</button>',
+      '<button type="button" :disabled="disable" :data-label="label" v-bind="$attrs" @click="$emit(\'click\')"><slot />{{ label }}</button>',
   },
   'q-banner': { template: '<div><slot /><slot name="action" /></div>' },
   'q-badge': true,
@@ -172,7 +177,11 @@ function submitBtn(wrapper: ReturnType<typeof mountEditor>) {
     .find((b) => b.attributes('data-label') === 'content.submitModeration');
 }
 
-describe('pack editor dirty Submit (SC-PACK-234)', () => {
+function setupState(wrapper: ReturnType<typeof mountEditor>) {
+  return (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState;
+}
+
+describe('pack editor dirty Submit (SC-PACK-234/271/273)', () => {
   beforeEach(() => {
     clearAllPackSubmitBaselines();
     contentState.error = null;
@@ -182,6 +191,8 @@ describe('pack editor dirty Submit (SC-PACK-234)', () => {
     contentState.moderationStatus = null;
     contentState.pendingRequestId = null;
     contentState.isPendingAuthor = false;
+    contentState.hasUnsubmittedChanges = false;
+    contentState.canHardDelete = true;
     contentState.pack = {
       id: 'p1',
       title: 'Ready Pack',
@@ -197,12 +208,28 @@ describe('pack editor dirty Submit (SC-PACK-234)', () => {
     authState.isStaff = false;
     acquireEditLock.mockClear().mockResolvedValue({ ok: true });
     staffSavePack.mockClear();
-    saveDraft.mockClear().mockResolvedValue(structuredClone(readyBody));
-    submitPack.mockClear().mockResolvedValue(undefined);
+    saveDraft.mockClear().mockImplementation((body: PackContent) => {
+      contentState.hasUnsubmittedChanges = true;
+      if (contentState.moderationStatus === 'pending') {
+        contentState.moderationStatus = 'draft';
+      }
+      return Promise.resolve(structuredClone(body));
+    });
+    submitPack.mockClear().mockImplementation(() => {
+      contentState.hasUnsubmittedChanges = false;
+      contentState.moderationStatus = 'pending';
+      contentState.pendingRequestId = 'r1';
+      contentState.isPendingAuthor = true;
+      return Promise.resolve(undefined);
+    });
+    deleteUnpublishedPack.mockClear().mockResolvedValue({ ok: true });
     loadStaffEdit.mockReset();
     loadDraft.mockReset().mockResolvedValue({
       pack: contentState.pack,
       draft: structuredClone(readyBody),
+      hasUnsubmittedChanges: contentState.hasUnsubmittedChanges,
+      canHardDelete: contentState.canHardDelete,
+      moderationStatus: contentState.moderationStatus,
     });
   });
 
@@ -211,37 +238,118 @@ describe('pack editor dirty Submit (SC-PACK-234)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-234: Submit disabled on open without edits; enabled after change', async () => {
+  it('SC-PACK-234: Submit disabled without persisted dirty; enabled after marker set', async () => {
     const wrapper = mountEditor();
     await flushPromises();
 
     const btn = submitBtn(wrapper);
     expect(btn).toBeTruthy();
     expect(btn!.attributes('disabled')).toBeDefined();
+    expect(setupState(wrapper).canSubmit).toBe(false);
 
-    const titleInput = wrapper.find('input');
-    await titleInput.setValue('Ready Pack edited');
+    // Local edit alone does not enable Submit (server marker required).
+    await wrapper.find('input').setValue('Ready Pack edited');
     await flushPromises();
+    expect(setupState(wrapper).canSubmit).toBe(false);
 
-    expect(submitBtn(wrapper)!.attributes('disabled')).toBeUndefined();
+    contentState.hasUnsubmittedChanges = true;
+    const ready = mountEditor();
+    await flushPromises();
+    expect(setupState(ready).canSubmit).toBe(true);
+    expect(submitBtn(ready)!.attributes('disabled')).toBeUndefined();
   });
 
-  it('SC-PACK-234: after successful submit, baseline refresh disables Submit again', async () => {
+  it('SC-PACK-271: reload with hasUnsubmittedChanges enables Submit without further edit', async () => {
+    contentState.hasUnsubmittedChanges = true;
+    contentState.moderationStatus = 'draft';
+    contentState.pendingRequestId = 'r-draft';
+    contentState.isPendingAuthor = true;
+    loadDraft.mockResolvedValue({
+      pack: contentState.pack,
+      draft: structuredClone(readyBody),
+      hasUnsubmittedChanges: true,
+      canHardDelete: true,
+      moderationStatus: 'draft',
+    });
+
     const wrapper = mountEditor();
     await flushPromises();
 
-    await wrapper.find('input').setValue('Ready Pack edited');
-    await flushPromises();
+    expect(setupState(wrapper).canSubmit).toBe(true);
     expect(submitBtn(wrapper)!.attributes('disabled')).toBeUndefined();
+    expect(wrapper.text()).toContain('content.addTaskSetDraftStatus');
+  });
+
+  it('SC-PACK-273: dirty needs_revision keeps label and enables Submit after reload', async () => {
+    contentState.hasUnsubmittedChanges = true;
+    contentState.moderationStatus = 'needs_revision';
+    contentState.pendingRequestId = 'r1';
+    contentState.isPendingAuthor = true;
+    loadDraft.mockResolvedValue({
+      pack: contentState.pack,
+      draft: structuredClone(readyBody),
+      hasUnsubmittedChanges: true,
+      canHardDelete: true,
+      moderationStatus: 'needs_revision',
+    });
+
+    const wrapper = mountEditor();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('content.taskSetStatusMarks.needs_revision');
+    expect(setupState(wrapper).canSubmit).toBe(true);
+    expect(setupState(wrapper).canReply).toBe(true);
+  });
+
+  it('SC-PACK-272: pending remains editable; save shows draft status', async () => {
+    contentState.hasUnsubmittedChanges = false;
+    contentState.moderationStatus = 'pending';
+    contentState.pendingRequestId = 'r1';
+    contentState.isPendingAuthor = true;
+    loadDraft.mockResolvedValue({
+      pack: contentState.pack,
+      draft: structuredClone(readyBody),
+      hasUnsubmittedChanges: false,
+      canHardDelete: true,
+      moderationStatus: 'pending',
+    });
+
+    const pending = mountEditor();
+    await flushPromises();
+    expect(setupState(pending).canSubmit).toBe(false);
+    expect(pending.text()).toContain('content.taskSetStatusMarks.pending');
+
+    contentState.hasUnsubmittedChanges = true;
+    contentState.moderationStatus = 'draft';
+    const withdrawn = mountEditor();
+    await flushPromises();
+    expect(withdrawn.text()).toContain('content.addTaskSetDraftStatus');
+    expect(setupState(withdrawn).canSubmit).toBe(true);
+  });
+
+  it('SC-PACK-234: after successful submit, marker clear disables Submit again', async () => {
+    contentState.hasUnsubmittedChanges = true;
+    const wrapper = mountEditor();
+    await flushPromises();
+    expect(setupState(wrapper).canSubmit).toBe(true);
 
     const afterSubmit: PackContent = {
       ...structuredClone(readyBody),
       title: 'Ready Pack edited',
     };
-    submitPack.mockResolvedValue(undefined);
-    loadDraft.mockResolvedValue({
-      pack: contentState.pack,
-      draft: afterSubmit,
+    loadDraft.mockImplementation(() => {
+      contentState.hasUnsubmittedChanges = false;
+      contentState.moderationStatus = 'pending';
+      contentState.pendingRequestId = 'r1';
+      contentState.isPendingAuthor = true;
+      contentState.draft = afterSubmit;
+      return Promise.resolve({
+        pack: contentState.pack,
+        draft: afterSubmit,
+        hasUnsubmittedChanges: false,
+        canHardDelete: true,
+        moderationStatus: 'pending',
+      });
     });
     saveDraft.mockResolvedValue(afterSubmit);
 
@@ -249,7 +357,11 @@ describe('pack editor dirty Submit (SC-PACK-234)', () => {
     await flushPromises();
 
     expect(submitPack).toHaveBeenCalled();
-    expect(submitBtn(wrapper)!.attributes('disabled')).toBeDefined();
+    expect(contentState.hasUnsubmittedChanges).toBe(false);
+    // Remount mirrors reload after submit (non-reactive mock bag).
+    const after = mountEditor();
+    await flushPromises();
+    expect(setupState(after).canSubmit).toBe(false);
   });
 
   it('staff published path still has no Submit (unaffected)', async () => {
@@ -263,6 +375,7 @@ describe('pack editor dirty Submit (SC-PACK-234)', () => {
       inCatalog: true,
       createdBy: 'u1',
     };
+    contentState.canHardDelete = false;
     loadDraft.mockResolvedValue({
       pack: contentState.pack,
       draft: structuredClone(readyBody),

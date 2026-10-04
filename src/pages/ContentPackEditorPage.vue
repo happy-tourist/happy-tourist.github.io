@@ -284,6 +284,7 @@
           color="negative"
           outline
           :label="$t('content.deletePack')"
+          data-testid="delete-unpublished-pack"
           :loading="content.loading"
           @click="packDeleteConfirmOpen = true"
         />
@@ -450,13 +451,6 @@ import type { QForm } from 'quasar';
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackTaskSetCardTile from '@/components/PackTaskSetCardTile.vue';
 import {
-  clearPackSubmitBaseline,
-  ensurePackSubmitBaseline,
-  getPackSubmitBaseline,
-  isEditorContentDirty,
-  setPackSubmitBaseline,
-} from '@/lib/editorDirty';
-import {
   downloadCsvText,
   parseAnswers,
   sanitizePackCsvFilename,
@@ -535,6 +529,10 @@ const statusLabel = computed(() => {
   if (status === 'needs_revision' || status === 'rejected') {
     return t('content.taskSetStatusMarks.needs_revision');
   }
+  // SC-PACK-272: pending withdraw → author draft label.
+  if (status === 'draft' || status === 'cancelled') {
+    return t('content.addTaskSetDraftStatus');
+  }
   if (content.pack?.hasLive) return t('content.taskSetStatusMarks.published');
   return '';
 });
@@ -562,16 +560,13 @@ const meetsSubmitMinima = computed(() => {
   );
 });
 
-/** D3 / SC-PACK-234: dirty vs session baseline (survives cards↔tasks). */
-const isDirty = computed(() => {
-  if (!local.value || !packId.value) return false;
-  return isEditorContentDirty(local.value, getPackSubmitBaseline(packId.value));
-});
+/** D13 / SC-PACK-234/271: persisted unsubmitted changes from server (not session fingerprint). */
+const hasPersistedDirty = computed(() => Boolean(content.hasUnsubmittedChanges));
 
 /** SC-PACK-102/156: unified submit for creator / task-set-author working copy (incl. post-publish). */
 const canSubmit = computed(() => {
   if (staffMode.value || !local.value || readOnly.value) return false;
-  if (!isDirty.value) return false;
+  if (!hasPersistedDirty.value) return false;
   if (content.editorKind === 'task_set_author') {
     // Task-set author submits from cards page after editing own sets; minima = own sets.
     const mine = local.value.taskSets.filter((ts) => ts.authorUserId === uid.value);
@@ -594,7 +589,7 @@ const canSubmit = computed(() => {
     return false;
   }
   if (content.pendingRequestId && !content.isPendingAuthor) return false;
-  // SC-PACK-163: author may resubmit while open/pending (incl. while staff holds take).
+  // SC-PACK-163/272: author may edit own pending (withdraws to draft) and resubmit.
   return true;
 });
 
@@ -602,25 +597,16 @@ const submitHint = computed(() => {
   if (content.pendingRequestId && !content.isPendingAuthor) {
     return t('content.submitLockedOther');
   }
-  if (content.moderationStatus === 'pending' && content.isPendingAuthor) {
-    return t('content.statusPendingAuthor');
-  }
   if (content.editorKind === 'task_set_author') {
-    if (!isDirty.value) return t('content.submitHintNotDirty');
+    if (!hasPersistedDirty.value) return t('content.submitHintNotDirty');
     return t('content.submitHintTaskSetAuthor');
   }
   if (!meetsSubmitMinima.value) {
     return t('content.submitHint');
   }
-  if (!isDirty.value) return t('content.submitHintNotDirty');
+  if (!hasPersistedDirty.value) return t('content.submitHintNotDirty');
   return t('content.submitHint');
 });
-
-function capturePackBaseline(body: PackContent, refresh = false) {
-  if (!packId.value) return;
-  if (refresh) setPackSubmitBaseline(packId.value, body);
-  else ensurePackSubmitBaseline(packId.value, body);
-}
 
 /** Task-set author cannot edit answer cards (SC-PACK-159). */
 const cardsReadOnly = computed(() => readOnly.value || content.editorKind === 'task_set_author');
@@ -633,9 +619,10 @@ const canOpenTasks = computed(() => {
   return local.value.answerCards.length > 0;
 });
 
+/** D11 / SC-PACK-274/275: top delete only when server reports canHardDelete. */
 const canDeletePack = computed(() => {
-  if (!content.pack || content.pack.hasLive || staffMode.value) return false;
-  return Boolean(uid.value) && content.pack.createdBy === uid.value;
+  if (staffMode.value || !content.pack) return false;
+  return Boolean(content.canHardDelete);
 });
 
 const canCancelRequest = computed(
@@ -646,6 +633,7 @@ const canCancelRequest = computed(
     (content.moderationStatus === 'pending' || content.moderationStatus === 'needs_revision'),
 );
 
+/** SC-PACK-273: dirty needs_revision keeps author thread/reply. */
 const canReply = computed(() => {
   if (staffMode.value || !content.isPendingAuthor || !content.pendingRequestId) return false;
   return content.moderationStatus === 'pending' || content.moderationStatus === 'needs_revision';
@@ -1041,7 +1029,6 @@ async function onSubmit() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(data.draft)) as PackContent;
     suppressAutosave = false;
-    capturePackBaseline(local.value, true);
     await loadThread();
   } catch {
     /* error in store */
@@ -1068,8 +1055,6 @@ async function enterStaffEdit() {
   local.value = JSON.parse(JSON.stringify(data.content)) as PackContent;
   suppressAutosave = false;
   staffMode.value = true;
-  // Staff has no Submit; still seed baseline so author session state stays coherent.
-  capturePackBaseline(local.value);
 }
 
 async function load() {
@@ -1091,7 +1076,6 @@ async function load() {
     suppressAutosave = true;
     local.value = JSON.parse(JSON.stringify(content.draft)) as PackContent;
     suppressAutosave = false;
-    capturePackBaseline(local.value);
     startLockHeartbeat();
     return;
   }
@@ -1118,7 +1102,6 @@ async function load() {
         local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
         suppressAutosave = false;
         staffMode.value = false;
-        capturePackBaseline(local.value);
         await loadThread();
         return;
       }
@@ -1131,7 +1114,6 @@ async function load() {
         local.value = JSON.parse(JSON.stringify(draftData.draft)) as PackContent;
         suppressAutosave = false;
         staffMode.value = false;
-        capturePackBaseline(local.value);
         await loadThread();
         return;
       }
@@ -1169,8 +1151,7 @@ async function load() {
 }
 
 onMounted(load);
-watch(packId, (id, prev) => {
-  if (prev && prev !== id) clearPackSubmitBaseline(prev);
+watch(packId, () => {
   void load();
 });
 
@@ -1178,7 +1159,6 @@ watch(packId, (id, prev) => {
 onBeforeRouteLeave((to) => {
   if (!packId.value) return;
   if (isStaffEditSessionNavigation(to, packId.value)) return;
-  clearPackSubmitBaseline(packId.value);
   // Prefer staffEditTarget so mid-load leave still unlocks (lockHeld may still be false).
   if (!lockHeld.value && !content.staffEditTarget) return;
   void content.releaseEditLock(packId.value).catch(() => {
