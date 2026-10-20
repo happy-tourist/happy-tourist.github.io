@@ -283,7 +283,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-50: peek header shows three difficulty dots and word-only badge centered', async () => {
+  it('SC-BOARD-50: peek header shows left-edge dots and centered word-only badge', async () => {
     const game = seedPlayingSeat(2);
     openPeekFixture(game, { difficulty: 2, reward: 2 });
 
@@ -292,6 +292,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
 
     const header = wrapper.find('[data-testid="peek-diff-header"]');
     expect(header.exists()).toBe(true);
+    expect(header.classes()).toContain('peek-diff-header');
 
     const dots = wrapper.find('[data-testid="peek-diff-dots"]');
     expect(dots.exists()).toBe(true);
@@ -313,13 +314,44 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
-    expect(appScss).toMatch(/\.peek-diff-header\s*\{[^}]*justify-content:\s*center/s);
+    // Layout: dots absolutely left-edged; badge centered via flex (not one centered cluster).
+    expect(appScss).toMatch(
+      /\.peek-diff-header\s*\{[^}]*position:\s*relative[^}]*justify-content:\s*center/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-diff-header\s+\.peek-diff-dots\s*\{[^}]*position:\s*absolute[^}]*left:\s*0/s,
+    );
 
     // Read-only: clicking dots does not change difficulty.
     await dots.findAll('.peek-diff-dot')[2]!.trigger('click');
     await flushPromises();
     expect(game.openPeek!.difficulty).toBe(2);
     expect(dots.findAll('.peek-diff-dot--filled')).toHaveLength(2);
+
+    wrapper.unmount();
+  });
+
+  it('SC-BOARD-10/45: peeks=0 finite hides eye on flipped task cell', async () => {
+    const game = seedPlayingSeat(1);
+    game.peeks = 0;
+    game.budgetsInfinite = false;
+    // Piece 0 sits on task * at (3,3); mark that cell flipped.
+    game.flippedCells = [{ key: '3,3', taskId: 't1', difficulty: 2 }];
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const slot = wrapper.find('.my-tourist-slot');
+    expect(slot.exists()).toBe(true);
+    await slot.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.peek-affordance').exists()).toBe(false);
+
+    // With peeks remaining, eye appears on the same flipped cell.
+    game.peeks = 1;
+    await flushPromises();
+    expect(wrapper.find('.peek-affordance').exists()).toBe(true);
 
     wrapper.unmount();
   });

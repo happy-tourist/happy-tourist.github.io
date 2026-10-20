@@ -89,7 +89,7 @@
               class="peek-slot peek-slot--portrait"
               :class="{
                 'peek-slot--filled': Boolean(placement),
-                'peek-slot--interactive': isPeekOwner && Boolean(placement),
+                'peek-slot--interactive': isPeekOwner,
               }"
               data-testid="peek-slot"
               @click="onPeekSlotClick(slotIndex)"
@@ -1023,12 +1023,6 @@ const stripPieceIds = computed((): string[] => {
   return mySeat.value.pieces.map((p) => p.pieceId);
 });
 
-const flippedCellKeySet = computed(() => new Set(game.flippedCells.map((c) => c.key)));
-
-function isFlippedTaskCell(row: number, col: number): boolean {
-  return flippedCellKeySet.value.has(cellKey(row, col));
-}
-
 /** Steps always numeric; peeks ∞ only in solo (SC-PRESENCE-16). */
 const stepsBudgetDisplay = computed(() => String(game.steps));
 const peeksBudgetDisplay = computed(() =>
@@ -1307,10 +1301,7 @@ const canShowPeekAffordance = computed(() => {
   if (!piece || !isPresentTaskCell(piece.row, piece.col)) {
     return false;
   }
-  // Flipped peek free at peeks=0; fresh needs peeks or solo ∞ (SC-BOARD-10/45).
-  if (isFlippedTaskCell(piece.row, piece.col)) {
-    return true;
-  }
+  // Finite peeks: any open (fresh or flipped) needs peeks ≥ 1; solo ∞ always OK.
   return budgetsInfinite.value || game.peeks > 0;
 });
 
@@ -1567,9 +1558,7 @@ function pieceCanPeek(piece: GamePiece): boolean {
   if (!isPresentTaskCell(piece.row, piece.col)) {
     return false;
   }
-  if (isFlippedTaskCell(piece.row, piece.col)) {
-    return true;
-  }
+  // Mirror server: peeks=0 (finite) blocks flipped as well as fresh (SC-BOARD-10/45).
   return budgetsInfinite.value || game.peeks > 0;
 }
 
@@ -3940,6 +3929,9 @@ body.body--dark .say-picker {
   width: min(380px, 92vw);
   max-width: min(400px, 92vw);
   border-radius: 18px;
+  /* Match pack-card surface (dark #2a2a2a) — not raw Quasar dark card. */
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
 }
 
 .peek-modal-body {
@@ -3980,6 +3972,8 @@ body.body--dark .say-picker {
   padding: 12px 18px 16px;
 }
 
+/* Beat Quasar `.q-btn` min-height 2.572em so Spec 28–36 / action-h 30 sticks. */
+.peek-modal-actions :deep(.q-btn.peek-submit-btn),
 .peek-submit-btn {
   width: 100%;
   min-height: 28px;

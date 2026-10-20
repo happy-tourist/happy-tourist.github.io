@@ -331,7 +331,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(dialog.find('.q-select-stub').exists()).toBe(false);
   });
 
-  it('SC-PACK-276: difficulty dots preview/commit; word-only badge centered; model 1|2|3', async () => {
+  it('SC-PACK-276: difficulty dots left-edge + word-only badge center; preview/commit; model 1|2|3', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -346,6 +346,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     const dotsHost = dialog.find('[data-testid="task-compose-difficulty"]');
     expect(dotsHost.exists()).toBe(true);
     expect(dotsHost.attributes('data-diff')).toBe('1');
+    expect(dotsHost.classes()).toContain('peek-diff-dots');
 
     const dots = dialog.findAll('[data-testid="compose-diff-dot"]');
     expect(dots).toHaveLength(3);
@@ -364,7 +365,13 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
-    expect(appScss).toMatch(/\.peek-diff-header\s*\{[^}]*justify-content:\s*center/s);
+    // Same as game peek: dots absolute left; badge centered independently.
+    expect(appScss).toMatch(
+      /\.peek-diff-header\s*\{[^}]*position:\s*relative[^}]*justify-content:\s*center/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-diff-header\s+\.peek-diff-dots\s*\{[^}]*position:\s*absolute[^}]*left:\s*0/s,
+    );
 
     // Hover third dot → preview filled 1…3 in hard color (data-diff=3).
     await dots[2]!.trigger('mouseenter');

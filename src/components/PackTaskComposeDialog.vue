@@ -276,6 +276,8 @@ function pickAnswer(cardId: string) {
 <style scoped>
 .pack-task-compose-card {
   border-radius: 18px;
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
 }
 
 /* Dim empty/disabled pool cards; pointer-events from global `.peek-answer-mini--readonly`. */

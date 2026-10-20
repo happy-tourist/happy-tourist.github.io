@@ -856,8 +856,9 @@ export const useGameStore = defineStore('game', {
 
     /**
      * Open a peek on own unfinished piece standing on a present task cell.
-     * Fresh/unbound spends a peek on the server; flipped is free even at peeks=0.
-     * Client does not gate on peeks — server decides (SC-BOARD-10/45).
+     * Finite mode: every successful open (fresh or flipped) spends 1 peek;
+     * peeks=0 is rejected for both. Solo infinite: no decrement.
+     * Affordance gating lives on GamePage; server still enforces budget.
      * @returns true if the message was sent.
      */
     sendPeek(pieceId: string): boolean {
