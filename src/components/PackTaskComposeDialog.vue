@@ -189,16 +189,11 @@ const previewDifficulty = ref<Difficulty | null>(null);
 
 const displayDifficulty = computed((): Difficulty => previewDifficulty.value ?? props.difficulty);
 
-const difficultyBadgeLabel = computed(() =>
-  t('content.difficultyBadge', {
-    word: t(`content.difficultyWord.${props.difficulty}`),
-  }),
-);
+/** Word-only badge — no «Сложность:» prefix (SC-PACK-276). */
+const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.difficulty}`));
 
 function difficultyDotAria(level: Difficulty) {
-  return t('content.difficultyBadge', {
-    word: t(`content.difficultyWord.${level}`),
-  });
+  return t(`content.difficultyWord.${level}`);
 }
 
 function onDotPreview(level: Difficulty) {

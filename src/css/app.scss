@@ -36,6 +36,8 @@
   --peek-badge-1-fg: var(--pack-ts-dot-1);
   --peek-badge-2-fg: var(--pack-ts-dot-2);
   --peek-badge-3-fg: var(--pack-ts-dot-3);
+  /* Half-size peek/compose tiles (polish: ~86 → ~43). */
+  --peek-tile-max-w: 43px;
 }
 
 .pack-card-grid {
@@ -117,13 +119,13 @@ body.body--dark .peek-chrome {
 
 /* --- Peek / compose portrait slot + mini-card chrome (redesign-peek-task-modal) ---
  * Apply `.peek-slot--portrait` / `.peek-slot-like--portrait` only on game peek + task
- * compose — NOT on PackTaskTile list slots (keep compact labeled base above). */
+ * compose — NOT on PackTaskTile list slots (keep compact labeled base above).
+ * Polish: half-size max-width ~43 (was ~86), filled primary border, centered header. */
 
 .peek-slot--portrait,
 .peek-slot-like--portrait {
-  /* Match pool column width (4 cols × 8px gap) — Spec AR derived from col width. */
-  width: calc((100% - 3 * 8px) / 4);
-  max-width: 86px;
+  width: var(--peek-tile-max-w, 43px);
+  max-width: var(--peek-tile-max-w, 43px);
   min-width: 0;
   min-height: 0;
   aspect-ratio: 156 / 206;
@@ -149,23 +151,30 @@ body.body--dark .peek-slot-like--portrait:not(.peek-slot-like--filled) {
   display: none;
 }
 
-/* Filled portrait = answer mini-card surface (--pack-card-*). */
+/* Filled portrait = pack-card surface + thin primary border (not on pool). */
 .peek-slot--portrait.peek-slot--filled,
 .peek-slot-like--portrait.peek-slot-like--filled {
-  border: 1px solid var(--pack-card-border);
+  border: 1px solid #1976d2;
   border-radius: 12px;
   background: var(--pack-card-bg);
   color: var(--pack-card-fg);
   box-shadow: var(--pack-card-shadow);
-  padding: 6px 8px;
+  padding: 4px 5px;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
   overflow: hidden;
 }
 
-/* Hover only for peeker / editable surfaces — not spectator / readOnly pool. */
+/* Filled-slot hover: keep primary border; shadow MAY deepen (Visual Spec). */
 .peek-slot--portrait.peek-slot--filled.peek-slot--interactive:hover,
-.peek-slot-like--portrait.peek-slot-like--filled.peek-slot-like--interactive:hover,
+.peek-slot-like--portrait.peek-slot-like--filled.peek-slot-like--interactive:hover {
+  border-color: #1976d2;
+  box-shadow: var(--pack-card-shadow-hover);
+}
+
+/* Pool hover: neutral pack border/shadow — never filled-slot primary «used» chrome. */
 .peek-answer-mini:not(.peek-answer-mini--readonly):hover {
   border-color: var(--pack-card-border-hover);
   box-shadow: var(--pack-card-shadow-hover);
@@ -174,18 +183,23 @@ body.body--dark .peek-slot-like--portrait:not(.peek-slot-like--filled) {
 .peek-slot--portrait .peek-slot__label,
 .peek-slot-like--portrait .peek-slot-like__label,
 .peek-answer-mini__primary {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
   text-align: center;
   color: var(--pack-card-fg);
   word-break: break-word;
+  /* Half-size ~43px: clamp instead of mid-glyph clip (design risk mitigation). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 .peek-slot__secondary,
 .peek-slot-like__secondary,
 .peek-answer-mini__secondary {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 400;
   line-height: 1.2;
   text-align: center;
@@ -193,12 +207,22 @@ body.body--dark .peek-slot-like--portrait:not(.peek-slot-like--filled) {
   word-break: break-word;
 }
 
-/* Answer pool mini-card (peek + compose) — same chrome as filled portrait slot. */
+.peek-slot--portrait .peek-slot__secondary,
+.peek-slot-like--portrait .peek-slot-like__secondary,
+.peek-answer-mini__secondary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Answer pool mini-card — same half-size AR band; neutral border (not primary). */
 .peek-answer-mini {
   box-sizing: border-box;
   width: 100%;
+  max-width: var(--peek-tile-max-w, 43px);
   aspect-ratio: 156 / 206;
-  padding: 6px 8px;
+  padding: 4px 5px;
   border-radius: 12px;
   border: 1px solid var(--pack-card-border);
   background: var(--pack-card-bg);
@@ -215,14 +239,13 @@ body.body--dark .peek-slot-like--portrait:not(.peek-slot-like--filled) {
 }
 
 .peek-answer-pool {
-  container-type: inline-size;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, var(--peek-tile-max-w, 43px)));
+  justify-content: center;
   gap: 8px;
   width: 100%;
-  /* Col width tracks pool width so ≤4 AR 156∶206 rows stay visible (narrow + wide). */
-  --peek-pool-col-w: calc((100cqw - 3 * 8px) / 4);
-  max-height: calc(4 * (var(--peek-pool-col-w) * 206 / 156) + 3 * 8px);
+  /* ≤4 visible AR 156∶206 rows at half-size tile width. */
+  max-height: calc(4 * (var(--peek-tile-max-w, 43px) * 206 / 156) + 3 * 8px);
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -307,6 +330,7 @@ button.peek-diff-dot:disabled {
 .peek-diff-header {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 20px;
 }

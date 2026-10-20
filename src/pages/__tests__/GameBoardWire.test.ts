@@ -75,7 +75,7 @@ function seedPlayingSeat(count: number) {
   return game;
 }
 
-describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)', () => {
+describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.stubGlobal('localStorage', {
@@ -263,6 +263,18 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     expect(filledSlots.every((s) => s.text().includes('Четыре'))).toBe(true);
     expect(filledSlots.every((s) => s.classes().includes('peek-slot--portrait'))).toBe(true);
 
+    // Pool never gets filled-slot primary border class / used chrome.
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(
+      /\.peek-slot--portrait\.peek-slot--filled[\s\S]*?border:\s*1px\s+solid\s+#1976d2/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-answer-mini\s*\{[^}]*border:\s*1px\s+solid\s+var\(--pack-card-border\)/s,
+    );
+    expect(appScss).not.toMatch(/\.peek-answer-mini--used/);
+
     await filledSlots[0]!.trigger('click');
     await flushPromises();
     expect(sendPeekPlace).toHaveBeenCalledWith(0, '');
@@ -271,12 +283,15 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-50: peek header shows three difficulty dots and word badge', async () => {
+  it('SC-BOARD-50: peek header shows three difficulty dots and word-only badge centered', async () => {
     const game = seedPlayingSeat(2);
     openPeekFixture(game, { difficulty: 2, reward: 2 });
 
     const wrapper = mountPage();
     await flushPromises();
+
+    const header = wrapper.find('[data-testid="peek-diff-header"]');
+    expect(header.exists()).toBe(true);
 
     const dots = wrapper.find('[data-testid="peek-diff-dots"]');
     expect(dots.exists()).toBe(true);
@@ -287,10 +302,18 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     const badge = wrapper.find('[data-testid="peek-diff-badge"]');
     expect(badge.exists()).toBe(true);
     expect(badge.attributes('data-diff')).toBe('2');
-    // Word badge key — not digit-only `game.peekDifficulty` / bare `2`.
-    expect(badge.text()).toBe('game.peekDifficultyBadge');
+    // Word-only key — not «Сложность:», digit-only, or digit-prefix select labels.
+    expect(badge.text()).toBe('content.difficultyWord.2');
+    expect(badge.text()).not.toMatch(/Сложность/i);
     expect(badge.text()).not.toMatch(/^2$/);
     expect(badge.text()).not.toBe('game.peekDifficulty');
+    expect(badge.text()).not.toBe('game.peekDifficultyBadge');
+    expect(badge.text()).not.toBe('content.difficulty.2');
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/\.peek-diff-header\s*\{[^}]*justify-content:\s*center/s);
 
     // Read-only: clicking dots does not change difficulty.
     await dots.findAll('.peek-diff-dot')[2]!.trigger('click');
@@ -301,7 +324,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-51: empty slots are blank dashed; filled slots look like answer mini-cards', async () => {
+  it('SC-BOARD-51: empty slots blank dashed; filled half-size with primary border', async () => {
     const game = seedPlayingSeat(2);
     openPeekFixture(game, { placements: ['', ''] });
 
@@ -328,6 +351,20 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     expect(after[1]!.classes()).not.toContain('peek-slot--filled');
     expect(after[1]!.text().trim()).toBe('');
 
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/--peek-tile-max-w:\s*43px/);
+    expect(appScss).toMatch(
+      /\.peek-slot--portrait,\s*\n\.peek-slot-like--portrait\s*\{[^}]*max-width:\s*var\(--peek-tile-max-w/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-slot--portrait,\s*\n\.peek-slot-like--portrait\s*\{[^}]*aspect-ratio:\s*156\s*\/\s*206/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-slot--portrait\.peek-slot--filled[\s\S]*?border:\s*1px\s+solid\s+#1976d2/s,
+    );
+
     wrapper.unmount();
   });
 
@@ -352,16 +389,16 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     expect(cards[0]!.find('.peek-answer-mini__primary').text()).toContain('Ответ 1');
     expect(cards[0]!.find('.peek-answer-mini__secondary').text()).toContain('ед.');
 
-    // Contract in shared CSS: 4 columns + max-height for ≤4 rows + overflow-y scroll.
+    // Contract: 4 half-size cols + max-height for ≤4 rows + overflow-y scroll.
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
-    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*container-type:\s*inline-size/s);
-    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*100cqw/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*--peek-tile-max-w/s);
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*max-height:/s);
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*overflow-y:\s*auto/s);
     expect(appScss).toMatch(/\.peek-answer-mini\s*\{[^}]*aspect-ratio:\s*156\s*\/\s*206/s);
+    expect(appScss).toMatch(/\.peek-answer-mini\s*\{[^}]*max-width:\s*var\(--peek-tile-max-w/s);
     expect(appScss).toMatch(/\.peek-answer-mini--readonly\s*\{[^}]*pointer-events:\s*none/s);
 
     wrapper.unmount();
@@ -386,7 +423,9 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
-    expect(pageSrc).toMatch(/data-testid="peek-submit"[\s\S]*?no-caps|no-caps[\s\S]*?data-testid="peek-submit"/);
+    expect(pageSrc).toMatch(
+      /data-testid="peek-submit"[\s\S]*?no-caps|no-caps[\s\S]*?data-testid="peek-submit"/,
+    );
     expect(pageSrc).toMatch(/\.peek-submit-btn\s*\{[^}]*min-height:\s*28px/s);
     expect(pageSrc).toMatch(/\.peek-submit-btn\s*\{[^}]*max-height:\s*36px/s);
     expect(pageSrc).toMatch(/\.peek-submit-btn\s*\{[^}]*height:\s*var\(--pack-card-action-h/s);
@@ -408,5 +447,30 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…53, SC-PIECE-52)
     expect(spectator.find('[data-testid="peek-submit"]').exists()).toBe(false);
     expect(spectator.find('[data-testid="peek-spectator-hint"]').exists()).toBe(true);
     spectator.unmount();
+  });
+
+  it('SC-BOARD-54: game peek question uses enlarged ~24px type band', async () => {
+    const game = seedPlayingSeat(2);
+    openPeekFixture(game, { question: 'Увеличенный вопрос?' });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="peek-question"]').text()).toContain('Увеличенный вопрос?');
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(pageSrc).toMatch(/\.peek-question\s*\{[^}]*font-size:\s*24px/s);
+
+    // Compose question control must not inherit this scale.
+    const composeSrc = readFileSync(
+      path.resolve(__dirname, '../../components/PackTaskComposeDialog.vue'),
+      'utf8',
+    );
+    expect(composeSrc).not.toMatch(/font-size:\s*24px/);
+    expect(composeSrc).toMatch(/data-testid="task-compose-question"/);
+
+    wrapper.unmount();
   });
 });

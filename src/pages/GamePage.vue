@@ -53,7 +53,7 @@
       </q-card>
     </q-dialog>
 
-    <!-- Shared peek modal — dots+badge, portrait slots, mini-card pool (SC-BOARD-46/49/50…53). -->
+    <!-- Shared peek modal — dots+badge, portrait slots, mini-card pool (SC-BOARD-46/49/50…54). -->
     <q-dialog :model-value="Boolean(game.openPeek)" persistent>
       <q-card class="peek-modal-card peek-chrome">
         <q-card-section class="peek-modal-body">
@@ -1322,12 +1322,10 @@ const peekDifficultyLevel = computed((): 1 | 2 | 3 => {
   return n === 1 || n === 2 || n === 3 ? n : 1;
 });
 
-/** Word badge `Сложность: лёгкая|средняя|сложная` — not digit-only (SC-BOARD-50). */
+/** Word-only badge `лёгкая|средняя|сложная` — no «Сложность:» prefix (SC-BOARD-50). */
 const peekDifficultyBadgeLabel = computed(() => {
   const level = peekDifficultyLevel.value;
-  return t('game.peekDifficultyBadge', {
-    word: t(`content.difficultyWord.${level}`),
-  });
+  return t(`content.difficultyWord.${level}`);
 });
 
 const canSubmitPeek = computed(() => {
@@ -3937,7 +3935,7 @@ body.body--dark .say-picker {
   z-index: 1;
 }
 
-/* Peek modal layout (SC-BOARD-50…53); slot/pool/dot chrome in app.scss. */
+/* Peek modal layout (SC-BOARD-50…54); slot/pool/dot chrome in app.scss. */
 .peek-modal-card {
   width: min(380px, 92vw);
   max-width: min(400px, 92vw);
@@ -3955,7 +3953,8 @@ body.body--dark .say-picker {
 
 .peek-question {
   text-align: center;
-  font-size: 16px;
+  /* SC-BOARD-54: game peek only — ~1.5× prior 16px band (compose q-input untouched). */
+  font-size: 24px;
   font-weight: 600;
   line-height: 1.35;
   color: var(--pack-card-fg);
@@ -3994,7 +3993,8 @@ body.body--dark .say-picker {
 }
 
 .peek-spectator-hint {
-  padding: 4px 18px 16px;
+  /* pool mb 4 + top 12 ≈ Spec pool→spectator 12–16 */
+  padding: 12px 18px 16px;
 }
 
 /* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */

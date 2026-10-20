@@ -331,7 +331,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(dialog.find('.q-select-stub').exists()).toBe(false);
   });
 
-  it('SC-PACK-276: difficulty dots preview on hover and commit on click; model stays 1|2|3', async () => {
+  it('SC-PACK-276: difficulty dots preview/commit; word-only badge centered; model 1|2|3', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -339,6 +339,10 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     await flushPromises();
 
     const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    const header = dialog.find('[data-testid="compose-diff-header"]');
+    expect(header.exists()).toBe(true);
+    expect(header.classes()).toContain('peek-diff-header');
+
     const dotsHost = dialog.find('[data-testid="task-compose-difficulty"]');
     expect(dotsHost.exists()).toBe(true);
     expect(dotsHost.attributes('data-diff')).toBe('1');
@@ -350,9 +354,17 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     const badge = dialog.find('[data-testid="compose-diff-badge"]');
     expect(badge.exists()).toBe(true);
     expect(badge.attributes('data-diff')).toBe('1');
-    expect(badge.text()).toBe('content.difficultyBadge');
+    // Word-only — no «Сложность:» prefix / digit-only / digit-prefix select labels.
+    expect(badge.text()).toBe('content.difficultyWord.1');
+    expect(badge.text()).not.toMatch(/Сложность/i);
     expect(badge.text()).not.toMatch(/^1$/);
     expect(badge.text()).not.toBe('content.difficulty.1');
+    expect(badge.text()).not.toBe('content.difficultyBadge');
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/\.peek-diff-header\s*\{[^}]*justify-content:\s*center/s);
 
     // Hover third dot → preview filled 1…3 in hard color (data-diff=3).
     await dots[2]!.trigger('mouseenter');
@@ -370,9 +382,10 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(dotsHost.attributes('data-diff')).toBe('2');
     expect(dots.filter((d) => d.classes().includes('peek-diff-dot--filled'))).toHaveLength(2);
     expect(badge.attributes('data-diff')).toBe('2');
+    expect(badge.text()).toBe('content.difficultyWord.2');
   });
 
-  it('SC-PACK-277: empty slots unlabeled; pool scrolls past 4×4 via CSS contract', async () => {
+  it('SC-PACK-277: empty unlabeled; half-size pool scrolls past 4×4; filled primary border', async () => {
     const manyCards = Array.from({ length: 17 }, (_, i) => ({
       id: `c${i + 1}`,
       content: `Answer ${i + 1}`,
@@ -410,12 +423,16 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/--peek-tile-max-w:\s*43px/);
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
-    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*container-type:\s*inline-size/s);
-    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*100cqw/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*--peek-tile-max-w/s);
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*max-height:/s);
     expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*overflow-y:\s*auto/s);
     expect(appScss).toMatch(/\.peek-answer-mini\s*\{[^}]*aspect-ratio:\s*156\s*\/\s*206/s);
+    expect(appScss).toMatch(/\.peek-answer-mini\s*\{[^}]*max-width:\s*var\(--peek-tile-max-w/s);
+    expect(appScss).toMatch(
+      /\.peek-slot-like--portrait\.peek-slot-like--filled[\s\S]*?border:\s*1px\s+solid\s+#1976d2/s,
+    );
   });
 
   it('SC-PACK-262: CSV stays on the page above the list, outside the dialog', async () => {
@@ -484,6 +501,17 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(parisCard!.classes()).not.toContain('peek-answer-mini--used');
     expect(parisCard!.classes()).not.toContain('peek-answer-mini--readonly');
     expect(parisCard!.classes()).not.toContain('disabled');
+
+    // Filled slots get primary border in CSS; pool keeps neutral pack-card border.
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(
+      /\.peek-slot-like--portrait\.peek-slot-like--filled[\s\S]*?border:\s*1px\s+solid\s+#1976d2/s,
+    );
+    expect(appScss).toMatch(
+      /\.peek-answer-mini\s*\{[^}]*border:\s*1px\s+solid\s+var\(--pack-card-border\)/s,
+    );
   });
 });
 
