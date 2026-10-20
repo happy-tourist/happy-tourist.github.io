@@ -35,7 +35,7 @@
         no-caps
         class="full-width"
         icon="edit"
-        :label="$t('content.editCard')"
+        :label="$t('content.edit')"
         data-testid="pack-answer-tile-edit"
         @click="emit('edit')"
       />
@@ -161,13 +161,14 @@ function onBodyClick() {
   align-self: stretch;
 }
 
+/* SC-PACK-283: 24px = PackTaskTile question / peek question parity (not task-set title 0.78rem). */
 .pack-answer-tile__content {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 0.15rem 0;
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: 24px;
   line-height: 1.25;
   word-break: break-word;
   text-align: center;

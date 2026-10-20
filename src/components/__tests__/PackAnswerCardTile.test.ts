@@ -21,7 +21,7 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282)', () => {
+describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282/283)', () => {
   it('with description: content top + description bottom (column, no horizontal splitter) (SC-PACK-222/282)', () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: {
@@ -51,7 +51,7 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282)', () => {
     expect(wrapper.classes()).not.toContain('pack-answer-tile--short');
   });
 
-  it('editable shows bottom full-width outline+icon Edit/Delete; body click does not emit edit (SC-PACK-224)', async () => {
+  it('editable shows bottom full-width outline+icon Edit/Delete; label content.edit (SC-PACK-224/283)', async () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: { content: 'Berlin', description: 'City', editable: true },
       global: { stubs },
@@ -65,8 +65,11 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282)', () => {
     expect(deleteBtn.classes()).toContain('full-width');
     expect(editBtn.attributes('data-icon')).toBe('edit');
     expect(deleteBtn.attributes('data-icon')).toBe('delete');
-    expect(editBtn.text().length).toBeGreaterThan(0);
+    expect(editBtn.text()).toContain('content.edit');
+    expect(editBtn.text()).not.toContain('content.editCard');
     expect(wrapper.find('.pack-answer-tile__actions').exists()).toBe(true);
+    expect(vueSrc).toMatch(/\$t\(['"]content\.edit['"]\)/);
+    expect(vueSrc).not.toMatch(/\$t\(['"]content\.editCard['"]\)/);
     expect(vueSrc).toMatch(/icon=["']edit["']/);
     expect(vueSrc).toMatch(/icon=["']delete["']/);
     expect(vueSrc).toMatch(/<q-btn[^>]*\n\s*outline/s);
@@ -122,8 +125,14 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282)', () => {
     expect(vueSrc).not.toMatch(/width:\s*150px/);
     expect(vueSrc).not.toMatch(/height:\s*200px/);
     expect(vueSrc).not.toMatch(/pack-answer-tile--short/);
-    expect(vueSrc).toMatch(/font-size:\s*0\.78rem/);
+    expect(vueSrc).toMatch(/\.pack-answer-tile__content\s*\{[^}]*font-size:\s*24px/s);
     expect(vueSrc).toMatch(/font-size:\s*0\.68rem/);
+    expect(vueSrc).not.toMatch(/\.pack-answer-tile__content\s*\{[^}]*font-size:\s*0\.78rem/s);
+  });
+
+  it('SC-PACK-283: answer content is 24px (task/peek question parity)', () => {
+    expect(vueSrc).toMatch(/\.pack-answer-tile__content\s*\{[^}]*font-size:\s*24px/s);
+    expect(vueSrc).toMatch(/\.pack-answer-tile__content\s*\{[^}]*font-weight:\s*600/s);
   });
 
   it('uses shared --pack-card-* surface tokens for light/dark readability (SC-PACK-227)', () => {

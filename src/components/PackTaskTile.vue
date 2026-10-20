@@ -49,7 +49,7 @@
         no-caps
         class="full-width"
         icon="edit"
-        :label="$t('content.editTask')"
+        :label="$t('content.edit')"
         data-testid="pack-task-tile-edit"
         @click="emit('edit')"
       />

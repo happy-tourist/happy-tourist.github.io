@@ -25,7 +25,7 @@ const appScss = readFileSync(
   'utf8',
 );
 
-describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
+describe('PackTaskTile (SC-PACK-223/224/226/227/238/278/283)', () => {
   it('shows question, dots+word badge header, and portrait filled slots (SC-PACK-223/278)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
@@ -111,7 +111,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(wrapper.find('[data-testid="pack-task-tile-delete"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-224: editable shows outline+icon Edit/Delete; body has no edit-on-click', async () => {
+  it('SC-PACK-224/283: editable shows outline+icon Edit/Delete; label content.edit', async () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -130,8 +130,11 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(deleteBtn.classes()).toContain('full-width');
     expect(editBtn.attributes('data-icon')).toBe('edit');
     expect(deleteBtn.attributes('data-icon')).toBe('delete');
-    expect(editBtn.text().length).toBeGreaterThan(0);
+    expect(editBtn.text()).toContain('content.edit');
+    expect(editBtn.text()).not.toContain('content.editTask');
     expect(wrapper.find('.pack-task-tile__actions').exists()).toBe(true);
+    expect(vueSrc).toMatch(/\$t\(['"]content\.edit['"]\)/);
+    expect(vueSrc).not.toMatch(/\$t\(['"]content\.editTask['"]\)/);
     expect(vueSrc).toMatch(/icon=["']edit["']/);
     expect(vueSrc).toMatch(/icon=["']delete["']/);
     expect(vueSrc).toMatch(/<q-btn[^>]*\n\s*outline/s);
