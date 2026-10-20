@@ -310,11 +310,20 @@ export default {
     questionsList: 'Список вопросов',
     answerTiles: 'Карточки для слотов',
     difficultyLabel: 'Сложность',
+    /** Digit-prefix select labels (compose q-select legacy / list tile tooltip). */
     difficulty: {
       1: '1 — лёгкая',
       2: '2 — средняя',
       3: '3 — сложная',
     },
+    /** Word-only difficulty for peek/compose badge (SC-BOARD-50 / SC-PACK-276) — no digit. */
+    difficultyWord: {
+      1: 'лёгкая',
+      2: 'средняя',
+      3: 'сложная',
+    },
+    /** Badge template: `Сложность: {word}` — pass word from `difficultyWord.{n}`. */
+    difficultyBadge: 'Сложность: {word}',
     slots: 'Слоты ответов',
     slotsCount: 'слотов: {n}',
     slotEmpty: 'пусто',
@@ -670,8 +679,15 @@ export default {
     focusActionable: 'Выбрать ближайшего туриста',
     /** Peek modal — shared Q&A with slots + pack answers (SC-BOARD-43/44/46). */
     peekModal: 'Под плиткой награда: {n}. Ответьте правильно, чтобы получить шаги.',
+    /** Legacy digit badge — do not use as sole peek difficulty copy (prefer peekDifficultyBadge). */
     peekDifficulty: 'Сложность: {n}',
+    /**
+     * Word badge for peek header (SC-BOARD-50): `Сложность: {word}`.
+     * Pass `word` from `content.difficultyWord.{n}` — not bare `{n}` and not digit-prefix select labels.
+     */
+    peekDifficultyBadge: 'Сложность: {word}',
     peekQuestionFallback: 'Вопрос',
+    /** Legacy empty-slot label — unused in unlabeled portrait slots (SC-BOARD-51). */
     peekSlotEmpty: 'Слот',
     peekSubmit: 'Ответить',
     peekSpectatorHint: 'Игрок отвечает на вопрос…',

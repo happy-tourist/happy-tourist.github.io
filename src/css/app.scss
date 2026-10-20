@@ -11,12 +11,11 @@
 
 /* Playing-card wrap grid for pack answer/task tiles (SC-PACK-222…224).
  * Shared resting chrome for PackListCardTile + PackTaskSetCardTile (SC-PACK-255).
+ * Also on `.peek-chrome` so game peek / task compose can consume the same tokens
+ * without living inside a pack-card-grid (redesign-peek-task-modal).
  * Canon values = former PackTaskSetCardTile --pack-ts-* surface tokens. */
-.pack-card-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-
+.pack-card-grid,
+.peek-chrome {
   --pack-card-bg: #ffffff;
   --pack-card-fg: rgba(0, 0, 0, 0.87);
   --pack-card-muted: rgba(0, 0, 0, 0.7);
@@ -26,9 +25,27 @@
   --pack-card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.14);
   --pack-card-splitter: rgba(0, 0, 0, 0.08);
   --pack-card-action-h: 30px;
+  /* Difficulty dots (PackTaskSetCardTile / peek / compose) — light. */
+  --pack-ts-dot-1: #43a047;
+  --pack-ts-dot-2: #f9a825;
+  --pack-ts-dot-3: #e53935;
+  /* Soft badge tint by difficulty (peek + compose header). */
+  --peek-badge-1-bg: rgba(67, 160, 71, 0.14);
+  --peek-badge-2-bg: rgba(249, 168, 37, 0.16);
+  --peek-badge-3-bg: rgba(229, 57, 53, 0.14);
+  --peek-badge-1-fg: var(--pack-ts-dot-1);
+  --peek-badge-2-fg: var(--pack-ts-dot-2);
+  --peek-badge-3-fg: var(--pack-ts-dot-3);
 }
 
-body.body--dark .pack-card-grid {
+.pack-card-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+body.body--dark .pack-card-grid,
+body.body--dark .peek-chrome {
   --pack-card-bg: #2a2a2a;
   --pack-card-fg: rgba(255, 255, 255, 0.92);
   --pack-card-muted: rgba(255, 255, 255, 0.78);
@@ -37,9 +54,17 @@ body.body--dark .pack-card-grid {
   --pack-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   --pack-card-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
   --pack-card-splitter: rgba(255, 255, 255, 0.12);
+  --pack-ts-dot-1: #66bb6a;
+  --pack-ts-dot-2: #ffca28;
+  --pack-ts-dot-3: #ef5350;
+  --peek-badge-1-bg: rgba(102, 187, 106, 0.18);
+  --peek-badge-2-bg: rgba(255, 202, 40, 0.18);
+  --peek-badge-3-bg: rgba(239, 83, 80, 0.18);
 }
 
-/* Peek-comparable answer-slot chrome (GamePage `.peek-slot` + editor/tile `.peek-slot-like`; SC-PACK-237/238). */
+/* Peek-comparable answer-slot chrome (GamePage `.peek-slot` + editor/tile `.peek-slot-like`; SC-PACK-237/238).
+ * Base stays compact + labeled for PackTaskTile list slots (SC-PACK-238 carve-out).
+ * Portrait unlabeled + mini-card AR apply only via `--portrait` modifiers (peek / compose). */
 .peek-slot,
 .peek-slot-like {
   min-width: 72px;
@@ -88,4 +113,200 @@ body.body--dark .pack-card-grid {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+/* --- Peek / compose portrait slot + mini-card chrome (redesign-peek-task-modal) ---
+ * Apply `.peek-slot--portrait` / `.peek-slot-like--portrait` only on game peek + task
+ * compose — NOT on PackTaskTile list slots (keep compact labeled base above). */
+
+.peek-slot--portrait,
+.peek-slot-like--portrait {
+  /* Match pool column width (4 cols × 8px gap) — Spec AR derived from col width. */
+  width: calc((100% - 3 * 8px) / 4);
+  max-width: 86px;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 156 / 206;
+  height: auto;
+  padding: 0;
+  border-radius: 12px;
+  /* Empty: dashed only — no label text (hide empty label nodes if present). */
+}
+
+.peek-slot--portrait:not(.peek-slot--filled),
+.peek-slot-like--portrait:not(.peek-slot-like--filled) {
+  border: 2px dashed rgba(0, 0, 0, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.body--dark .peek-slot--portrait:not(.peek-slot--filled),
+body.body--dark .peek-slot-like--portrait:not(.peek-slot-like--filled) {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.peek-slot--portrait .peek-slot__empty,
+.peek-slot-like--portrait .peek-slot-like__empty {
+  display: none;
+}
+
+/* Filled portrait = answer mini-card surface (--pack-card-*). */
+.peek-slot--portrait.peek-slot--filled,
+.peek-slot-like--portrait.peek-slot-like--filled {
+  border: 1px solid var(--pack-card-border);
+  border-radius: 12px;
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
+  box-shadow: var(--pack-card-shadow);
+  padding: 6px 8px;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+/* Hover only for peeker / editable surfaces — not spectator / readOnly pool. */
+.peek-slot--portrait.peek-slot--filled.peek-slot--interactive:hover,
+.peek-slot-like--portrait.peek-slot-like--filled.peek-slot-like--interactive:hover,
+.peek-answer-mini:not(.peek-answer-mini--readonly):hover {
+  border-color: var(--pack-card-border-hover);
+  box-shadow: var(--pack-card-shadow-hover);
+}
+
+.peek-slot--portrait .peek-slot__label,
+.peek-slot-like--portrait .peek-slot-like__label,
+.peek-answer-mini__primary {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--pack-card-fg);
+  word-break: break-word;
+}
+
+.peek-slot__secondary,
+.peek-slot-like__secondary,
+.peek-answer-mini__secondary {
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--pack-card-muted);
+  word-break: break-word;
+}
+
+/* Answer pool mini-card (peek + compose) — same chrome as filled portrait slot. */
+.peek-answer-mini {
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 156 / 206;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--pack-card-border);
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
+  box-shadow: var(--pack-card-shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  cursor: pointer;
+  /* no transform scale on hover */
+}
+
+.peek-answer-pool {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  /* Col width tracks pool width so ≤4 AR 156∶206 rows stay visible (narrow + wide). */
+  --peek-pool-col-w: calc((100cqw - 3 * 8px) / 4);
+  max-height: calc(4 * (var(--peek-pool-col-w) * 206 / 156) + 3 * 8px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.peek-answer-mini--readonly {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Difficulty dots — PackTaskSetCardTile pattern: 6px, gap 2, single token for N. */
+.peek-diff-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  --peek-diff-dot-color: var(--pack-ts-dot-1);
+}
+
+.peek-diff-dots[data-diff='2'] {
+  --peek-diff-dot-color: var(--pack-ts-dot-2);
+}
+
+.peek-diff-dots[data-diff='3'] {
+  --peek-diff-dot-color: var(--pack-ts-dot-3);
+}
+
+.peek-diff-dot {
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--peek-diff-dot-color);
+}
+
+/* Compose interactive dots are <button> — reset UA chrome (game peek uses <span>). */
+button.peek-diff-dot {
+  padding: 0;
+  margin: 0;
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.peek-diff-dot:disabled {
+  cursor: default;
+}
+
+.peek-diff-dot--filled {
+  background: var(--peek-diff-dot-color);
+  border-color: var(--peek-diff-dot-color);
+}
+
+/* Soft difficulty word badge (peek + compose). */
+.peek-diff-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  background: var(--peek-badge-1-bg);
+  color: var(--peek-badge-1-fg);
+}
+
+.peek-diff-badge[data-diff='2'] {
+  background: var(--peek-badge-2-bg);
+  color: var(--peek-badge-2-fg);
+}
+
+.peek-diff-badge[data-diff='3'] {
+  background: var(--peek-badge-3-bg);
+  color: var(--peek-badge-3-fg);
+}
+
+.peek-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
 }

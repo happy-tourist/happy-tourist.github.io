@@ -56,7 +56,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(vueSrc).not.toMatch(/<q-chip/);
   });
 
-  it('SC-PACK-238: slots use peek-comparable chrome class and sizes', () => {
+  it('SC-PACK-238: slots keep compact labeled chrome (not peek portrait AR)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -70,12 +70,19 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(slots).toHaveLength(2);
     expect(slots[0]!.classes()).toContain('peek-slot-like');
     expect(slots[0]!.classes()).toContain('peek-slot-like--filled');
+    expect(slots[0]!.classes()).not.toContain('peek-slot-like--portrait');
     expect(slots[1]!.classes()).toContain('peek-slot-like');
     expect(slots[1]!.classes()).not.toContain('peek-slot-like--filled');
+    expect(slots[1]!.classes()).not.toContain('peek-slot-like--portrait');
+    // Empty list slots still show label text (carve-out vs unlabeled peek/compose).
+    expect(slots[1]!.text()).toMatch(/slotEmpty|пусто/i);
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-width:\s*72px/s);
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-height:\s*40px/s);
     expect(appScss).toMatch(/border:\s*2px\s+dashed/);
     expect(appScss).toMatch(/\.peek-slot-like--filled\s*\{[^}]*border-style:\s*solid/s);
+    // Portrait AR is a modifier for peek/compose only — not forced onto list tiles.
+    expect(appScss).toMatch(/\.peek-slot-like--portrait/);
+    expect(vueSrc).not.toMatch(/peek-slot-like--portrait/);
   });
 
   it('editable shows bottom full-width text Edit/Delete; body has no edit-on-click', async () => {

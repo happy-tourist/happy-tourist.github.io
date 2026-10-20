@@ -53,56 +53,88 @@
       </q-card>
     </q-dialog>
 
-    <!-- Shared peek modal — question, slots, pack answers (SC-BOARD-43/44/46). -->
+    <!-- Shared peek modal — dots+badge, portrait slots, mini-card pool (SC-BOARD-46/49/50…53). -->
     <q-dialog :model-value="Boolean(game.openPeek)" persistent>
-      <q-card class="peek-modal-card" style="min-width: min(420px, 92vw); max-width: 520px">
-        <q-card-section>
-          <div class="text-subtitle2 text-muted text-center q-mb-sm">
-            {{ $t('game.peekDifficulty', { n: game.openPeek?.difficulty ?? 0 }) }}
+      <q-card class="peek-modal-card peek-chrome">
+        <q-card-section class="peek-modal-body">
+          <div class="peek-diff-header" data-testid="peek-diff-header">
+            <div
+              class="peek-diff-dots"
+              :data-diff="String(peekDifficultyLevel)"
+              data-testid="peek-diff-dots"
+              aria-hidden="true"
+            >
+              <span
+                v-for="dotIndex in 3"
+                :key="`peek-dot-${dotIndex}`"
+                class="peek-diff-dot"
+                :class="{ 'peek-diff-dot--filled': dotIndex <= peekDifficultyLevel }"
+              />
+            </div>
+            <span
+              class="peek-diff-badge"
+              :data-diff="String(peekDifficultyLevel)"
+              data-testid="peek-diff-badge"
+            >
+              {{ peekDifficultyBadgeLabel }}
+            </span>
           </div>
-          <div class="text-body1 text-center q-mb-md">
+          <div class="peek-question" data-testid="peek-question">
             {{ game.openPeek?.question || $t('game.peekQuestionFallback') }}
           </div>
-          <div class="peek-slots row q-gutter-sm justify-center q-mb-md">
+          <div class="peek-slots" data-testid="peek-slots">
             <div
               v-for="(placement, slotIndex) in peekSlotPlacements"
               :key="`peek-slot-${slotIndex}`"
-              class="peek-slot"
+              class="peek-slot peek-slot--portrait"
               :class="{
                 'peek-slot--filled': Boolean(placement),
-                'peek-slot--interactive': isPeekOwner,
+                'peek-slot--interactive': isPeekOwner && Boolean(placement),
               }"
+              data-testid="peek-slot"
               @click="onPeekSlotClick(slotIndex)"
             >
-              <span v-if="placement" class="peek-slot__label">{{
-                answerCardLabel(placement)
-              }}</span>
-              <span v-else class="peek-slot__empty">{{ $t('game.peekSlotEmpty') }}</span>
+              <template v-if="placement">
+                <span class="peek-slot__label">{{ answerCardPrimary(placement) }}</span>
+                <span v-if="answerCardDescription(placement)" class="peek-slot__secondary">
+                  {{ answerCardDescription(placement) }}
+                </span>
+              </template>
             </div>
           </div>
-          <div class="peek-answers row q-gutter-sm justify-center">
-            <q-chip
+          <div class="peek-answer-pool" data-testid="peek-answer-pool">
+            <div
               v-for="card in game.answerCards"
               :key="`peek-ans-${card.id}`"
-              :clickable="isPeekOwner"
-              outline
-              :disable="!isPeekOwner"
+              class="peek-answer-mini"
+              :class="{ 'peek-answer-mini--readonly': !isPeekOwner }"
               data-testid="peek-answer-chip"
               @click="onPeekAnswerClick(card.id)"
             >
-              {{ card.content || card.id }}
-            </q-chip>
+              <span class="peek-answer-mini__primary">{{ card.content || card.id }}</span>
+              <span v-if="card.description" class="peek-answer-mini__secondary">
+                {{ card.description }}
+              </span>
+            </div>
           </div>
         </q-card-section>
-        <q-card-actions v-if="isPeekOwner" align="right">
+        <q-card-actions v-if="isPeekOwner" class="peek-modal-actions">
           <q-btn
+            class="peek-submit-btn full-width"
             color="primary"
+            unelevated
+            no-caps
             :label="$t('game.peekSubmit')"
             :disable="!canSubmitPeek"
+            data-testid="peek-submit"
             @click="submitPeek"
           />
         </q-card-actions>
-        <q-card-section v-else class="text-caption text-center text-muted q-pt-none">
+        <q-card-section
+          v-else
+          class="peek-spectator-hint text-caption text-center text-muted"
+          data-testid="peek-spectator-hint"
+        >
           {{ $t('game.peekSpectatorHint') }}
         </q-card-section>
       </q-card>
@@ -1284,6 +1316,20 @@ const canShowPeekAffordance = computed(() => {
 
 const peekSlotPlacements = computed((): string[] => game.openPeek?.placements ?? []);
 
+/** Bound difficulty 1|2|3 for dots + badge tint (SC-BOARD-50). */
+const peekDifficultyLevel = computed((): 1 | 2 | 3 => {
+  const n = game.openPeek?.difficulty;
+  return n === 1 || n === 2 || n === 3 ? n : 1;
+});
+
+/** Word badge `Сложность: лёгкая|средняя|сложная` — not digit-only (SC-BOARD-50). */
+const peekDifficultyBadgeLabel = computed(() => {
+  const level = peekDifficultyLevel.value;
+  return t('game.peekDifficultyBadge', {
+    word: t(`content.difficultyWord.${level}`),
+  });
+});
+
 const canSubmitPeek = computed(() => {
   if (!isPeekOwner.value || !game.openPeek) {
     return false;
@@ -1293,9 +1339,17 @@ const canSubmitPeek = computed(() => {
   );
 });
 
-function answerCardLabel(answerCardId: string): string {
-  const card = game.answerCards.find((c) => c.id === answerCardId);
+function answerCardById(answerCardId: string) {
+  return game.answerCards.find((c) => c.id === answerCardId);
+}
+
+function answerCardPrimary(answerCardId: string): string {
+  const card = answerCardById(answerCardId);
   return card?.content || answerCardId;
+}
+
+function answerCardDescription(answerCardId: string): string {
+  return answerCardById(answerCardId)?.description ?? '';
 }
 
 function firstEmptyPeekSlot(): number {
@@ -3883,9 +3937,64 @@ body.body--dark .say-picker {
   z-index: 1;
 }
 
-/* Slot chrome lives in app.scss (`.peek-slot` / `--filled` / label) — shared with editor tiles. */
+/* Peek modal layout (SC-BOARD-50…53); slot/pool/dot chrome in app.scss. */
+.peek-modal-card {
+  width: min(380px, 92vw);
+  max-width: min(400px, 92vw);
+  border-radius: 18px;
+}
+
+.peek-modal-body {
+  /* Visual Spec modal pad 16–20; bottom air lives in actions / spectator hint. */
+  padding: 16px 18px 0;
+}
+
+.peek-diff-header {
+  margin-bottom: 12px;
+}
+
+.peek-question {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--pack-card-fg);
+  margin: 0 0 14px;
+}
+
 .peek-slots {
-  min-height: 48px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 14px;
+  min-height: 0;
+}
+
+.peek-answer-pool {
+  margin: 0 0 4px;
+}
+
+.peek-modal-actions {
+  /* pool → submit rhythm 12–16 (+ pool mb 4 ≈ 16). */
+  padding: 12px 18px 16px;
+}
+
+.peek-submit-btn {
+  width: 100%;
+  min-height: 28px;
+  height: var(--pack-card-action-h, 30px);
+  max-height: 36px;
+  /* Spec pad 0 0.4–0.8rem + pack-action slim chrome (strip Quasar default pad). */
+  padding: 0 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.peek-spectator-hint {
+  padding: 4px 18px 16px;
 }
 
 /* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */

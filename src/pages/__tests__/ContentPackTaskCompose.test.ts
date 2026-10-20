@@ -167,16 +167,6 @@ const stubs = {
     emits: ['update:modelValue'],
     template: '<div class="q-select-stub" />',
   },
-  'q-chip': {
-    props: {
-      disable: Boolean,
-      outline: Boolean,
-      clickable: Boolean,
-      color: String,
-    },
-    template:
-      '<button type="button" class="q-chip-stub" :disabled="disable" :data-outline="outline ? \'true\' : \'false\'" :data-color="color || \'\'" :data-clickable="clickable ? \'true\' : \'false\'" data-testid="task-compose-answer-chip" @click="$emit(\'click\')"><slot /></button>',
-  },
   'q-space': true,
   'q-dialog': {
     props: ['modelValue'],
@@ -306,7 +296,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(wrapper.find('[data-testid="task-compose-question"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-260: dialog has centered slots + chip pool, not playing-card picker', async () => {
+  it('SC-PACK-260/237: dialog has centered portrait slots + mini-card pool, not playing-card picker', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -315,20 +305,117 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
 
     const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
     expect(dialog.exists()).toBe(true);
+    expect(dialog.classes()).toContain('peek-chrome');
 
     const row = dialog.find('[data-testid="compose-slot-row"]');
     expect(row.exists()).toBe(true);
     expect(row.classes()).toContain('peek-slot-like-row');
     expect(row.classes()).toContain('justify-center');
-    expect(row.find('[data-testid="peek-slot-like"]').exists()).toBe(true);
+    const slots = row.findAll('[data-testid="peek-slot-like"]');
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots[0]!.classes()).toContain('peek-slot-like--portrait');
+    // Empty compose slots: unlabeled (no slotEmpty / СЛОТ copy).
+    expect(slots[0]!.text().trim()).toBe('');
 
     const pool = dialog.find('[data-testid="task-compose-answer-pool"]');
     expect(pool.exists()).toBe(true);
-    expect(pool.classes()).toContain('peek-answers');
-    expect(pool.findAll('[data-testid="task-compose-answer-chip"]').length).toBeGreaterThan(0);
+    expect(pool.classes()).toContain('peek-answer-pool');
+    const cards = pool.findAll('[data-testid="task-compose-answer-chip"]');
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((c) => c.classes().includes('peek-answer-mini'))).toBe(true);
+    expect(cards[0]!.find('.peek-answer-mini__primary').text()).toContain('Paris');
+    expect(cards[0]!.find('.peek-answer-mini__secondary').text()).toContain('Capital');
 
     expect(dialog.find('[data-testid="slot-picker-grid"]').exists()).toBe(false);
     expect(dialog.find('.pack-answer-tile-stub').exists()).toBe(false);
+    expect(dialog.find('.q-select-stub').exists()).toBe(false);
+  });
+
+  it('SC-PACK-276: difficulty dots preview on hover and commit on click; model stays 1|2|3', async () => {
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    const dotsHost = dialog.find('[data-testid="task-compose-difficulty"]');
+    expect(dotsHost.exists()).toBe(true);
+    expect(dotsHost.attributes('data-diff')).toBe('1');
+
+    const dots = dialog.findAll('[data-testid="compose-diff-dot"]');
+    expect(dots).toHaveLength(3);
+    expect(dots.filter((d) => d.classes().includes('peek-diff-dot--filled'))).toHaveLength(1);
+
+    const badge = dialog.find('[data-testid="compose-diff-badge"]');
+    expect(badge.exists()).toBe(true);
+    expect(badge.attributes('data-diff')).toBe('1');
+    expect(badge.text()).toBe('content.difficultyBadge');
+    expect(badge.text()).not.toMatch(/^1$/);
+    expect(badge.text()).not.toBe('content.difficulty.1');
+
+    // Hover third dot → preview filled 1…3 in hard color (data-diff=3).
+    await dots[2]!.trigger('mouseenter');
+    await flushPromises();
+    expect(dotsHost.attributes('data-diff')).toBe('3');
+    expect(dots.filter((d) => d.classes().includes('peek-diff-dot--filled'))).toHaveLength(3);
+
+    await dots[2]!.trigger('mouseleave');
+    await flushPromises();
+    expect(dotsHost.attributes('data-diff')).toBe('1');
+
+    // Click second → commit difficulty 2; badge tracks committed value.
+    await dots[1]!.trigger('click');
+    await flushPromises();
+    expect(dotsHost.attributes('data-diff')).toBe('2');
+    expect(dots.filter((d) => d.classes().includes('peek-diff-dot--filled'))).toHaveLength(2);
+    expect(badge.attributes('data-diff')).toBe('2');
+  });
+
+  it('SC-PACK-277: empty slots unlabeled; pool scrolls past 4×4 via CSS contract', async () => {
+    const manyCards = Array.from({ length: 17 }, (_, i) => ({
+      id: `c${i + 1}`,
+      content: `Answer ${i + 1}`,
+      description: i === 0 ? 'desc' : '',
+    }));
+    contentState.draft = {
+      ...structuredClone(draftBody),
+      answerCards: manyCards,
+    };
+    loadDraft.mockResolvedValue({
+      pack: contentState.pack,
+      draft: contentState.draft,
+    });
+
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    const emptySlots = dialog
+      .findAll('[data-testid="peek-slot-like"]')
+      .filter((s) => !s.classes().includes('peek-slot-like--filled'));
+    for (const slot of emptySlots) {
+      expect(slot.classes()).toContain('peek-slot-like--portrait');
+      expect(slot.text().trim()).toBe('');
+      expect(slot.text()).not.toMatch(/slotEmpty|Слот/i);
+    }
+
+    const pool = dialog.find('[data-testid="task-compose-answer-pool"]');
+    expect(pool.classes()).toContain('peek-answer-pool');
+    expect(pool.findAll('[data-testid="task-compose-answer-chip"]')).toHaveLength(17);
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*container-type:\s*inline-size/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*100cqw/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*max-height:/s);
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(appScss).toMatch(/\.peek-answer-mini\s*\{[^}]*aspect-ratio:\s*156\s*\/\s*206/s);
   });
 
   it('SC-PACK-262: CSV stays on the page above the list, outside the dialog', async () => {
@@ -361,7 +448,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(wrapper.find('[data-testid="task-compose-dialog"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-263: same answer card fills multiple slots; chip stays available without used chrome', async () => {
+  it('SC-PACK-263: same answer card fills multiple slots; pool mini-card stays available without used chrome', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -377,25 +464,26 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     let slots = dialog.findAll('[data-testid="peek-slot-like"]');
     expect(slots.length).toBeGreaterThanOrEqual(2);
 
-    const chips = dialog.findAll('[data-testid="task-compose-answer-chip"]');
-    const parisChip = chips.find((c) => c.text().includes('Paris'));
-    expect(parisChip).toBeTruthy();
+    const poolCards = dialog.findAll('[data-testid="task-compose-answer-chip"]');
+    const parisCard = poolCards.find((c) => c.text().includes('Paris'));
+    expect(parisCard).toBeTruthy();
 
-    await parisChip!.trigger('click');
+    await parisCard!.trigger('click');
     await flushPromises();
-    await parisChip!.trigger('click');
+    await parisCard!.trigger('click');
     await flushPromises();
 
     slots = dialog.findAll('[data-testid="peek-slot-like"]');
-    const filledLabels = slots
-      .filter((s) => s.classes().includes('peek-slot-like--filled'))
-      .map((s) => s.text());
-    expect(filledLabels.filter((t) => t.includes('Paris')).length).toBeGreaterThanOrEqual(2);
+    const filled = slots.filter((s) => s.classes().includes('peek-slot-like--filled'));
+    expect(filled.filter((s) => s.text().includes('Paris')).length).toBeGreaterThanOrEqual(2);
+    expect(filled.every((s) => s.classes().includes('peek-slot-like--portrait'))).toBe(true);
+    // Secondary description on filled slot when present.
+    expect(filled.some((s) => s.find('.peek-slot-like__secondary').exists())).toBe(true);
 
-    expect(parisChip!.attributes('disabled')).toBeUndefined();
-    expect(parisChip!.attributes('data-outline')).toBe('true');
-    expect(parisChip!.attributes('data-color')).toBe('');
-    expect(parisChip!.attributes('data-clickable')).toBe('true');
+    expect(parisCard!.classes()).toContain('peek-answer-mini');
+    expect(parisCard!.classes()).not.toContain('peek-answer-mini--used');
+    expect(parisCard!.classes()).not.toContain('peek-answer-mini--readonly');
+    expect(parisCard!.classes()).not.toContain('disabled');
   });
 });
 
@@ -447,7 +535,7 @@ describe('ContentPackAddTaskSetPage compose (SC-PACK-261 + dialog)', () => {
     vi.clearAllMocks();
   });
 
-  it('SC-PACK-261: no top live-answer-card-grid; chips available in dialog', async () => {
+  it('SC-PACK-261: no top live-answer-card-grid; mini-cards available in dialog', async () => {
     const wrapper = mountAddTaskSet();
     await flushPromises();
 

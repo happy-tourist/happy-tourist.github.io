@@ -1,7 +1,11 @@
 <template>
   <q-dialog :model-value="modelValue" @update:model-value="onOpenChange" @hide="onHide">
-    <q-card style="min-width: min(420px, 92vw); max-width: 560px" data-testid="task-compose-dialog">
-      <q-card-section>
+    <q-card
+      class="peek-chrome pack-task-compose-card"
+      style="min-width: min(360px, 92vw); max-width: min(400px, 92vw)"
+      data-testid="task-compose-dialog"
+    >
+      <q-card-section class="q-pb-none">
         <div class="text-h6">
           {{ editing ? $t('content.editTask') : $t('content.addTask') }}
         </div>
@@ -17,18 +21,42 @@
             data-testid="task-compose-question"
             @update:model-value="emit('update:question', String($event ?? ''))"
           />
-          <q-select
-            :model-value="difficulty"
-            :options="difficultyOptions"
-            emit-value
-            map-options
-            outlined
-            dense
-            :label="$t('content.difficultyLabel')"
-            :disable="readOnly"
-            data-testid="task-compose-difficulty"
-            @update:model-value="emit('update:difficulty', $event as Difficulty)"
-          />
+
+          <!-- SC-PACK-276: interactive dots + word badge (model stays 1|2|3). -->
+          <div class="peek-diff-header" data-testid="compose-diff-header">
+            <div
+              class="peek-diff-dots"
+              :data-diff="String(displayDifficulty)"
+              data-testid="task-compose-difficulty"
+              role="group"
+              :aria-label="$t('content.difficultyLabel')"
+            >
+              <button
+                v-for="dotIndex in 3"
+                :key="`compose-dot-${dotIndex}`"
+                type="button"
+                class="peek-diff-dot"
+                :class="{ 'peek-diff-dot--filled': dotIndex <= displayDifficulty }"
+                :disabled="readOnly"
+                :aria-label="difficultyDotAria(dotIndex as Difficulty)"
+                :aria-pressed="difficulty === dotIndex"
+                data-testid="compose-diff-dot"
+                @mouseenter="onDotPreview(dotIndex as Difficulty)"
+                @mouseleave="onDotPreviewClear"
+                @focus="onDotPreview(dotIndex as Difficulty)"
+                @blur="onDotPreviewClear"
+                @click="onDotCommit(dotIndex as Difficulty)"
+              />
+            </div>
+            <span
+              class="peek-diff-badge"
+              :data-diff="String(difficulty)"
+              data-testid="compose-diff-badge"
+            >
+              {{ difficultyBadgeLabel }}
+            </span>
+          </div>
+
           <div class="row items-center q-mb-xs">
             <div class="text-caption">{{ $t('content.slots') }}</div>
             <q-space />
@@ -51,12 +79,13 @@
               @click="addSlot"
             />
           </div>
-          <!-- SC-PACK-260/237: centered peek-slot-like row (justify-center like GamePage .peek-slots) -->
+
+          <!-- SC-PACK-237/260/277: centered portrait unlabeled slots (peek parity). -->
           <div class="peek-slot-like-row justify-center q-mb-sm" data-testid="compose-slot-row">
             <div
               v-for="slot in formSlots"
               :key="slot.id"
-              class="peek-slot-like"
+              class="peek-slot-like peek-slot-like--portrait"
               :class="{
                 'peek-slot-like--filled': Boolean(slot.answerCardId),
                 'peek-slot-like--interactive': !readOnly && Boolean(slot.answerCardId),
@@ -64,29 +93,34 @@
               data-testid="peek-slot-like"
               @click="slot.answerCardId && clearSlot(slot)"
             >
-              <span v-if="slot.answerCardId" class="peek-slot-like__label">{{
-                slotLabel(slot)
-              }}</span>
-              <span v-else class="peek-slot-like__empty">{{ slotLabel(slot) }}</span>
+              <template v-if="slot.answerCardId">
+                <span class="peek-slot-like__label">{{ slotPrimary(slot) }}</span>
+                <span v-if="slotSecondary(slot)" class="peek-slot-like__secondary">
+                  {{ slotSecondary(slot) }}
+                </span>
+              </template>
             </div>
           </div>
-          <!-- SC-PACK-260: chip pool like GamePage .peek-answers — not PackAnswerCardTile / slot-picker-grid -->
-          <div
-            class="peek-answers row q-gutter-sm justify-center"
-            data-testid="task-compose-answer-pool"
-          >
-            <q-chip
+
+          <!-- SC-PACK-260/263/277: mini-card pool ≤4×4 scroll — not catalog tiles / flat chips. -->
+          <div class="peek-answer-pool" data-testid="task-compose-answer-pool">
+            <div
               v-for="card in answerCards"
               :key="card.id"
-              :clickable="!readOnly && Boolean(card.content.trim())"
-              outline
-              :disable="readOnly || !card.content.trim()"
+              class="peek-answer-mini"
+              :class="{
+                'peek-answer-mini--readonly': readOnly || !card.content.trim(),
+              }"
               data-testid="task-compose-answer-chip"
               @click="pickAnswer(card.id)"
             >
-              {{ card.content || card.id }}
-            </q-chip>
+              <span class="peek-answer-mini__primary">{{ card.content || card.id }}</span>
+              <span v-if="card.description" class="peek-answer-mini__secondary">
+                {{ card.description }}
+              </span>
+            </div>
           </div>
+
           <q-card-actions align="right" class="q-pa-none">
             <q-btn flat :label="$t('content.cancelEditTask')" @click="onCancel" />
             <q-btn
@@ -109,7 +143,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { newLocalId, type Difficulty, type TaskSlot } from '@/stores/content';
@@ -150,18 +184,44 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const difficultyOptions = computed(() =>
-  ([1, 2, 3] as Difficulty[]).map((value) => ({
-    label: t(`content.difficulty.${value}`),
-    value,
-  })),
+/** Hover/focus preview of difficulty K; null = resting committed value. */
+const previewDifficulty = ref<Difficulty | null>(null);
+
+const displayDifficulty = computed((): Difficulty => previewDifficulty.value ?? props.difficulty);
+
+const difficultyBadgeLabel = computed(() =>
+  t('content.difficultyBadge', {
+    word: t(`content.difficultyWord.${props.difficulty}`),
+  }),
 );
+
+function difficultyDotAria(level: Difficulty) {
+  return t('content.difficultyBadge', {
+    word: t(`content.difficultyWord.${level}`),
+  });
+}
+
+function onDotPreview(level: Difficulty) {
+  if (props.readOnly) return;
+  previewDifficulty.value = level;
+}
+
+function onDotPreviewClear() {
+  previewDifficulty.value = null;
+}
+
+function onDotCommit(level: Difficulty) {
+  if (props.readOnly) return;
+  previewDifficulty.value = null;
+  emit('update:difficulty', level);
+}
 
 function onOpenChange(value: boolean) {
   emit('update:modelValue', value);
 }
 
 function onHide() {
+  previewDifficulty.value = null;
   emit('hide');
 }
 
@@ -170,16 +230,21 @@ function onCancel() {
   emit('cancel');
 }
 
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId) {
-    return t('content.slotEmpty');
-  }
-  const card = props.answerCards.find((c) => c.id === slot.answerCardId);
-  if (card) {
-    const text = card.content?.trim();
-    if (text) return text;
-  }
+function cardForSlot(slot: TaskSlot) {
+  if (!slot.answerCardId) return undefined;
+  return props.answerCards.find((c) => c.id === slot.answerCardId);
+}
+
+function slotPrimary(slot: TaskSlot) {
+  const card = cardForSlot(slot);
+  const text = card?.content?.trim();
+  if (text) return text;
   return t('content.slotFilled');
+}
+
+function slotSecondary(slot: TaskSlot) {
+  const desc = cardForSlot(slot)?.description?.trim();
+  return desc || '';
 }
 
 function addSlot() {
@@ -202,6 +267,8 @@ function clearSlot(slot: TaskSlot) {
 
 function pickAnswer(cardId: string) {
   if (props.readOnly) return;
+  const card = props.answerCards.find((c) => c.id === cardId);
+  if (!card?.content.trim()) return;
   const idx = props.formSlots.findIndex((s) => !s.answerCardId);
   if (idx < 0) return;
   emit(
@@ -210,3 +277,14 @@ function pickAnswer(cardId: string) {
   );
 }
 </script>
+
+<style scoped>
+.pack-task-compose-card {
+  border-radius: 18px;
+}
+
+/* Dim empty/disabled pool cards; pointer-events from global `.peek-answer-mini--readonly`. */
+.peek-answer-mini--readonly {
+  opacity: 0.55;
+}
+</style>

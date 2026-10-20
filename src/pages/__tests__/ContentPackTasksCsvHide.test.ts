@@ -216,12 +216,15 @@ describe('ContentPackTasksPage CSV hide (SC-PACK-235/236)', () => {
 });
 
 describe('compose slot chrome (SC-PACK-237)', () => {
-  it('task compose dialog uses peek-slot-like chrome with peek sizes (not page-level slot-picker-grid)', () => {
+  it('task compose dialog uses portrait peek-slot-like + mini-card pool (not page-level slot-picker-grid)', () => {
     expect(composeDialogSrc).toMatch(/data-testid="compose-slot-row"/);
     expect(composeDialogSrc).toMatch(/peek-slot-like/);
+    expect(composeDialogSrc).toMatch(/peek-slot-like--portrait/);
     expect(composeDialogSrc).toMatch(/peek-slot-like--filled/);
     expect(composeDialogSrc).toMatch(/justify-center/);
+    expect(composeDialogSrc).toMatch(/peek-answer-pool/);
     expect(composeDialogSrc).toMatch(/task-compose-answer-pool/);
+    expect(composeDialogSrc).toMatch(/peek-answer-mini/);
     expect(composeDialogSrc).not.toMatch(/data-testid="slot-picker-grid"/);
     expect(composeDialogSrc).not.toMatch(/<PackAnswerCardTile/);
     expect(tasksPageSrc).not.toMatch(/data-testid="slot-picker-grid"/);
@@ -230,6 +233,7 @@ describe('compose slot chrome (SC-PACK-237)', () => {
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-width:\s*72px/s);
     expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-height:\s*40px/s);
     expect(appScss).toMatch(/\.peek-slot-like--filled\s*\{[^}]*border-style:\s*solid/s);
+    expect(appScss).toMatch(/\.peek-slot-like--portrait/);
   });
 
   it('staff Edit: slot chrome appears inside open task compose dialog', async () => {
