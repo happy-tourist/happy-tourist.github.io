@@ -260,9 +260,9 @@ const stubs = {
     template: '<div class="pack-answer-tile-stub">{{ content }} {{ description }}</div>',
   },
   PackTaskTile: {
-    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    props: ['question', 'difficulty', 'filledSlots', 'editable', 'cascadeGap', 'fallbackQuestion'],
     template:
-      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
+      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in filledSlots" :key="i">{{ s.content }}</span></div>',
   },
   PackListCardTile: false,
   PackTaskSetCardTile: false,

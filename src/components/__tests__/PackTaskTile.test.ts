@@ -14,10 +14,6 @@ const stubs = {
     template:
       '<button type="button" v-bind="$attrs" :class="$attrs.class" @click="$emit(\'click\')">{{ label }}<slot /></button>',
   },
-  'q-badge': {
-    template: '<span class="q-badge-stub" v-bind="$attrs"><slot /></span>',
-  },
-  'q-tooltip': { template: '<span><slot /></span>' },
 };
 
 const vueSrc = readFileSync(
@@ -29,60 +25,85 @@ const appScss = readFileSync(
   'utf8',
 );
 
-describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
-  it('shows question, difficulty top-left, and peek-slot-like slots in a row', () => {
+describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
+  it('shows question, dots+word badge header, and portrait filled slots (SC-PACK-223/278)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Capital of France?',
         difficulty: 2,
-        slotLabels: ['Paris', 'Lyon'],
+        filledSlots: [{ content: 'Paris' }, { content: 'Lyon', description: 'city' }],
       },
       global: { stubs },
     });
 
     expect(wrapper.find('[data-testid="pack-task-tile"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Capital of France?');
-    expect(wrapper.find('[data-testid="pack-task-tile-difficulty"]').text()).toContain('2');
-    expect(wrapper.find('.pack-task-tile__slots').text()).toContain('Paris');
-    expect(wrapper.find('.pack-task-tile__slots').text()).toContain('Lyon');
-    expect(wrapper.find('.pack-task-tile__body').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-tile-difficulty"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-tile-diff-badge"]').text()).toBe(
+      'content.difficultyWord.2',
+    );
+    expect(wrapper.findAll('.peek-diff-dot')).toHaveLength(3);
+    expect(wrapper.findAll('.peek-diff-dot--filled')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="pack-task-tile-slots"]').text()).toContain('Paris');
+    expect(wrapper.find('[data-testid="pack-task-tile-slots"]').text()).toContain('Lyon');
+    expect(wrapper.find('[data-testid="pack-task-tile-slots"]').text()).toContain('city');
     expect(wrapper.findAll('.pack-task-tile__slot')).toHaveLength(2);
     expect(wrapper.findAll('[data-testid="peek-slot-like"]')).toHaveLength(2);
     expect(wrapper.findAll('[data-testid="peek-slot-like"]')[0]!.classes()).toContain(
+      'peek-slot-like--portrait',
+    );
+    expect(wrapper.findAll('[data-testid="peek-slot-like"]')[0]!.classes()).toContain(
       'peek-slot-like--filled',
     );
-    expect(vueSrc).toMatch(/\.pack-task-tile__slot-list\s*\{[^}]*flex-direction:\s*row/s);
-    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*border-left:/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*overflow-x:\s*auto/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*flex-wrap:\s*nowrap/s);
+    // Portrait minis must not flex-shrink — otherwise overflow-x never scrolls (SC-PACK-278).
+    expect(vueSrc).toMatch(/\.pack-task-tile__slot\s*\{[^}]*flex-shrink:\s*0/s);
+    expect(vueSrc).not.toMatch(/border-left:/);
+    expect(vueSrc).not.toMatch(/<q-badge/);
+    expect(vueSrc).not.toMatch(/content\.difficulty\./);
     expect(vueSrc).not.toMatch(/<q-chip/);
   });
 
-  it('SC-PACK-238: slots keep compact labeled chrome (not peek portrait AR)', () => {
+  it('SC-PACK-238: filled slots use peek portrait mini-card chrome; empty omitted', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
         difficulty: 1,
-        slotLabels: ['A', 'content.slotEmpty'],
+        filledSlots: [{ content: 'A' }],
       },
       global: { stubs },
     });
 
     const slots = wrapper.findAll('[data-testid="peek-slot-like"]');
-    expect(slots).toHaveLength(2);
+    expect(slots).toHaveLength(1);
     expect(slots[0]!.classes()).toContain('peek-slot-like');
     expect(slots[0]!.classes()).toContain('peek-slot-like--filled');
-    expect(slots[0]!.classes()).not.toContain('peek-slot-like--portrait');
-    expect(slots[1]!.classes()).toContain('peek-slot-like');
-    expect(slots[1]!.classes()).not.toContain('peek-slot-like--filled');
-    expect(slots[1]!.classes()).not.toContain('peek-slot-like--portrait');
-    // Empty list slots still show label text (carve-out vs unlabeled peek/compose).
-    expect(slots[1]!.text()).toMatch(/slotEmpty|пусто/i);
-    expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-width:\s*72px/s);
-    expect(appScss).toMatch(/\.peek-slot-like\s*\{[^}]*min-height:\s*40px/s);
-    expect(appScss).toMatch(/border:\s*2px\s+dashed/);
-    expect(appScss).toMatch(/\.peek-slot-like--filled\s*\{[^}]*border-style:\s*solid/s);
-    // Portrait AR is a modifier for peek/compose only — not forced onto list tiles.
+    expect(slots[0]!.classes()).toContain('peek-slot-like--portrait');
+    expect(wrapper.text()).not.toMatch(/slotEmpty|пусто/i);
     expect(appScss).toMatch(/\.peek-slot-like--portrait/);
-    expect(vueSrc).not.toMatch(/peek-slot-like--portrait/);
+    expect(appScss).toMatch(
+      /\.peek-slot-like--portrait\.peek-slot-like--filled[\s\S]*?border:\s*1px\s+solid\s+#1976d2/s,
+    );
+    expect(vueSrc).toMatch(/peek-slot-like--portrait/);
+  });
+
+  it('SC-PACK-278: zero filled slots omits slots row and slotEmpty body copy', () => {
+    const wrapper = mount(PackTaskTile, {
+      props: {
+        question: 'Q?',
+        difficulty: 3,
+        filledSlots: [],
+        editable: false,
+      },
+      global: { stubs },
+    });
+
+    expect(wrapper.find('[data-testid="pack-task-tile-slots"]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-testid="peek-slot-like"]')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain('content.slotEmpty');
+    expect(wrapper.find('[data-testid="pack-task-tile-edit"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="pack-task-tile-delete"]').exists()).toBe(false);
   });
 
   it('editable shows bottom full-width text Edit/Delete; body has no edit-on-click', async () => {
@@ -90,7 +111,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
       props: {
         question: 'Q?',
         difficulty: 1,
-        slotLabels: ['A'],
+        filledSlots: [{ content: 'A' }],
         editable: true,
       },
       global: { stubs },
@@ -106,6 +127,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(wrapper.find('.pack-task-tile__actions').exists()).toBe(true);
     expect(vueSrc).not.toMatch(/icon=["']edit["']/);
     expect(vueSrc).not.toMatch(/icon=["']delete["']/);
+    expect(vueSrc).toMatch(/--pack-card-action-h/);
 
     await wrapper.trigger('click');
     expect(wrapper.emitted('edit')).toBeUndefined();
@@ -114,53 +136,38 @@ describe('PackTaskTile (SC-PACK-223/224/226/227)', () => {
     expect(wrapper.emitted('edit')).toHaveLength(1);
   });
 
-  it('read-only omits edit/delete controls', () => {
-    const wrapper = mount(PackTaskTile, {
-      props: {
-        question: 'Q?',
-        difficulty: 3,
-        slotLabels: [],
-        editable: false,
-      },
-      global: { stubs },
-    });
-
-    expect(wrapper.find('[data-testid="pack-task-tile-edit"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="pack-task-tile-delete"]').exists()).toBe(false);
-    expect(wrapper.text()).toContain('content.slotEmpty');
-  });
-
-  it('uses fixed 300×200 size (SC-PACK-226)', () => {
+  it('uses portrait pack-card size (SC-PACK-226) — not fixed 300×200', () => {
     mount(PackTaskTile, {
       props: {
         question: 'Q?',
         difficulty: 1,
-        slotLabels: ['A'],
+        filledSlots: [{ content: 'A' }],
       },
       global: { stubs },
     });
 
-    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*width:\s*300px/s);
-    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*height:\s*200px/s);
-    expect(vueSrc).toMatch(/font-size:\s*1\.75rem/);
+    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*width:\s*168px/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*min-height:\s*206px/s);
+    expect(vueSrc).not.toMatch(/width:\s*300px/);
+    expect(vueSrc).not.toMatch(/height:\s*200px/);
+    expect(vueSrc).toMatch(/font-size:\s*14px/);
   });
 
-  it('sets explicit light/dark bg, text, and edit control colors (SC-PACK-227)', () => {
+  it('sets pack-card surface + edit control colors (SC-PACK-227)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
         difficulty: 1,
-        slotLabels: ['A'],
+        filledSlots: [{ content: 'A' }],
         editable: true,
       },
       global: { stubs },
     });
 
     expect(wrapper.find('.pack-task-tile__edit-btn').exists()).toBe(true);
-    expect(vueSrc).toMatch(/--pack-tile-bg:\s*#ffffff/);
-    expect(vueSrc).toMatch(/--pack-tile-fg:\s*rgba\(0,\s*0,\s*0/);
-    expect(vueSrc).toMatch(/\.body--dark\s+\.pack-task-tile\s*\{[^}]*--pack-tile-bg:\s*#2a2a2a/s);
-    expect(vueSrc).toMatch(/\.body--dark\s+\.pack-task-tile\s*\{[^}]*--pack-tile-fg:\s*rgba\(255/s);
+    expect(vueSrc).toMatch(/background:\s*var\(--pack-card-bg\)/);
+    expect(vueSrc).toMatch(/color:\s*var\(--pack-card-fg\)/);
+    expect(vueSrc).toMatch(/border:\s*1px\s+solid\s+var\(--pack-card-border\)/);
     expect(vueSrc).toMatch(/\.pack-task-tile__edit-btn\s*\{[^}]*color:\s*var\(--pack-tile-edit\)/s);
     expect(vueSrc).not.toMatch(/var\(--q-card-background/);
   });

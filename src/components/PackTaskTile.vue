@@ -4,35 +4,41 @@
     :class="{ 'pack-task-tile--cascade': cascadeGap }"
     :data-testid="testId || 'pack-task-tile'"
   >
-    <q-badge
-      class="pack-task-tile__difficulty"
-      color="primary"
-      outline
-      :aria-label="difficultyLabel"
-      data-testid="pack-task-tile-difficulty"
-    >
-      {{ difficulty }}
-      <q-tooltip>{{ difficultyLabel }}</q-tooltip>
-    </q-badge>
-
-    <div class="pack-task-tile__body">
-      <div class="pack-task-tile__question">
-        {{ question.trim() || fallbackQuestion }}
+    <!-- SC-PACK-278: peek-like dots left + word badge center (not digit outline). -->
+    <div class="peek-diff-header pack-task-tile__header" data-testid="pack-task-tile-difficulty">
+      <div class="peek-diff-dots" :data-diff="String(difficulty)" aria-hidden="true">
+        <span
+          v-for="dotIndex in 3"
+          :key="`task-tile-dot-${dotIndex}`"
+          class="peek-diff-dot"
+          :class="{ 'peek-diff-dot--filled': dotIndex <= difficulty }"
+        />
       </div>
-      <div class="pack-task-tile__slots">
-        <div v-if="slotLabels.length" class="pack-task-tile__slot-list">
-          <div
-            v-for="(label, i) in slotLabels"
-            :key="i"
-            class="peek-slot-like pack-task-tile__slot"
-            :class="{ 'peek-slot-like--filled': isSlotFilled(label) }"
-            data-testid="peek-slot-like"
-          >
-            <span v-if="isSlotFilled(label)" class="peek-slot-like__label">{{ label }}</span>
-            <span v-else class="peek-slot-like__empty">{{ label || emptySlotLabel }}</span>
-          </div>
-        </div>
-        <div v-else class="text-muted">{{ $t('content.slotEmpty') }}</div>
+      <span
+        class="peek-diff-badge"
+        :data-diff="String(difficulty)"
+        :aria-label="difficultyBadgeLabel"
+        data-testid="pack-task-tile-diff-badge"
+      >
+        {{ difficultyBadgeLabel }}
+      </span>
+    </div>
+
+    <div class="pack-task-tile__question">
+      {{ question.trim() || fallbackQuestion }}
+    </div>
+
+    <div v-if="filledSlots.length" class="pack-task-tile__slots" data-testid="pack-task-tile-slots">
+      <div
+        v-for="(slot, i) in filledSlots"
+        :key="i"
+        class="peek-slot-like peek-slot-like--portrait peek-slot-like--filled pack-task-tile__slot"
+        data-testid="peek-slot-like"
+      >
+        <span class="peek-slot-like__label">{{ slot.content }}</span>
+        <span v-if="slot.description" class="peek-slot-like__secondary">
+          {{ slot.description }}
+        </span>
       </div>
     </div>
 
@@ -64,14 +70,15 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import type { TaskFilledSlot } from '@/lib/taskFilledSlots';
 import type { Difficulty } from '@/stores/content';
 
 const props = withDefaults(
   defineProps<{
     question: string;
     difficulty: Difficulty;
-    /** Resolved answer-card content texts for slots (empty string → slotEmpty). */
-    slotLabels: string[];
+    /** Filled answer slots only — empty answerCardId omitted by parents. */
+    filledSlots: TaskFilledSlot[];
     editable?: boolean;
     cascadeGap?: boolean;
     /** Optional override when question is blank (e.g. «Задание N»). */
@@ -92,49 +99,32 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const difficultyLabel = computed(() => t(`content.difficulty.${props.difficulty}`));
-const emptySlotLabel = computed(() => t('content.slotEmpty'));
-
-/** Filled when parent passed non-empty content (not slotEmpty key/copy). */
-function isSlotFilled(label: string): boolean {
-  const trimmed = label.trim();
-  return Boolean(trimmed) && trimmed !== emptySlotLabel.value;
-}
+const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.difficulty}`));
 </script>
 
 <style scoped>
-/* Fixed 300×200 + vertical split + chip row (D12′/D19 / SC-PACK-223/226/227). */
+/* Portrait pack-card family (SC-PACK-223/226/278) — not former 300×200 split. */
 .pack-task-tile {
-  --pack-tile-bg: #ffffff;
-  --pack-tile-fg: rgba(0, 0, 0, 0.87);
-  --pack-tile-muted: rgba(0, 0, 0, 0.7);
-  --pack-tile-border: rgba(0, 0, 0, 0.14);
-  --pack-tile-splitter: rgba(0, 0, 0, 0.12);
   --pack-tile-edit: rgba(0, 0, 0, 0.72);
-  --pack-tile-chip-bg: rgba(0, 0, 0, 0.08);
 
   position: relative;
   box-sizing: border-box;
-  width: 300px;
-  height: 200px;
+  width: 168px;
+  min-height: 206px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  border: 1px solid var(--pack-tile-border);
-  background: var(--pack-tile-bg);
-  color: var(--pack-tile-fg);
+  border: 1px solid var(--pack-card-border);
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
+  box-shadow: var(--pack-card-shadow);
   overflow: hidden;
   flex: 0 0 auto;
+  padding: 8px 10px 0;
 }
 
 .body--dark .pack-task-tile {
-  --pack-tile-bg: #2a2a2a;
-  --pack-tile-fg: rgba(255, 255, 255, 0.92);
-  --pack-tile-muted: rgba(255, 255, 255, 0.78);
-  --pack-tile-border: rgba(255, 255, 255, 0.22);
-  --pack-tile-splitter: rgba(255, 255, 255, 0.18);
   --pack-tile-edit: rgba(255, 255, 255, 0.88);
-  --pack-tile-chip-bg: rgba(255, 255, 255, 0.12);
 }
 
 .pack-task-tile--cascade {
@@ -142,78 +132,58 @@ function isSlotFilled(label: string): boolean {
   outline-offset: -2px;
 }
 
-.pack-task-tile__difficulty {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  z-index: 2;
-  max-width: calc(100% - 0.75rem);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.pack-task-tile__header {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
 }
 
-.pack-task-tile__body {
+.pack-task-tile__question {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 48px;
+  overflow-y: auto;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+  word-break: break-word;
+  text-align: center;
+  color: var(--pack-card-fg);
+}
+
+.pack-task-tile__slots {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin-top: 8px;
+  padding-bottom: 2px;
+}
+
+/* SC-PACK-278: do not flex-shrink portrait minis — overflow-x scrolls instead. */
+.pack-task-tile__slot {
+  flex-shrink: 0;
+  min-width: var(--peek-tile-max-w, 43px);
 }
 
 .pack-task-tile__actions {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  border-top: 1px solid var(--pack-tile-splitter);
+  width: calc(100% + 20px);
+  margin: 3px -10px 0;
+  border-top: 1px solid var(--pack-card-splitter);
 }
 
 .pack-task-tile__edit-btn {
   color: var(--pack-tile-edit);
 }
 
-.pack-task-tile__question {
-  flex: 1 1 50%;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 1.75rem 0.5rem 0.55rem;
-  font-weight: 600;
-  font-size: 1.75rem;
-  line-height: 1.2;
-  word-break: break-word;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--pack-tile-fg);
-}
-
-.pack-task-tile__slots {
-  flex: 1 1 50%;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 1.75rem 0.5rem 0.55rem;
-  border-left: 1px solid var(--pack-tile-splitter);
-  font-size: 1.55rem;
-  line-height: 1.25;
-  color: var(--pack-tile-muted);
-  display: flex;
-  align-items: center;
-}
-
-.pack-task-tile__slot-list {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-content: flex-start;
-  width: 100%;
-}
-
-/* Slot chrome: global `.peek-slot-like` (app.scss) — SC-PACK-238. */
-.pack-task-tile__slot {
-  color: var(--pack-tile-fg);
-  max-width: 100%;
+.pack-task-tile__actions :deep(.q-btn) {
+  min-height: 28px;
+  max-height: 32px;
+  height: var(--pack-card-action-h, 30px);
+  font-size: 0.78rem;
 }
 </style>

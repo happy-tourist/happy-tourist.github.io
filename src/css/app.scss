@@ -64,9 +64,9 @@ body.body--dark .peek-chrome {
   --peek-badge-3-bg: rgba(239, 83, 80, 0.18);
 }
 
-/* Peek-comparable answer-slot chrome (GamePage `.peek-slot` + editor/tile `.peek-slot-like`; SC-PACK-237/238).
- * Base stays compact + labeled for PackTaskTile list slots (SC-PACK-238 carve-out).
- * Portrait unlabeled + mini-card AR apply only via `--portrait` modifiers (peek / compose). */
+/* Peek-comparable answer-slot chrome (GamePage `.peek-slot` + compose/tile `.peek-slot-like`; SC-PACK-237/238).
+ * Compact labeled base (~72×40) remains for non-portrait consumers.
+ * Portrait mini-card AR via `--portrait` on game peek, task compose, and PackTaskTile filled slots. */
 .peek-slot,
 .peek-slot-like {
   min-width: 72px;
@@ -117,10 +117,10 @@ body.body--dark .peek-chrome {
   align-items: center;
 }
 
-/* --- Peek / compose portrait slot + mini-card chrome (redesign-peek-task-modal) ---
- * Apply `.peek-slot--portrait` / `.peek-slot-like--portrait` only on game peek + task
- * compose — NOT on PackTaskTile list slots (keep compact labeled base above).
- * Polish: half-size max-width ~43 (was ~86), filled primary border;
+/* --- Peek / compose / list-tile portrait slot + mini-card chrome ---
+ * `.peek-slot--portrait` / `.peek-slot-like--portrait` on game peek, task compose,
+ * and PackTaskTile filled list slots (SC-PACK-238 — carve-out lifted).
+ * Polish: half-size max-width ~43, filled primary border;
  * header: dots left-edge, badge centered independently. */
 
 .peek-slot--portrait,

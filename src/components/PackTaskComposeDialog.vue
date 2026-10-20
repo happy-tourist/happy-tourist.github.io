@@ -1,10 +1,6 @@
 <template>
   <q-dialog :model-value="modelValue" @update:model-value="onOpenChange" @hide="onHide">
-    <q-card
-      class="peek-chrome pack-task-compose-card"
-      style="min-width: min(360px, 92vw); max-width: min(400px, 92vw)"
-      data-testid="task-compose-dialog"
-    >
+    <q-card class="peek-chrome pack-task-compose-card" data-testid="task-compose-dialog">
       <q-card-section class="q-pb-none">
         <div class="text-h6">
           {{ editing ? $t('content.editTask') : $t('content.addTask') }}
@@ -275,9 +271,26 @@ function pickAnswer(cardId: string) {
 
 <style scoped>
 .pack-task-compose-card {
+  /* SC-PACK-279: width ≤ 4 pool mini-cards + gaps + section pad (16+16); not fixed 360/400. */
+  --compose-horizontal-pad: 32px;
+  --compose-diff-dot-size: 20px;
   border-radius: 18px;
   background: var(--pack-card-bg);
   color: var(--pack-card-fg);
+  min-width: min(
+    calc(4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad)),
+    92vw
+  );
+  max-width: min(
+    calc(4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad)),
+    92vw
+  );
+}
+
+/* SC-PACK-280: compose-only hit target ≈ badge height; shared `.peek-diff-dot` stays 6px. */
+.pack-task-compose-card .peek-diff-dot {
+  width: var(--compose-diff-dot-size);
+  height: var(--compose-diff-dot-size);
 }
 
 /* Dim empty/disabled pool cards; pointer-events from global `.peek-answer-mini--readonly`. */

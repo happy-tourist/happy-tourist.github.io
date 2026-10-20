@@ -78,7 +78,7 @@
           :key="task.id"
           :question="task.question"
           :difficulty="task.difficulty"
-          :slot-labels="taskSlotLabels(task)"
+          :filled-slots="taskFilledSlots(task)"
           :editable="canComposeTasks"
           @edit="startEditTask(task)"
           @delete="removeTask(task.id)"
@@ -220,6 +220,7 @@ import PackTaskComposeDialog from '@/components/PackTaskComposeDialog.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
 import { fingerprintEditorContent, isEditorContentDirty } from '@/lib/editorDirty';
+import { resolveTaskFilledSlots } from '@/lib/taskFilledSlots';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -464,19 +465,9 @@ function startEditTask(task: ContentTask) {
   taskComposeOpen.value = true;
 }
 
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId) return t('content.slotEmpty');
-  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
-  const card = liveCards.value.find((c) => c.id === slot.answerCardId);
-  if (card) {
-    const text = card.content?.trim();
-    if (text) return text;
-  }
-  return t('content.slotFilled');
-}
-
-function taskSlotLabels(task: ContentTask): string[] {
-  return task.slots.map((slot) => slotLabel(slot));
+/** Filled slots only — content + optional description from live answerCards (SC-PACK-127/278). */
+function taskFilledSlots(task: ContentTask) {
+  return resolveTaskFilledSlots(task.slots, liveCards.value, t('content.slotFilled'));
 }
 
 function messageAuthorLabel(msg: ModerationMessage) {

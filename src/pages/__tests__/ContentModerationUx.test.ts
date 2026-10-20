@@ -20,7 +20,7 @@ const draftContent: PackContent = {
   title: 'Pack',
   description: '',
   answerCards: [
-    { id: 'c1', content: 'Alpha', description: '' },
+    { id: 'c1', content: 'Alpha', description: 'alpha-desc' },
     { id: 'c2', content: 'Beta', description: '' },
   ],
   taskSets: [
@@ -55,7 +55,7 @@ const addTaskSetFixture: AddTaskSetState = {
     inCatalog: true,
   },
   liveCards: [
-    { id: 'c1', content: 'Alpha', description: '' },
+    { id: 'c1', content: 'Alpha', description: 'alpha-desc' },
     { id: 'c2', content: 'Beta', description: '' },
   ],
   draft: {
@@ -260,9 +260,9 @@ const stubs = {
     template: '<div class="pack-answer-tile-stub">{{ content }}</div>',
   },
   PackTaskTile: {
-    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    props: ['question', 'difficulty', 'filledSlots', 'editable', 'cascadeGap', 'fallbackQuestion'],
     template:
-      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in slotLabels" :key="i">{{ s }}</span></div>',
+      '<div class="pack-task-tile-stub">{{ question }} <span v-for="(s, i) in filledSlots" :key="i">{{ s.content }} {{ s.description }}</span></div>',
   },
   PackTasksCsvControls: { template: '<div data-testid="tasks-csv-stub" />' },
   PackListCardTile: false,
@@ -331,7 +331,7 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     expect(contentState.taskSetHasCascadeGap).toHaveBeenCalled();
   });
 
-  it('SC-PACK-127/223: staff hub question rows show answer slots on task tiles', async () => {
+  it('SC-PACK-127/223: staff hub question rows show filled answer slots on task tiles', async () => {
     authState.isStaff = true;
     contentState.staffPreview = structuredClone(staffPreviewFixture);
 
@@ -341,10 +341,11 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
     const tiles = wrapper.findAll('.pack-task-tile-stub');
     expect(tiles.length).toBeGreaterThanOrEqual(1);
     expect(wrapper.text()).toContain('Alpha');
-    expect(wrapper.text()).toContain('content.slotEmpty');
+    expect(wrapper.text()).toContain('alpha-desc');
+    expect(wrapper.text()).not.toContain('content.slotEmpty');
   });
 
-  it('SC-PACK-127/223: add-task-set question list shows answer slots on task tiles', async () => {
+  it('SC-PACK-127/223: add-task-set question list shows filled answer slots on task tiles', async () => {
     contentState.addTaskSet = structuredClone(addTaskSetFixture);
 
     const wrapper = shallowMount(ContentPackAddTaskSetPage, { global: { stubs } });
@@ -352,7 +353,8 @@ describe('moderation UX follow-up (SC-PACK-126…128)', () => {
 
     expect(wrapper.text()).toContain('New Q?');
     expect(wrapper.text()).toContain('Alpha');
-    expect(wrapper.text()).toContain('content.slotEmpty');
+    expect(wrapper.text()).toContain('alpha-desc');
+    expect(wrapper.text()).not.toContain('content.slotEmpty');
     const tiles = wrapper.findAll('.pack-task-tile-stub');
     expect(tiles.length).toBeGreaterThanOrEqual(1);
   });

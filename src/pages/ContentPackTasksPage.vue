@@ -91,7 +91,7 @@
           :key="task.id"
           :question="task.question"
           :difficulty="task.difficulty"
-          :slot-labels="taskSlotLabels(task)"
+          :filled-slots="taskFilledSlots(task)"
           :editable="canComposeTasks"
           :cascade-gap="content.taskHasCascadeGap(task.id)"
           :fallback-question="$t('content.taskN', { n: ti + 1 })"
@@ -217,6 +217,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
 import PackTaskComposeDialog from '@/components/PackTaskComposeDialog.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
 import PackTasksCsvControls from '@/components/PackTasksCsvControls.vue';
+import { resolveTaskFilledSlots } from '@/lib/taskFilledSlots';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -485,21 +486,10 @@ function startEditTask(task: ContentTask) {
   taskComposeOpen.value = true;
 }
 
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId || !local.value) {
-    return t('content.slotEmpty');
-  }
-  // SC-PACK-134: resolve card text; never show «заполнен» when card is found with content.
-  const card = local.value.answerCards.find((c) => c.id === slot.answerCardId);
-  if (card) {
-    const text = card.content?.trim();
-    if (text) return text;
-  }
-  return t('content.slotFilled');
-}
-
-function taskSlotLabels(task: ContentTask): string[] {
-  return task.slots.map((slot) => slotLabel(slot));
+/** Filled slots only — content + optional description from loaded answerCards (SC-PACK-127/278). */
+function taskFilledSlots(task: ContentTask) {
+  if (!local.value) return [];
+  return resolveTaskFilledSlots(task.slots, local.value.answerCards, t('content.slotFilled'));
 }
 
 async function onAddOrUpdateTask() {

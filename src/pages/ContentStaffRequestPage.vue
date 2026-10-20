@@ -180,7 +180,7 @@
             :key="task.id"
             :question="task.question"
             :difficulty="task.difficulty"
-            :slot-labels="taskSlotLabels(task)"
+            :filled-slots="taskFilledSlots(task)"
           />
         </div>
       </div>
@@ -319,6 +319,7 @@ import type { QForm } from 'quasar';
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 import PackTaskTile from '@/components/PackTaskTile.vue';
+import { resolveTaskFilledSlots } from '@/lib/taskFilledSlots';
 import { useAuthStore } from '@/stores/auth';
 import {
   contentErrorI18nKey,
@@ -327,7 +328,6 @@ import {
   type ContentTask,
   type MapStaffContent,
   type PackContent,
-  type TaskSlot,
 } from '@/stores/content';
 
 const auth = useAuthStore();
@@ -429,20 +429,10 @@ function statusLabel(status: string) {
   return status;
 }
 
-function slotLabel(slot: TaskSlot) {
-  if (!slot.answerCardId || !packContent.value) {
-    return t('content.slotEmpty');
-  }
-  const card = packContent.value.answerCards.find((c) => c.id === slot.answerCardId);
-  if (card) {
-    const text = card.content?.trim();
-    if (text) return text;
-  }
-  return t('content.slotFilled');
-}
-
-function taskSlotLabels(task: ContentTask): string[] {
-  return task.slots.map((slot) => slotLabel(slot));
+/** Filled slots only — live answers for task_set preview (SC-PACK-127/134/278). */
+function taskFilledSlots(task: ContentTask) {
+  if (!packContent.value) return [];
+  return resolveTaskFilledSlots(task.slots, packContent.value.answerCards, t('content.slotFilled'));
 }
 
 function formatDate(value: string | Date) {

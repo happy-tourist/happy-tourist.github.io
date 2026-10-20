@@ -228,7 +228,7 @@ const stubs = {
     template: '<div class="pack-answer-tile-stub">{{ content }}</div>',
   },
   PackTaskTile: {
-    props: ['question', 'difficulty', 'slotLabels', 'editable', 'cascadeGap', 'fallbackQuestion'],
+    props: ['question', 'difficulty', 'filledSlots', 'editable', 'cascadeGap', 'fallbackQuestion'],
     template: '<div class="pack-task-tile-stub">{{ question }}</div>',
   },
   PackListCardTile: false,

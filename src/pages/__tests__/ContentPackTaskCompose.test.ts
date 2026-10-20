@@ -392,6 +392,73 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(badge.text()).toBe('content.difficultyWord.2');
   });
 
+  it('SC-PACK-279: compose dialog width ≤ four pool mini-cards + pad; not fixed 360/400', async () => {
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.classes()).toContain('pack-task-compose-card');
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const composeSrc = readFileSync(
+      path.resolve(__dirname, '../../components/PackTaskComposeDialog.vue'),
+      'utf8',
+    );
+    // Width formula: 4×--peek-tile-max-w + 3×8px + horizontal pad; cap 92vw.
+    expect(composeSrc).toMatch(
+      /4\s*\*\s*var\(--peek-tile-max-w(?:,\s*43px)?\)\s*\+\s*3\s*\*\s*8px/,
+    );
+    expect(composeSrc).toMatch(/92vw/);
+    expect(composeSrc).not.toMatch(/min\(360px,\s*92vw\)/);
+    expect(composeSrc).not.toMatch(/min\(400px,\s*92vw\)/);
+
+    const pool = dialog.find('[data-testid="task-compose-answer-pool"]');
+    expect(pool.classes()).toContain('peek-answer-pool');
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+    expect(appScss).toMatch(/\.peek-answer-pool\s*\{[^}]*grid-template-columns:\s*repeat\(4/s);
+
+    // Game peek modal width unchanged (SC-PACK-279 / design Decision 5).
+    const gamePageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(gamePageSrc).toMatch(/\.peek-modal-card\s*\{[^}]*max-width:\s*min\(400px,\s*92vw\)/s);
+  });
+
+  it('SC-PACK-280: compose dots ≈ badge height; shared peek base stays 6px', async () => {
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    expect(dialog.findAll('[data-testid="compose-diff-dot"]')).toHaveLength(3);
+    expect(dialog.find('[data-testid="compose-diff-badge"]').exists()).toBe(true);
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const composeSrc = readFileSync(
+      path.resolve(__dirname, '../../components/PackTaskComposeDialog.vue'),
+      'utf8',
+    );
+    const appScss = readFileSync(path.resolve(__dirname, '../../css/app.scss'), 'utf8');
+
+    // Compose-scoped ≈20px (= badge height); not a global .peek-diff-dot override.
+    expect(composeSrc).toMatch(/--compose-diff-dot-size:\s*20px/);
+    expect(composeSrc).toMatch(
+      /\.pack-task-compose-card\s+\.peek-diff-dot\s*\{[^}]*var\(--compose-diff-dot-size\)/s,
+    );
+    expect(appScss).toMatch(/\.peek-diff-dot\s*\{[^}]*width:\s*6px[^}]*height:\s*6px/s);
+
+    // Game peek still uses shared 6px class (no compose-only size on GamePage).
+    const gamePageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(gamePageSrc).toMatch(/class="peek-diff-dot"/);
+    expect(gamePageSrc).not.toMatch(/compose-diff-dot-size/);
+  });
+
   it('SC-PACK-277: empty unlabeled; half-size pool scrolls past 4×4; filled primary border', async () => {
     const manyCards = Array.from({ length: 17 }, (_, i) => ({
       id: `c${i + 1}`,
