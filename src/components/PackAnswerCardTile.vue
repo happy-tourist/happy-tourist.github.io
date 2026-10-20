@@ -2,7 +2,6 @@
   <div
     class="pack-answer-tile"
     :class="{
-      'pack-answer-tile--short': !hasDescription,
       'pack-answer-tile--selectable': selectable && !disabled,
       'pack-answer-tile--selected': selected,
       'pack-answer-tile--disabled': disabled,
@@ -15,7 +14,12 @@
     @keydown.enter.prevent="onBodyClick"
     @keydown.space.prevent="onBodyClick"
   >
-    <div class="pack-answer-tile__body">
+    <div
+      class="pack-answer-tile__body"
+      :class="
+        hasDescription ? 'pack-answer-tile__body--with-desc' : 'pack-answer-tile__body--no-desc'
+      "
+    >
       <div class="pack-answer-tile__content">
         {{ content.trim() || $t('content.untitled') }}
       </div>
@@ -26,20 +30,22 @@
 
     <div v-if="editable" class="pack-answer-tile__actions" @click.stop>
       <q-btn
-        flat
+        outline
         dense
         no-caps
-        class="full-width pack-answer-tile__edit-btn"
+        class="full-width"
+        icon="edit"
         :label="$t('content.editCard')"
         data-testid="pack-answer-tile-edit"
         @click="emit('edit')"
       />
       <q-btn
-        flat
+        outline
         dense
         no-caps
         class="full-width"
         color="negative"
+        icon="delete"
         :label="$t('content.deleteCard')"
         data-testid="pack-answer-tile-delete"
         @click="emit('delete')"
@@ -55,7 +61,7 @@ const props = withDefaults(
   defineProps<{
     content: string;
     description?: string;
-    /** Show bottom text Edit/Delete (editor surfaces). */
+    /** Show bottom outline+icon Edit/Delete (editor surfaces). */
     editable?: boolean;
     /** Body click selects this card (slot picker). */
     selectable?: boolean;
@@ -87,40 +93,22 @@ function onBodyClick() {
 </script>
 
 <style scoped>
-/* Fixed px sizes + vertical split + ×2 type (D12′ / SC-PACK-222/225/227). */
+/* Portrait pack-card family (SC-PACK-222/225/282) — not former 150/300×200 horizontal split. */
 .pack-answer-tile {
-  --pack-tile-bg: #ffffff;
-  --pack-tile-fg: rgba(0, 0, 0, 0.87);
-  --pack-tile-muted: rgba(0, 0, 0, 0.7);
-  --pack-tile-border: rgba(0, 0, 0, 0.14);
-  --pack-tile-splitter: rgba(0, 0, 0, 0.12);
-  --pack-tile-edit: rgba(0, 0, 0, 0.72);
-
   position: relative;
   box-sizing: border-box;
-  width: 300px;
-  height: 200px;
+  width: 156px;
+  min-height: 206px;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
-  border: 1px solid var(--pack-tile-border);
-  background: var(--pack-tile-bg);
-  color: var(--pack-tile-fg);
+  border: 1px solid var(--pack-card-border);
+  background: var(--pack-card-bg);
+  color: var(--pack-card-fg);
+  box-shadow: var(--pack-card-shadow);
   overflow: hidden;
   flex: 0 0 auto;
-}
-
-.body--dark .pack-answer-tile {
-  --pack-tile-bg: #2a2a2a;
-  --pack-tile-fg: rgba(255, 255, 255, 0.92);
-  --pack-tile-muted: rgba(255, 255, 255, 0.78);
-  --pack-tile-border: rgba(255, 255, 255, 0.22);
-  --pack-tile-splitter: rgba(255, 255, 255, 0.18);
-  --pack-tile-edit: rgba(255, 255, 255, 0.88);
-}
-
-.pack-answer-tile--short {
-  width: 150px;
+  padding: 8px 10px 0;
 }
 
 .pack-answer-tile--selectable {
@@ -142,53 +130,104 @@ function onBodyClick() {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* SC-PACK-282: with description — content top, description bottom. */
+.pack-answer-tile__body--with-desc {
+  justify-content: flex-start;
+}
+
+.pack-answer-tile__body--with-desc .pack-answer-tile__content {
+  flex: 0 1 auto;
+  align-self: stretch;
+}
+
+.pack-answer-tile__body--with-desc .pack-answer-tile__description {
+  flex: 0 1 auto;
+  margin-top: auto;
+  align-self: stretch;
+}
+
+/* SC-PACK-282: no description — content centered in body above actions. */
+.pack-answer-tile__body--no-desc {
+  justify-content: center;
+  align-items: center;
+}
+
+.pack-answer-tile__body--no-desc .pack-answer-tile__content {
+  flex: 0 1 auto;
+  align-self: stretch;
+}
+
+.pack-answer-tile__content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.15rem 0;
+  font-weight: 600;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  word-break: break-word;
+  text-align: center;
+  color: var(--pack-card-fg);
+}
+
+.pack-answer-tile__description {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.15rem 0 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.25;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: center;
+  color: var(--pack-card-muted);
 }
 
 .pack-answer-tile__actions {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  gap: 4px;
+  width: calc(100% + 20px);
+  margin: auto -10px 0;
+  padding: 8px 10px 8px;
+  border-top: 1px solid var(--pack-card-splitter);
+  box-sizing: border-box;
+}
+
+/* Slim outline + icon — PackTaskTile / task-set action chrome parity (SC-PACK-224). */
+.pack-answer-tile__actions :deep(.q-btn) {
   width: 100%;
-  border-top: 1px solid var(--pack-tile-splitter);
-}
-
-.pack-answer-tile__edit-btn {
-  color: var(--pack-tile-edit);
-}
-
-.pack-answer-tile__content {
-  flex: 1 1 50%;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.55rem 0.5rem;
-  font-weight: 600;
-  font-size: 1.75rem;
+  min-height: 28px;
+  max-height: 32px;
+  height: var(--pack-card-action-h, 30px);
+  padding: 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 500;
   line-height: 1.2;
-  word-break: break-word;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  color: var(--pack-tile-fg);
+  color: var(--pack-card-fg);
+  white-space: nowrap;
 }
 
-.pack-answer-tile--short .pack-answer-tile__content {
-  flex: 1 1 auto;
+.pack-answer-tile__actions :deep(.q-btn .q-icon) {
+  font-size: 18px;
+  color: currentColor;
 }
 
-.pack-answer-tile__description {
-  flex: 1 1 50%;
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 0.55rem 0.5rem;
-  border-left: 1px solid var(--pack-tile-splitter);
-  font-size: 1.55rem;
-  line-height: 1.25;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--pack-tile-muted);
+.pack-answer-tile__actions :deep(.q-btn--outline:before) {
+  border-color: var(--pack-card-border);
+}
+
+.pack-answer-tile__actions :deep(.q-btn.text-negative) {
+  color: var(--q-negative);
+}
+
+.pack-answer-tile__actions :deep(.q-btn.text-negative.q-btn--outline:before) {
+  border-color: var(--q-negative);
 }
 </style>

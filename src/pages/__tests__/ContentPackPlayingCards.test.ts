@@ -122,7 +122,7 @@ const stubs = {
   PackListCardTile: false,
 };
 
-describe('ContentPackEditorPage playing-card chrome (SC-PACK-222/224)', () => {
+describe('ContentPackEditorPage answer pack-card chrome (SC-PACK-222/224)', () => {
   beforeEach(() => {
     contentState.error = null;
     contentState.loading = false;
@@ -148,7 +148,7 @@ describe('ContentPackEditorPage playing-card chrome (SC-PACK-222/224)', () => {
     vi.clearAllMocks();
   });
 
-  it('renders answer cards as playing-card tiles in a wrap grid', async () => {
+  it('renders answer cards as portrait pack-card tiles in a wrap grid', async () => {
     const wrapper = shallowMount(ContentPackEditorPage, { global: { stubs } });
     await flushPromises();
 

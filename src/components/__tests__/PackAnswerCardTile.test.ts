@@ -9,10 +9,10 @@ import PackAnswerCardTile from '@/components/PackAnswerCardTile.vue';
 
 const stubs = {
   'q-btn': {
-    props: ['label'],
+    props: ['label', 'icon', 'outline', 'dense', 'color'],
     emits: ['click'],
     template:
-      '<button type="button" v-bind="$attrs" :class="$attrs.class" @click="$emit(\'click\')">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :class="$attrs.class" :data-icon="icon" :data-outline="outline ? \'true\' : undefined" @click="$emit(\'click\')">{{ label }}<slot /></button>',
   },
 };
 
@@ -21,8 +21,8 @@ const vueSrc = readFileSync(
   'utf8',
 );
 
-describe('PackAnswerCardTile (SC-PACK-222/224/225/227)', () => {
-  it('splits content and description vertically; long description region scrolls', () => {
+describe('PackAnswerCardTile (SC-PACK-222/224/225/227/282)', () => {
+  it('with description: content top + description bottom (column, no horizontal splitter) (SC-PACK-222/282)', () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: {
         content: 'Paris',
@@ -32,23 +32,26 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227)', () => {
     });
 
     expect(wrapper.find('[data-testid="pack-answer-tile"]').exists()).toBe(true);
-    expect(wrapper.classes()).not.toContain('pack-answer-tile--short');
     expect(wrapper.text()).toContain('Paris');
     expect(wrapper.find('.pack-answer-tile__description').exists()).toBe(true);
-    expect(wrapper.find('.pack-answer-tile__body').exists()).toBe(true);
+    expect(wrapper.find('.pack-answer-tile__body--with-desc').exists()).toBe(true);
+    expect(wrapper.classes()).not.toContain('pack-answer-tile--short');
+    expect(vueSrc).not.toMatch(/border-left:/);
+    expect(vueSrc).toMatch(/\.pack-answer-tile__body\s*\{[^}]*flex-direction:\s*column/s);
   });
 
-  it('shortens tile when description is empty', () => {
+  it('without description: content centered; description node omitted (SC-PACK-282)', () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: { content: 'Rome', description: '' },
       global: { stubs },
     });
 
-    expect(wrapper.classes()).toContain('pack-answer-tile--short');
+    expect(wrapper.find('.pack-answer-tile__body--no-desc').exists()).toBe(true);
     expect(wrapper.find('.pack-answer-tile__description').exists()).toBe(false);
+    expect(wrapper.classes()).not.toContain('pack-answer-tile--short');
   });
 
-  it('editable shows bottom full-width text Edit/Delete; body click does not emit edit', async () => {
+  it('editable shows bottom full-width outline+icon Edit/Delete; body click does not emit edit (SC-PACK-224)', async () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: { content: 'Berlin', description: 'City', editable: true },
       global: { stubs },
@@ -60,11 +63,15 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227)', () => {
     expect(deleteBtn.exists()).toBe(true);
     expect(editBtn.classes()).toContain('full-width');
     expect(deleteBtn.classes()).toContain('full-width');
+    expect(editBtn.attributes('data-icon')).toBe('edit');
+    expect(deleteBtn.attributes('data-icon')).toBe('delete');
     expect(editBtn.text().length).toBeGreaterThan(0);
-    expect(deleteBtn.text().length).toBeGreaterThan(0);
     expect(wrapper.find('.pack-answer-tile__actions').exists()).toBe(true);
-    expect(vueSrc).not.toMatch(/icon=["']edit["']/);
-    expect(vueSrc).not.toMatch(/icon=["']delete["']/);
+    expect(vueSrc).toMatch(/icon=["']edit["']/);
+    expect(vueSrc).toMatch(/icon=["']delete["']/);
+    expect(vueSrc).toMatch(/<q-btn[^>]*\n\s*outline/s);
+    expect(vueSrc).toMatch(/--pack-card-action-h/);
+    expect(vueSrc).not.toMatch(/<q-btn[^>]*\n\s*flat/s);
 
     await wrapper.trigger('click');
     expect(wrapper.emitted('edit')).toBeUndefined();
@@ -94,7 +101,7 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227)', () => {
     expect(wrapper.emitted('select')).toHaveLength(1);
   });
 
-  it('uses fixed 150×200 without description and 300×200 with vertical splitter (SC-PACK-225)', () => {
+  it('uses one portrait size ≈156×206 with/without description (SC-PACK-225) — not 150/300×200', () => {
     const withDesc = mount(PackAnswerCardTile, {
       props: { content: 'Paris', description: 'Capital' },
       global: { stubs },
@@ -104,33 +111,33 @@ describe('PackAnswerCardTile (SC-PACK-222/224/225/227)', () => {
       global: { stubs },
     });
 
-    expect(withDesc.classes()).not.toContain('pack-answer-tile--short');
-    expect(withoutDesc.classes()).toContain('pack-answer-tile--short');
     expect(withDesc.find('.pack-answer-tile__description').exists()).toBe(true);
+    expect(withoutDesc.find('.pack-answer-tile__description').exists()).toBe(false);
+    expect(withDesc.classes()).not.toContain('pack-answer-tile--short');
+    expect(withoutDesc.classes()).not.toContain('pack-answer-tile--short');
 
-    expect(vueSrc).toMatch(/\.pack-answer-tile\s*\{[^}]*width:\s*300px/s);
-    expect(vueSrc).toMatch(/\.pack-answer-tile\s*\{[^}]*height:\s*200px/s);
-    expect(vueSrc).toMatch(/\.pack-answer-tile--short\s*\{[^}]*width:\s*150px/s);
-    expect(vueSrc).toMatch(/\.pack-answer-tile__description\s*\{[^}]*border-left:/s);
-    expect(vueSrc).toMatch(/font-size:\s*1\.75rem/);
+    expect(vueSrc).toMatch(/\.pack-answer-tile\s*\{[^}]*width:\s*156px/s);
+    expect(vueSrc).toMatch(/\.pack-answer-tile\s*\{[^}]*min-height:\s*206px/s);
+    expect(vueSrc).not.toMatch(/width:\s*300px/);
+    expect(vueSrc).not.toMatch(/width:\s*150px/);
+    expect(vueSrc).not.toMatch(/height:\s*200px/);
+    expect(vueSrc).not.toMatch(/pack-answer-tile--short/);
+    expect(vueSrc).toMatch(/font-size:\s*0\.78rem/);
+    expect(vueSrc).toMatch(/font-size:\s*0\.68rem/);
   });
 
-  it('sets explicit light/dark bg, text, and edit control colors (SC-PACK-227)', () => {
+  it('uses shared --pack-card-* surface tokens for light/dark readability (SC-PACK-227)', () => {
     const wrapper = mount(PackAnswerCardTile, {
       props: { content: 'Berlin', description: 'City', editable: true },
       global: { stubs },
     });
 
-    expect(wrapper.find('.pack-answer-tile__edit-btn').exists()).toBe(true);
-    expect(vueSrc).toMatch(/--pack-tile-bg:\s*#ffffff/);
-    expect(vueSrc).toMatch(/--pack-tile-fg:\s*rgba\(0,\s*0,\s*0/);
-    expect(vueSrc).toMatch(/\.body--dark\s+\.pack-answer-tile\s*\{[^}]*--pack-tile-bg:\s*#2a2a2a/s);
-    expect(vueSrc).toMatch(
-      /\.body--dark\s+\.pack-answer-tile\s*\{[^}]*--pack-tile-fg:\s*rgba\(255/s,
-    );
-    expect(vueSrc).toMatch(
-      /\.pack-answer-tile__edit-btn\s*\{[^}]*color:\s*var\(--pack-tile-edit\)/s,
-    );
+    expect(wrapper.find('[data-testid="pack-answer-tile-edit"]').exists()).toBe(true);
+    expect(vueSrc).toMatch(/var\(--pack-card-bg\)/);
+    expect(vueSrc).toMatch(/var\(--pack-card-fg\)/);
+    expect(vueSrc).toMatch(/var\(--pack-card-muted\)/);
+    expect(vueSrc).toMatch(/var\(--pack-card-border\)/);
+    expect(vueSrc).not.toMatch(/--pack-tile-bg/);
     expect(vueSrc).not.toMatch(/var\(--q-card-background/);
   });
 });
