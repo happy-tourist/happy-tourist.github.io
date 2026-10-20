@@ -117,11 +117,14 @@
             </div>
           </div>
 
-          <q-card-actions align="right" class="q-pa-none">
-            <q-btn flat :label="$t('content.cancelEditTask')" @click="onCancel" />
+          <!-- SC-PACK-281: Save = peekSubmit chrome; Cancel omitted (dismiss = backdrop/Esc). -->
+          <q-card-actions class="q-pa-none pack-task-compose-actions">
             <q-btn
               type="submit"
+              class="full-width pack-task-compose-save"
               color="primary"
+              unelevated
+              no-caps
               :label="editing ? $t('content.saveTask') : $t('content.addTask')"
               :loading="saving"
               :disable="readOnly || !canSave"
@@ -174,7 +177,7 @@ const emit = defineEmits<{
   'update:difficulty': [value: Difficulty];
   'update:formSlots': [value: TaskSlot[]];
   save: [];
-  cancel: [];
+  /** Dismiss without save = backdrop/Esc → `@hide` (Cancel control removed, SC-PACK-281). */
   hide: [];
 }>();
 
@@ -214,11 +217,6 @@ function onOpenChange(value: boolean) {
 function onHide() {
   previewDifficulty.value = null;
   emit('hide');
-}
-
-function onCancel() {
-  emit('update:modelValue', false);
-  emit('cancel');
 }
 
 function cardForSlot(slot: TaskSlot) {
@@ -271,18 +269,25 @@ function pickAnswer(cardId: string) {
 
 <style scoped>
 .pack-task-compose-card {
-  /* SC-PACK-279: width ≤ 4 pool mini-cards + gaps + section pad (16+16); not fixed 360/400. */
+  /* SC-PACK-279: 4 pool minis + gaps + pad + ≈50px slack; not fixed 360/400. */
   --compose-horizontal-pad: 32px;
+  --compose-width-slack: 50px;
   --compose-diff-dot-size: 20px;
   border-radius: 18px;
   background: var(--pack-card-bg);
   color: var(--pack-card-fg);
   min-width: min(
-    calc(4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad)),
+    calc(
+      4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad) +
+        var(--compose-width-slack)
+    ),
     92vw
   );
   max-width: min(
-    calc(4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad)),
+    calc(
+      4 * var(--peek-tile-max-w, 43px) + 3 * 8px + var(--compose-horizontal-pad) +
+        var(--compose-width-slack)
+    ),
     92vw
   );
 }
@@ -291,6 +296,23 @@ function pickAnswer(cardId: string) {
 .pack-task-compose-card .peek-diff-dot {
   width: var(--compose-diff-dot-size);
   height: var(--compose-diff-dot-size);
+}
+
+/* SC-PACK-281: Save matches `.peek-submit-btn` chrome (labels stay content.saveTask/addTask). */
+.pack-task-compose-actions {
+  padding-top: 4px;
+}
+
+/* Beat Quasar min-height so peekSubmit-like 28–36 / action-h 30 sticks. */
+.pack-task-compose-actions :deep(.q-btn.pack-task-compose-save) {
+  width: 100%;
+  min-height: 28px;
+  height: var(--pack-card-action-h, 30px);
+  max-height: 36px;
+  padding: 0 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 /* Dim empty/disabled pool cards; pointer-events from global `.peek-answer-mini--readonly`. */

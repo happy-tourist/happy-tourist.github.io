@@ -44,20 +44,22 @@
 
     <div v-if="editable" class="pack-task-tile__actions" @click.stop>
       <q-btn
-        flat
+        outline
         dense
         no-caps
-        class="full-width pack-task-tile__edit-btn"
+        class="full-width"
+        icon="edit"
         :label="$t('content.editTask')"
         data-testid="pack-task-tile-edit"
         @click="emit('edit')"
       />
       <q-btn
-        flat
+        outline
         dense
         no-caps
         class="full-width"
         color="negative"
+        icon="delete"
         :label="$t('content.deleteTask')"
         data-testid="pack-task-tile-delete"
         @click="emit('delete')"
@@ -105,8 +107,6 @@ const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.di
 <style scoped>
 /* Portrait pack-card family (SC-PACK-223/226/278) — not former 300×200 split. */
 .pack-task-tile {
-  --pack-tile-edit: rgba(0, 0, 0, 0.72);
-
   position: relative;
   box-sizing: border-box;
   width: 168px;
@@ -123,10 +123,6 @@ const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.di
   padding: 8px 10px 0;
 }
 
-.body--dark .pack-task-tile {
-  --pack-tile-edit: rgba(255, 255, 255, 0.88);
-}
-
 .pack-task-tile--cascade {
   outline: 2px solid var(--q-warning);
   outline-offset: -2px;
@@ -137,27 +133,31 @@ const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.di
   margin-bottom: 10px;
 }
 
+/* SC-PACK-278/Decision 8: 24px peek question parity; content-sized — no flex-grow void. */
 .pack-task-tile__question {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 48px;
   overflow-y: auto;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 24px;
   line-height: 1.3;
   word-break: break-word;
   text-align: center;
   color: var(--pack-card-fg);
 }
 
+/* SC-PACK-278: centered filled minis + air above actions (not pinned to bottom). */
 .pack-task-tile__slots {
   flex: 0 0 auto;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
+  justify-content: center;
   gap: 8px;
   overflow-x: auto;
   overflow-y: hidden;
   margin-top: 8px;
+  margin-bottom: 10px;
   padding-bottom: 2px;
 }
 
@@ -168,22 +168,47 @@ const difficultyBadgeLabel = computed(() => t(`content.difficultyWord.${props.di
 }
 
 .pack-task-tile__actions {
+  /* Pin actions to tile bottom; free height becomes air above divider (raised slots). */
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
+  gap: 4px;
   width: calc(100% + 20px);
-  margin: 3px -10px 0;
+  margin: auto -10px 0;
+  padding: 8px 10px 8px;
   border-top: 1px solid var(--pack-card-splitter);
+  box-sizing: border-box;
 }
 
-.pack-task-tile__edit-btn {
-  color: var(--pack-tile-edit);
-}
-
+/* Slim outline + icon — task-set action chrome parity (SC-PACK-224 / Decision 7). */
 .pack-task-tile__actions :deep(.q-btn) {
+  width: 100%;
   min-height: 28px;
   max-height: 32px;
   height: var(--pack-card-action-h, 30px);
-  font-size: 0.78rem;
+  padding: 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--pack-card-fg);
+  white-space: nowrap;
+}
+
+.pack-task-tile__actions :deep(.q-btn .q-icon) {
+  font-size: 18px;
+  color: currentColor;
+}
+
+.pack-task-tile__actions :deep(.q-btn--outline:before) {
+  border-color: var(--pack-card-border);
+}
+
+/* Quasar outline+color="negative" → `.text-negative`. */
+.pack-task-tile__actions :deep(.q-btn.text-negative) {
+  color: var(--q-negative);
+}
+
+.pack-task-tile__actions :deep(.q-btn.text-negative.q-btn--outline:before) {
+  border-color: var(--q-negative);
 }
 </style>

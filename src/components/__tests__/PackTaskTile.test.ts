@@ -9,10 +9,10 @@ import PackTaskTile from '@/components/PackTaskTile.vue';
 
 const stubs = {
   'q-btn': {
-    props: ['label'],
+    props: ['label', 'icon', 'outline', 'dense', 'color'],
     emits: ['click'],
     template:
-      '<button type="button" v-bind="$attrs" :class="$attrs.class" @click="$emit(\'click\')">{{ label }}<slot /></button>',
+      '<button type="button" v-bind="$attrs" :class="$attrs.class" :data-icon="icon" :data-outline="outline ? \'true\' : undefined" @click="$emit(\'click\')">{{ label }}<slot /></button>',
   },
 };
 
@@ -57,8 +57,13 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     );
     expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*overflow-x:\s*auto/s);
     expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*flex-wrap:\s*nowrap/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*justify-content:\s*center/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__slots\s*\{[^}]*margin-bottom:\s*10px/s);
+    // Actions pinned to bottom — free height becomes raised air above divider (SC-PACK-278).
+    expect(vueSrc).toMatch(/\.pack-task-tile__actions\s*\{[^}]*margin:\s*auto\s+-10px\s+0/s);
     // Portrait minis must not flex-shrink — otherwise overflow-x never scrolls (SC-PACK-278).
     expect(vueSrc).toMatch(/\.pack-task-tile__slot\s*\{[^}]*flex-shrink:\s*0/s);
+    expect(vueSrc).toMatch(/\.pack-task-tile__question\s*\{[^}]*flex:\s*0\s+1\s+auto/s);
     expect(vueSrc).not.toMatch(/border-left:/);
     expect(vueSrc).not.toMatch(/<q-badge/);
     expect(vueSrc).not.toMatch(/content\.difficulty\./);
@@ -106,7 +111,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(wrapper.find('[data-testid="pack-task-tile-delete"]').exists()).toBe(false);
   });
 
-  it('editable shows bottom full-width text Edit/Delete; body has no edit-on-click', async () => {
+  it('SC-PACK-224: editable shows outline+icon Edit/Delete; body has no edit-on-click', async () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -123,11 +128,15 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(deleteBtn.exists()).toBe(true);
     expect(editBtn.classes()).toContain('full-width');
     expect(deleteBtn.classes()).toContain('full-width');
+    expect(editBtn.attributes('data-icon')).toBe('edit');
+    expect(deleteBtn.attributes('data-icon')).toBe('delete');
     expect(editBtn.text().length).toBeGreaterThan(0);
     expect(wrapper.find('.pack-task-tile__actions').exists()).toBe(true);
-    expect(vueSrc).not.toMatch(/icon=["']edit["']/);
-    expect(vueSrc).not.toMatch(/icon=["']delete["']/);
+    expect(vueSrc).toMatch(/icon=["']edit["']/);
+    expect(vueSrc).toMatch(/icon=["']delete["']/);
+    expect(vueSrc).toMatch(/<q-btn[^>]*\n\s*outline/s);
     expect(vueSrc).toMatch(/--pack-card-action-h/);
+    expect(vueSrc).not.toMatch(/<q-btn[^>]*\n\s*flat/s);
 
     await wrapper.trigger('click');
     expect(wrapper.emitted('edit')).toBeUndefined();
@@ -136,7 +145,7 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(wrapper.emitted('edit')).toHaveLength(1);
   });
 
-  it('uses portrait pack-card size (SC-PACK-226) — not fixed 300×200', () => {
+  it('uses portrait pack-card size + 24px question (SC-PACK-226/278) — not fixed 300×200', () => {
     mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -150,10 +159,11 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
     expect(vueSrc).toMatch(/\.pack-task-tile\s*\{[^}]*min-height:\s*206px/s);
     expect(vueSrc).not.toMatch(/width:\s*300px/);
     expect(vueSrc).not.toMatch(/height:\s*200px/);
-    expect(vueSrc).toMatch(/font-size:\s*14px/);
+    expect(vueSrc).toMatch(/\.pack-task-tile__question\s*\{[^}]*font-size:\s*24px/s);
+    expect(vueSrc).not.toMatch(/font-size:\s*14px/);
   });
 
-  it('sets pack-card surface + edit control colors (SC-PACK-227)', () => {
+  it('sets pack-card surface + outline action colors (SC-PACK-227)', () => {
     const wrapper = mount(PackTaskTile, {
       props: {
         question: 'Q?',
@@ -164,11 +174,21 @@ describe('PackTaskTile (SC-PACK-223/224/226/227/238/278)', () => {
       global: { stubs },
     });
 
-    expect(wrapper.find('.pack-task-tile__edit-btn').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="pack-task-tile-edit"]').exists()).toBe(true);
     expect(vueSrc).toMatch(/background:\s*var\(--pack-card-bg\)/);
     expect(vueSrc).toMatch(/color:\s*var\(--pack-card-fg\)/);
     expect(vueSrc).toMatch(/border:\s*1px\s+solid\s+var\(--pack-card-border\)/);
-    expect(vueSrc).toMatch(/\.pack-task-tile__edit-btn\s*\{[^}]*color:\s*var\(--pack-tile-edit\)/s);
+    expect(vueSrc).toMatch(
+      /\.pack-task-tile__actions :deep\(\.q-btn--outline:before\)\s*\{[^}]*border-color:\s*var\(--pack-card-border\)/s,
+    );
+    // Delete MAY be negative — Quasar uses `.text-negative` (not a `.q-btn--negative` selector).
+    expect(vueSrc).toMatch(
+      /\.pack-task-tile__actions :deep\(\.q-btn\.text-negative\)\s*\{[^}]*color:\s*var\(--q-negative\)/s,
+    );
+    expect(vueSrc).toMatch(
+      /\.pack-task-tile__actions :deep\(\.q-btn\.text-negative\.q-btn--outline:before\)\s*\{[^}]*border-color:\s*var\(--q-negative\)/s,
+    );
+    expect(vueSrc).not.toMatch(/:deep\(\.q-btn--negative/);
     expect(vueSrc).not.toMatch(/var\(--q-card-background/);
   });
 });

@@ -1,6 +1,7 @@
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import PackTaskComposeDialog from '@/components/PackTaskComposeDialog.vue';
 import ContentPackAddTaskSetPage from '@/pages/ContentPackAddTaskSetPage.vue';
 import ContentPackTasksPage from '@/pages/ContentPackTasksPage.vue';
 import type { PackContent } from '@/stores/content';
@@ -143,9 +144,9 @@ vi.mock('@/stores/content', async (importOriginal) => {
 const stubs = {
   'q-page': { template: '<div><slot /></div>' },
   'q-btn': {
-    props: ['label', 'disable', 'icon', 'type'],
+    props: ['label', 'disable', 'icon', 'type', 'unelevated', 'outline', 'color'],
     template:
-      '<button :type="type || \'button\'" :disabled="disable" :data-label="label" :data-icon="icon" @click="$emit(\'click\', $event)">{{ label }}<slot /></button>',
+      '<button :type="type || \'button\'" :disabled="disable" :data-label="label" :data-icon="icon" :data-unelevated="unelevated ? \'true\' : undefined" :class="$attrs.class" @click="$emit(\'click\', $event)">{{ label }}<slot /></button>',
   },
   'q-tooltip': { template: '<span />' },
   'q-banner': { template: '<div><slot /><slot name="action" /></div>' },
@@ -272,7 +273,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(wrapper.find('[data-testid="task-compose-question"]').exists()).toBe(true);
   });
 
-  it('SC-PACK-259: Edit opens the same dialog prefilled; cancel closes without inline form', async () => {
+  it('SC-PACK-259/281: Edit opens the same dialog prefilled; backdrop hide closes without Cancel btn', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -288,8 +289,13 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     const cancelBtn = wrapper
       .findAll('button')
       .find((b) => b.attributes('data-label') === 'content.cancelEditTask');
-    expect(cancelBtn).toBeTruthy();
-    await cancelBtn!.trigger('click');
+    expect(cancelBtn).toBeUndefined();
+
+    // Dismiss via backdrop/Esc path: modelValue false + hide (SC-PACK-281; no Cancel btn).
+    const compose = wrapper.findComponent(PackTaskComposeDialog);
+    expect(compose.exists()).toBe(true);
+    compose.vm.$emit('update:modelValue', false);
+    compose.vm.$emit('hide');
     await flushPromises();
 
     expect(wrapper.find('[data-testid="task-compose-dialog"]').exists()).toBe(false);
@@ -392,7 +398,7 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     expect(badge.text()).toBe('content.difficultyWord.2');
   });
 
-  it('SC-PACK-279: compose dialog width ≤ four pool mini-cards + pad; not fixed 360/400', async () => {
+  it('SC-PACK-279: compose dialog width = four pool mini-cards + pad + ≈50px slack; not fixed 360/400', async () => {
     const wrapper = mountTasks();
     await flushPromises();
 
@@ -409,10 +415,12 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
       path.resolve(__dirname, '../../components/PackTaskComposeDialog.vue'),
       'utf8',
     );
-    // Width formula: 4×--peek-tile-max-w + 3×8px + horizontal pad; cap 92vw.
+    // Width formula: 4×--peek-tile-max-w + 3×8px + horizontal pad + ≈50px slack; cap 92vw.
     expect(composeSrc).toMatch(
       /4\s*\*\s*var\(--peek-tile-max-w(?:,\s*43px)?\)\s*\+\s*3\s*\*\s*8px/,
     );
+    expect(composeSrc).toMatch(/--compose-width-slack:\s*50px/);
+    expect(composeSrc).toMatch(/var\(--compose-width-slack\)/);
     expect(composeSrc).toMatch(/92vw/);
     expect(composeSrc).not.toMatch(/min\(360px,\s*92vw\)/);
     expect(composeSrc).not.toMatch(/min\(400px,\s*92vw\)/);
@@ -425,6 +433,46 @@ describe('ContentPackTasksPage task compose dialog (SC-PACK-258/259/260/262)', (
     // Game peek modal width unchanged (SC-PACK-279 / design Decision 5).
     const gamePageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
     expect(gamePageSrc).toMatch(/\.peek-modal-card\s*\{[^}]*max-width:\s*min\(400px,\s*92vw\)/s);
+  });
+
+  it('SC-PACK-281: Save is full-width primary unelevated peekSubmit-like; no Cancel', async () => {
+    const wrapper = mountTasks();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="add-task-question"]').trigger('click');
+    await flushPromises();
+
+    const dialog = wrapper.find('[data-testid="task-compose-dialog"]');
+    expect(dialog.exists()).toBe(true);
+
+    const saveBtn = dialog.find('[data-testid="task-compose-save"]');
+    expect(saveBtn.exists()).toBe(true);
+    expect(saveBtn.classes()).toContain('full-width');
+    expect(saveBtn.classes()).toContain('pack-task-compose-save');
+    expect(saveBtn.attributes('data-label')).toBe('content.addTask');
+
+    const cancelBtn = dialog
+      .findAll('button')
+      .find((b) => b.attributes('data-label') === 'content.cancelEditTask');
+    expect(cancelBtn).toBeUndefined();
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const composeSrc = readFileSync(
+      path.resolve(__dirname, '../../components/PackTaskComposeDialog.vue'),
+      'utf8',
+    );
+    expect(composeSrc).toMatch(/unelevated/);
+    expect(composeSrc).toMatch(/color="primary"/);
+    expect(composeSrc).toMatch(/pack-task-compose-save/);
+    expect(composeSrc).toMatch(/--pack-card-action-h/);
+    expect(composeSrc).not.toMatch(/cancelEditTask/);
+    expect(composeSrc).not.toMatch(/function onCancel/);
+
+    // Game peek submit chrome itself unchanged.
+    const gamePageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(gamePageSrc).toMatch(/peek-submit-btn/);
+    expect(gamePageSrc).toMatch(/game\.peekSubmit/);
   });
 
   it('SC-PACK-280: compose dots ≈ badge height; shared peek base stays 6px', async () => {

@@ -129,7 +129,6 @@
       :saving="content.saving"
       :can-save="canSaveQuestion"
       @save="onAddOrUpdateTask"
-      @cancel="cancelTaskCompose"
       @hide="onTaskComposeHide"
     />
 
@@ -463,11 +462,6 @@ function openCreateTask() {
   if (!canComposeTasks.value) return;
   resetTaskForm();
   taskComposeOpen.value = true;
-}
-
-function cancelTaskCompose() {
-  taskComposeOpen.value = false;
-  resetTaskForm();
 }
 
 function onTaskComposeHide() {

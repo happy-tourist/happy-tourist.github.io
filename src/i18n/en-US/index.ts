@@ -278,7 +278,6 @@ export default {
     deleteCardConfirmPublished: 'Карточка будет удалена из опубликованного набора. Продолжить?',
     addTask: 'Добавить вопрос',
     saveTask: 'Сохранить вопрос',
-    cancelEditTask: 'Отмена',
     editTask: 'Изменить вопрос',
     deleteTask: 'Удалить',
     deleteTaskTitle: 'Удалить вопрос?',
