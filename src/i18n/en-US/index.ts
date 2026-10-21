@@ -38,6 +38,7 @@ export default {
     invalidCurrentPassword: 'Неверный текущий пароль',
     passwordChangeUnavailable: 'Смена пароля недоступна для этого аккаунта',
     logout: 'Выйти',
+    login: 'Войти',
     forgotLink: 'Забыли пароль?',
     forgotTitle: 'Восстановление пароля',
     forgotSubtitle: 'Укажите email — мы отправим ссылку для сброса пароля',

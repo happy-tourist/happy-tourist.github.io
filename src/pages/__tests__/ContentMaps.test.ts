@@ -508,6 +508,22 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(true);
   });
 
+  it('SC-MAP-69: guest sees only All filter; identity filters hidden', async () => {
+    authState.user = { id: 'g1', anonymous: true };
+    mapsState.list = [
+      { ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' },
+      { ...draftMap, moderationStatus: 'draft' },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="maps-filter-all"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filter-drafts"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filter-mine"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-row-m-pub"]').exists()).toBe(true);
+  });
+
   it('SC-MAP-31/32: pending and needs_revision short badges on Maps list', async () => {
     mapsState.list = [
       { ...approvedMap, id: 'm-pend', moderationStatus: 'pending', createdBy: 'u1' },

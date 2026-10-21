@@ -18,19 +18,19 @@
       </template>
     </q-banner>
 
-    <!-- SC-PACK-151…153: list filters -->
+    <!-- SC-PACK-151…153/286: list filters; identity hidden for guest (v-if, not disable) -->
     <div class="row q-gutter-sm q-mb-md" data-test-id="packs-filters">
-      <q-btn
-        v-for="opt in filterOptions"
-        :key="opt.value"
-        dense
-        :outline="listFilter !== opt.value"
-        :color="listFilter === opt.value ? 'primary' : undefined"
-        :label="opt.label"
-        :data-test-id="`packs-filter-${opt.value}`"
-        :disable="opt.identityOnly && isGuest"
-        @click="onFilterClick(opt.value, opt.identityOnly)"
-      />
+      <template v-for="opt in filterOptions" :key="opt.value">
+        <q-btn
+          v-if="!opt.identityOnly || !isGuest"
+          dense
+          :outline="listFilter !== opt.value"
+          :color="listFilter === opt.value ? 'primary' : undefined"
+          :label="opt.label"
+          :data-test-id="`packs-filter-${opt.value}`"
+          @click="onFilterClick(opt.value, opt.identityOnly)"
+        />
+      </template>
     </div>
 
     <div v-if="content.loading && !content.catalog.length" class="text-muted">

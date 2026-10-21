@@ -18,19 +18,19 @@
       </template>
     </q-banner>
 
-    <!-- SC-MAP-33/34: list filters (no favorites) -->
+    <!-- SC-MAP-33/34/69: list filters (no favorites); identity hidden for guest (v-if, not disable) -->
     <div class="row q-gutter-sm q-mb-md" data-test-id="maps-filters">
-      <q-btn
-        v-for="opt in filterOptions"
-        :key="opt.value"
-        dense
-        :outline="listFilter !== opt.value"
-        :color="listFilter === opt.value ? 'primary' : undefined"
-        :label="opt.label"
-        :data-test-id="`maps-filter-${opt.value}`"
-        :disable="opt.identityOnly && isGuest"
-        @click="onFilterClick(opt.value, opt.identityOnly)"
-      />
+      <template v-for="opt in filterOptions" :key="opt.value">
+        <q-btn
+          v-if="!opt.identityOnly || !isGuest"
+          dense
+          :outline="listFilter !== opt.value"
+          :color="listFilter === opt.value ? 'primary' : undefined"
+          :label="opt.label"
+          :data-test-id="`maps-filter-${opt.value}`"
+          @click="onFilterClick(opt.value, opt.identityOnly)"
+        />
+      </template>
     </div>
 
     <div v-if="maps.loading && !maps.list.length" class="text-muted">

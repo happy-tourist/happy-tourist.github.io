@@ -46,6 +46,30 @@ body.body--dark .app-page-bg {
   background: transparent;
 }
 
+/* SC-BRAND-23 / D7: shared breadcrumbs sit above q-page inside the container.
+ * Quasar sets q-page min-height ≈ viewport − header; stacking crumbs on top
+ * forces a phantom vertical scroll when content is short. Flex column fills
+ * the remaining space under the header padding instead. Lobby (no crumbs)
+ * keeps Quasar defaults. Prefer min-height/flex over overflow:hidden on body. */
+.q-page-container--with-crumbs {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* Fill viewport; Quasar padding-top (header offset) is inside this box. */
+  min-height: 100vh;
+}
+
+.q-page-container--with-crumbs > .app-breadcrumbs {
+  flex: 0 0 auto;
+}
+
+.q-page-container--with-crumbs > .q-page {
+  flex: 1 0 auto;
+  /* Override Quasar inline minHeight (screen − header); remaining flex space
+   * already accounts for header padding + crumb strip. */
+  min-height: 0 !important;
+}
+
 /* Playing-card wrap grid for pack answer/task tiles (SC-PACK-222…224).
  * Shared resting chrome for PackListCardTile + PackTaskSetCardTile (SC-PACK-255).
  * Also on `.peek-chrome` so game peek / task compose can consume the same tokens

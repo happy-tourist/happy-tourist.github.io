@@ -88,6 +88,7 @@ const {
     params: {} as Record<string, string>,
     query: {},
     path: '/lobby',
+    fullPath: '/lobby',
   };
   const screenLtMd = { value: false };
   return {
@@ -157,7 +158,10 @@ const stubs = {
   },
   'q-header': { template: '<div data-test-id="q-header"><slot /></div>' },
   'q-toolbar': { template: '<div data-test-id="q-toolbar"><slot /></div>' },
-  'q-page-container': { template: '<div data-test-id="q-page-container"><slot /></div>' },
+  'q-page-container': {
+    inheritAttrs: false,
+    template: '<div data-test-id="q-page-container" v-bind="$attrs"><slot /></div>',
+  },
   'q-space': { template: '<div />' },
   'q-btn': {
     props: ['label', 'to', 'icon', 'ariaLabel'],
@@ -208,6 +212,7 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     routeState.name = 'lobby';
     routeState.params = {};
     routeState.path = '/lobby';
+    routeState.fullPath = '/lobby';
     screenLtMd.value = false;
     gameState.isSeated = false;
     gameState.isPlaying = false;
@@ -244,6 +249,7 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
 
   it('SC-BRAND-13: logout rightmost vs account and theme on Lobby (wide)', async () => {
     screenLtMd.value = false;
+    authState.user = { id: 'u1', anonymous: false };
     wrapper = mountApp();
     await flushPromises();
     const toolbar = wrapper.find('[data-test-id="q-toolbar"]');
@@ -254,7 +260,59 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(accountIdx).toBeGreaterThan(-1);
     expect(themeIdx).toBeGreaterThan(accountIdx);
     expect(logoutIdx).toBeGreaterThan(themeIdx);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(false);
+  });
+
+  it('SC-BRAND-22: guest sees login icon instead of logout (wide)', async () => {
+    screenLtMd.value = false;
+    authState.user = { id: 'guest1', anonymous: true };
+    routeState.name = 'lobby';
+    routeState.path = '/lobby';
+    routeState.fullPath = '/lobby';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-account"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    const loginBtn = wrapper.find('[data-test-id="header-login"]');
+    expect(loginBtn.exists()).toBe(true);
+    expect(loginBtn.attributes('data-icon')).toBe('login');
+    const toolbar = wrapper.find('[data-test-id="q-toolbar"]');
+    const html = toolbar.html();
+    const themeIdx = html.indexOf('header-theme');
+    const loginIdx = html.indexOf('header-login');
+    expect(themeIdx).toBeGreaterThan(-1);
+    expect(loginIdx).toBeGreaterThan(themeIdx);
+
+    await loginBtn.trigger('click');
+    expect(logout).not.toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/lobby' },
+    });
+  });
+
+  it('SC-BRAND-22: auth screens omit logout and guest login', async () => {
+    screenLtMd.value = false;
+    authState.user = { id: 'guest1', anonymous: true };
+    routeState.name = 'login';
+    routeState.path = '/login';
+    routeState.fullPath = '/login';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-theme"]').exists()).toBe(true);
+
+    wrapper.unmount();
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.name = 'forgot-password';
+    routeState.path = '/forgot-password';
+    routeState.fullPath = '/forgot-password';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
   });
 
   it('SC-BRAND-14: burger exposes sections on narrow viewport', async () => {
@@ -273,12 +331,14 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
 
   it('SC-BRAND-19: narrow burger is rightmost and holds Acc/Theme/Logout', async () => {
     screenLtMd.value = true;
+    authState.user = { id: 'u1', anonymous: false };
     wrapper = mountApp();
     await flushPromises();
     const toolbar = wrapper.find('[data-test-id="q-toolbar"]');
     expect(wrapper.find('[data-test-id="header-account"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-theme"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(true);
     // Top-level toolbar header-* ids only (exclude menu internals header-burger-*).
     const toolbarIds = [...toolbar.html().matchAll(/data-test-id="(header-[^"]+)"/g)]
@@ -289,12 +349,43 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(wrapper.find('[data-test-id="header-burger-theme"]').exists()).toBe(true);
     const logoutItem = wrapper.find('[data-test-id="header-burger-logout"]');
     expect(logoutItem.exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="header-burger-login"]').exists()).toBe(false);
     const menuHtml = wrapper.find('[data-test-id="header-burger-menu"]').html();
     const accIdx = menuHtml.indexOf('header-burger-account');
     const themeIdx = menuHtml.indexOf('header-burger-theme');
     const logoutIdx = menuHtml.indexOf('header-burger-logout');
     expect(themeIdx).toBeGreaterThan(accIdx);
     expect(logoutIdx).toBeGreaterThan(themeIdx);
+  });
+
+  it('SC-BRAND-24: narrow burger holds login for guest', async () => {
+    screenLtMd.value = true;
+    authState.user = { id: 'guest1', anonymous: true };
+    routeState.name = 'lobby';
+    routeState.path = '/lobby';
+    routeState.fullPath = '/lobby';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="header-account"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-burger"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="header-burger-account"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-burger-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-burger-theme"]').exists()).toBe(true);
+    const loginItem = wrapper.find('[data-test-id="header-burger-login"]');
+    expect(loginItem.exists()).toBe(true);
+    const menuHtml = wrapper.find('[data-test-id="header-burger-menu"]').html();
+    const themeIdx = menuHtml.indexOf('header-burger-theme');
+    const loginIdx = menuHtml.indexOf('header-burger-login');
+    expect(loginIdx).toBeGreaterThan(themeIdx);
+
+    await loginItem.trigger('click');
+    expect(logout).not.toHaveBeenCalled();
+    expect(routerPush).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/lobby' },
+    });
   });
 
   it('SC-BRAND-19 / D21: Game and auth do not fold Acc/Theme into section burger', async () => {
@@ -469,11 +560,13 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     routeState.name = 'game';
     routeState.params = { roomId: 'r1' };
     routeState.path = '/game/r1';
+    routeState.fullPath = '/game/r1';
     wrapper = mountApp();
     await flushPromises();
     expect(wrapper.find('[data-test-id="header-sections"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-moderation"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-logout"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="header-login"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="header-game-leave"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(false);
 
@@ -509,6 +602,71 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     await flushPromises();
     expect(wrapper.find('[data-test-id="q-layout"]').classes()).toContain('app-page-bg');
     expect(appVueSrc).toMatch(/<q-layout[^>]*class="app-page-bg"/);
+  });
+});
+
+describe('App breadcrumbs layout (SC-BRAND-23 / D7)', () => {
+  let wrapper: ReturnType<typeof mountApp> | null = null;
+
+  beforeEach(() => {
+    authState.ready = true;
+    authState.isAuthenticated = true;
+    authState.isStaff = false;
+    authState.user = { id: 'u1', anonymous: false };
+    routeState.params = {};
+    contentState.pack = { id: 'p1', title: 'Пак Альфа' };
+    contentState.staffPreview = null;
+    mapsState.map = null;
+  });
+
+  afterEach(() => {
+    wrapper?.unmount();
+    wrapper = null;
+    vi.clearAllMocks();
+  });
+
+  it('SC-BRAND-23: page-container gets --with-crumbs when breadcrumbs show (packs/maps)', async () => {
+    routeState.name = 'content-catalog';
+    routeState.path = '/content';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="q-page-container"]').classes()).toContain(
+      'q-page-container--with-crumbs',
+    );
+
+    wrapper.unmount();
+    routeState.name = 'content-maps';
+    routeState.path = '/content/maps';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="q-page-container"]').classes()).toContain(
+      'q-page-container--with-crumbs',
+    );
+  });
+
+  it('SC-BRAND-23: lobby has no crumbs class (Quasar page min-height unchanged)', async () => {
+    routeState.name = 'lobby';
+    routeState.path = '/lobby';
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="app-breadcrumbs"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="q-page-container"]').classes()).not.toContain(
+      'q-page-container--with-crumbs',
+    );
+  });
+
+  it('SC-BRAND-23 / D7: app.scss flex column + override Quasar page min-height under crumbs', () => {
+    expect(appVueSrc).toMatch(/q-page-container--with-crumbs[\s\S]*breadcrumbItems\.length/);
+    expect(appScss).toMatch(
+      /\.q-page-container--with-crumbs\s*\{[\s\S]*display:\s*flex[\s\S]*flex-direction:\s*column[\s\S]*min-height:\s*100vh/,
+    );
+    expect(appScss).toMatch(
+      /\.q-page-container--with-crumbs\s*>\s*\.q-page\s*\{[\s\S]*min-height:\s*0\s*!important/,
+    );
+    // Prefer flex/min-height over hiding overflow on body (design D7 risk mitigation).
+    expect(appScss).not.toMatch(/body\s*\{[^}]*overflow:\s*hidden/);
   });
 });
 

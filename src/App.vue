@@ -96,6 +96,16 @@
           :label="t('auth.logout')"
           @click="onSessionLogout"
         />
+        <q-btn
+          v-else-if="showGuestLogin && !foldChromeIntoBurger"
+          flat
+          dense
+          icon="login"
+          data-test-id="header-login"
+          :aria-label="t('auth.login')"
+          :label="t('auth.login')"
+          @click="onGuestLogin"
+        />
 
         <!-- SC-BRAND-14/19: narrow section burger rightmost; Acc/Theme/Logout inside -->
         <q-btn
@@ -153,6 +163,15 @@
               >
                 <q-item-section>{{ t('auth.logout') }}</q-item-section>
               </q-item>
+              <q-item
+                v-else-if="showGuestLogin"
+                clickable
+                v-close-popup
+                data-test-id="header-burger-login"
+                @click="onGuestLogin"
+              >
+                <q-item-section>{{ t('auth.login') }}</q-item-section>
+              </q-item>
             </q-list>
           </q-menu>
         </q-btn>
@@ -193,7 +212,8 @@
     </q-dialog>
 
     <!-- SC-BRAND-17: crumbs inside page-container (header offset zone), before router-view -->
-    <q-page-container>
+    <!-- SC-BRAND-23 / D7: --with-crumbs flex column so Quasar page min-height does not stack under crumbs -->
+    <q-page-container :class="{ 'q-page-container--with-crumbs': breadcrumbItems.length > 0 }">
       <div
         v-if="breadcrumbItems.length"
         class="app-breadcrumbs q-px-md q-py-sm"
@@ -311,9 +331,19 @@ const showAccountNav = computed(
   () => auth.isAuthenticated && auth.user && !auth.user.anonymous && !isLoginRoute.value,
 );
 
-/** Session logout rightmost off-Game (SC-BRAND-13); never on Game (SC-LEAVE-11). */
+/** Session logout for registered only (SC-BRAND-13); never on Game (SC-LEAVE-11). */
 const showSessionLogout = computed(
-  () => auth.isAuthenticated && !isGameRoute.value && !isLoginRoute.value,
+  () =>
+    auth.isAuthenticated &&
+    !!auth.user &&
+    !auth.user.anonymous &&
+    !isGameRoute.value &&
+    !isLoginRoute.value,
+);
+
+/** Guest login affordance instead of logout (SC-BRAND-22/24; design D4). */
+const showGuestLogin = computed(
+  () => auth.isAuthenticated && !!auth.user?.anonymous && !isGameRoute.value && !isLoginRoute.value,
 );
 
 type Crumb = {
@@ -580,6 +610,14 @@ async function onSessionLogout() {
   await game.leaveGame();
   await auth.logout();
   await router.replace({ name: 'login' });
+}
+
+/** Anonymous → Login upgrade with return path; no logout (SC-BRAND-22; design D4). */
+function onGuestLogin() {
+  void router.push({
+    name: 'login',
+    query: { redirect: route.fullPath },
+  });
 }
 </script>
 

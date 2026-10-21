@@ -6,8 +6,8 @@ import {
   createWebHistory,
 } from 'vue-router';
 
+import { authBeforeEach } from './authGuard';
 import routes from './routes';
-import { useAuthStore } from '@/stores/auth';
 
 export default defineRouter(function (/* { store, ssrContext } */) {
   const createHistory = import.meta.env.QUASAR_SERVER
@@ -22,27 +22,7 @@ export default defineRouter(function (/* { store, ssrContext } */) {
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE),
   });
 
-  Router.beforeEach(async (to) => {
-    const auth = useAuthStore();
-    await auth.whenReady();
-
-    if (to.meta.requiresAuth && !auth.isAuthenticated) {
-      return '/login';
-    }
-
-    if (to.meta.guest && auth.isAuthenticated) {
-      return '/lobby';
-    }
-
-    // Client nav gating only — server still enforces (SC-ROLE-08).
-    if (to.meta.requiresAdmin && !auth.isAdmin) {
-      return '/support';
-    }
-
-    if (to.meta.requiresStaff && !auth.isStaff) {
-      return '/support';
-    }
-  });
+  Router.beforeEach(authBeforeEach);
 
   return Router;
 });

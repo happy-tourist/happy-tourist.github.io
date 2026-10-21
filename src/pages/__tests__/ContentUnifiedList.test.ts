@@ -246,15 +246,15 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-153: guest cannot use favorites; no star affordance', async () => {
+  it('SC-PACK-153/286: guest sees only All filter; no identity filters or star', async () => {
     authState.user = { id: 'g1', anonymous: true };
     wrapper = getWrapper();
     await flushPromises();
-    const favBtn = wrapper.find('[data-test-id="packs-filter-favorites"]');
-    expect(favBtn.attributes('disabled')).toBeDefined();
-    // Identity filter click must not grant a personal favorites set
-    await favBtn.trigger('click');
-    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-filter-all"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="packs-filter-moderation"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filter-drafts"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filter-mine"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filter-favorites"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="packs-star-pub1"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-star-contrib1"]').exists()).toBe(false);

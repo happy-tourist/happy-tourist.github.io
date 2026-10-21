@@ -9,7 +9,7 @@
       </q-card-section>
 
       <q-card-section>
-        <q-form class="q-gutter-md" @submit.prevent="onSubmit">
+        <q-form data-test-id="login-form" class="q-gutter-md" @submit.prevent="onSubmit">
           <q-input
             v-if="isRegister"
             v-model="displayName"
@@ -59,6 +59,7 @@
           </q-banner>
 
           <q-btn
+            data-test-id="login-submit"
             type="submit"
             color="primary"
             class="full-width"
@@ -93,6 +94,8 @@
           @click="toggleMode"
         />
         <q-btn
+          v-if="!auth.user?.anonymous"
+          data-test-id="login-anonymous"
           flat
           color="grey"
           label="Войти как гость"
