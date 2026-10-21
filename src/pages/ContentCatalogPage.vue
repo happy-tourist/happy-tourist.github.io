@@ -1,14 +1,25 @@
 <template>
-  <q-page class="q-pa-md">
-    <div class="row items-center justify-between q-mb-md">
-      <div>
-        <div class="text-h5">{{ $t('content.catalogTitle') }}</div>
-        <div class="text-subtitle2 text-muted">{{ $t('content.catalogSubtitle') }}</div>
+  <!-- SC-BRAND-25/26: title+create band per Visual Spec; staff Модерация stays in App header (SC-PACK-184) -->
+  <!-- q-pt-sm: crumb↔title 8–14 with App breadcrumbs bottom pad (Visual Spec) -->
+  <q-page class="q-px-md q-pb-md q-pt-sm catalog-list-page">
+    <div class="catalog-list-title-band" data-test-id="packs-list-chrome">
+      <div class="catalog-list-title-block">
+        <div class="catalog-list-title" data-test-id="packs-list-title">
+          {{ $t('content.catalogTitle') }}
+        </div>
+        <div class="catalog-list-subtitle" data-test-id="packs-list-subtitle">
+          {{ $t('content.catalogSubtitle') }}
+        </div>
       </div>
-      <div class="q-gutter-sm">
-        <!-- SC-PACK-184: staff «Модерация» is in App header, not list chrome -->
-        <q-btn color="primary" icon="add" :label="$t('content.create')" @click="onCreateClick" />
-      </div>
+      <q-btn
+        unelevated
+        color="primary"
+        icon="add"
+        class="catalog-list-create"
+        data-test-id="packs-list-create"
+        :label="$t('content.create')"
+        @click="onCreateClick"
+      />
     </div>
 
     <q-banner v-if="content.error" dense rounded class="bg-negative text-white q-mb-md">
@@ -18,17 +29,16 @@
       </template>
     </q-banner>
 
-    <!-- SC-PACK-151…153/286: list filters; identity hidden for guest (v-if, not disable) -->
-    <div class="row q-gutter-sm q-mb-md" data-test-id="packs-filters">
+    <!-- SC-PACK-151…153/286: entire filter row hidden for guest (D1/D7); no empty chrome -->
+    <div v-if="!isGuest" class="row q-gutter-sm catalog-list-filters" data-test-id="packs-filters">
       <template v-for="opt in filterOptions" :key="opt.value">
         <q-btn
-          v-if="!opt.identityOnly || !isGuest"
           dense
           :outline="listFilter !== opt.value"
           :color="listFilter === opt.value ? 'primary' : undefined"
           :label="opt.label"
           :data-test-id="`packs-filter-${opt.value}`"
-          @click="onFilterClick(opt.value, opt.identityOnly)"
+          @click="onFilterClick(opt.value)"
         />
       </template>
     </div>
@@ -72,6 +82,19 @@
         <template #status>
           <q-badge v-if="item.blocked" color="negative" dense>
             {{ $t('content.blocked') }}
+          </q-badge>
+          <!-- SC-PACK-289 / D2: staff soft-unpub short «СНЯТО» (parity MapsListPage) -->
+          <q-badge
+            v-else-if="item.hasLive && item.inCatalog === false"
+            dense
+            class="pack-task-set-status-badge pack-task-set-status-badge--muted"
+            :data-test-id="`packs-status-${item.id}`"
+          >
+            <span
+              class="pack-task-set-status-icon pack-task-set-status-icon--unpublished"
+              aria-hidden="true"
+            />
+            {{ $t('content.taskSetCardBadge.unpublished') }}
           </q-badge>
           <q-badge
             v-else-if="isReviseStatus(item)"
@@ -201,11 +224,11 @@ const pendingUnpublishId = ref<string | null>(null);
 const isGuest = computed(() => Boolean(auth.user?.anonymous));
 
 const filterOptions = computed(() => [
-  { value: 'all' as const, label: t('content.filterAll'), identityOnly: false },
-  { value: 'moderation' as const, label: t('content.filterModeration'), identityOnly: true },
-  { value: 'drafts' as const, label: t('content.filterDrafts'), identityOnly: true },
-  { value: 'mine' as const, label: t('content.filterMine'), identityOnly: true },
-  { value: 'favorites' as const, label: t('content.filterFavorites'), identityOnly: true },
+  { value: 'all' as const, label: t('content.filterAll') },
+  { value: 'moderation' as const, label: t('content.filterModeration') },
+  { value: 'drafts' as const, label: t('content.filterDrafts') },
+  { value: 'mine' as const, label: t('content.filterMine') },
+  { value: 'favorites' as const, label: t('content.filterFavorites') },
 ]);
 
 const gateTitle = computed(() =>
@@ -220,9 +243,13 @@ const errorLabel = computed(() => {
   return key ? t(key) : (content.error ?? '');
 });
 
-/** Client-side filters over unified GET /api/content/packs (SC-PACK-151…153). */
+/** Client-side filters over unified GET /api/content/packs (SC-PACK-151…153/289). */
 const filteredPacks = computed(() => {
-  const items = content.catalog;
+  // D2 / SC-PACK-289: omit soft-unpublished for non-staff (defense-in-depth vs listCatalog)
+  let items = content.catalog;
+  if (!auth.isStaff) {
+    items = items.filter((p) => !(p.hasLive && p.inCatalog === false));
+  }
   if (isGuest.value && listFilter.value !== 'all') {
     return [];
   }
@@ -250,8 +277,8 @@ onMounted(() => {
   });
 });
 
-function onFilterClick(value: PacksListFilter, identityOnly: boolean) {
-  if (identityOnly && isGuest.value) return;
+function onFilterClick(value: PacksListFilter) {
+  // Guest filter row is unmounted (SC-PACK-286); identity filters only for registered.
   listFilter.value = value;
 }
 
@@ -262,6 +289,8 @@ function isReviseStatus(item: ContentPackSummary): boolean {
 
 function statusBadge(item: ContentPackSummary): string {
   if (item.blocked) return '';
+  // Soft-unpublished rendered above via taskSetCardBadge.unpublished (short «СНЯТО»)
+  if (item.hasLive && item.inCatalog === false) return '';
   const status = item.moderationStatus;
   if (status === 'pending') return t('content.statuses.pending');
   // needs_revision rendered via isReviseStatus + taskSetCardBadge.needs_revision
@@ -269,8 +298,8 @@ function statusBadge(item: ContentPackSummary): string {
   if (status === 'draft' || (!item.hasLive && status !== 'unpublished')) {
     return t('content.statusDraft');
   }
-  if (status === 'unpublished' || (item.hasLive && item.inCatalog === false)) {
-    return t('content.unpublishedByStaff');
+  if (status === 'unpublished') {
+    return t('content.taskSetCardBadge.unpublished');
   }
   // SC-PACK-148/185: published / in_catalog rows have no status badge
   return '';

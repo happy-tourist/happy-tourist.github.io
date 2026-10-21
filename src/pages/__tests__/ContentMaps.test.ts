@@ -433,30 +433,29 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.find('.map-preview-stub').attributes('data-interactive')).toBe('false');
   });
 
-  it('SC-MAP-21: soft-unpublished short СНЯТО + muted; non-staff cannot open', async () => {
+  it('SC-MAP-21: staff soft-unpublished short СНЯТО + muted + republish; non-staff omit', async () => {
     mapsState.list = [{ ...softMap }];
-    authState.isStaff = false;
+    authState.isStaff = true;
     wrapper = getMapsListWrapper();
     await flushPromises();
 
     const softCard = wrapper.find('[data-test-id="maps-row-m-soft"]');
     expect(softCard.classes()).toContain('map-list-tile--muted');
     expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
-    expect(wrapper.text()).not.toContain('maps.unpublishedByStaff');
-    await softCard.trigger('click');
-    await flushPromises();
-    expect(routerPush).not.toHaveBeenCalled();
-
-    wrapper.unmount();
-    authState.isStaff = true;
-    wrapper = getMapsListWrapper();
-    await flushPromises();
-    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
     const republish = wrapper.find('[data-test-id="maps-republish"]');
     expect(republish.exists()).toBe(true);
     expect(republish.text()).toBe('content.taskSetCardRepublish');
     expect(republish.attributes('data-outline')).toBe('1');
     expect(republish.attributes('data-icon')).toBe('visibility');
+
+    // Non-staff: list omit (SC-MAP-70) — stronger than click-no-op alone
+    wrapper.unmount();
+    authState.isStaff = false;
+    mapsState.list = [{ ...softMap }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-soft"]').exists()).toBe(false);
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('SC-MAP-24: author my-moderation lists pending map and links to editor', async () => {
@@ -508,7 +507,7 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(true);
   });
 
-  it('SC-MAP-69: guest sees only All filter; identity filters hidden', async () => {
+  it('SC-MAP-69: guest sees no filter chrome (incl. All)', async () => {
     authState.user = { id: 'g1', anonymous: true };
     mapsState.list = [
       { ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' },
@@ -517,11 +516,66 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     wrapper = getMapsListWrapper();
     await flushPromises();
 
-    expect(wrapper.find('[data-test-id="maps-filter-all"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filter-all"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="maps-filter-moderation"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="maps-filter-drafts"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="maps-filter-mine"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="maps-row-m-pub"]').exists()).toBe(true);
+  });
+
+  it('SC-BRAND-25: maps list title chrome with create on title band; capacity rows kept', async () => {
+    mapsState.list = [{ ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    const chrome = wrapper.find('[data-test-id="maps-list-chrome"]');
+    expect(chrome.exists()).toBe(true);
+    expect(chrome.find('[data-test-id="maps-list-title"]').text()).toContain('maps.title');
+    expect(chrome.find('[data-test-id="maps-list-subtitle"]').text()).toContain('maps.subtitle');
+    expect(chrome.find('[data-test-id="maps-list-create"]').exists()).toBe(true);
+    expect(chrome.find('[data-test-id="maps-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filters"]').exists()).toBe(true);
+    // D5 / SC-MAP-55: two capacity rows, not mock-only «2-4» pill
+    expect(wrapper.find('[data-testid="map-list-players"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="map-list-tourists"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('СЧАСТЛИВЫЙ ТУРИСТ');
+  });
+
+  it('SC-BRAND-26: guest maps list keeps create on title band; no filter row chrome', async () => {
+    authState.user = { id: 'g1', anonymous: true };
+    mapsState.list = [{ ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' }];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    const chrome = wrapper.find('[data-test-id="maps-list-chrome"]');
+    expect(chrome.find('[data-test-id="maps-list-title"]').exists()).toBe(true);
+    expect(chrome.find('[data-test-id="maps-list-subtitle"]').exists()).toBe(true);
+    expect(chrome.find('[data-test-id="maps-list-create"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="maps-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-filter-all"]').exists()).toBe(false);
+  });
+
+  it('SC-MAP-70: non-staff omits soft-unpublished; staff keeps СНЯТО card', async () => {
+    mapsState.list = [
+      { ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' },
+      { ...softMap },
+    ];
+    authState.isStaff = false;
+    authState.user = { id: 'u1', anonymous: false };
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-soft"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="maps-row-m-pub"]').exists()).toBe(true);
+    wrapper.unmount();
+
+    authState.isStaff = true;
+    mapsState.list = [
+      { ...approvedMap, id: 'm-pub', moderationStatus: 'in_catalog' },
+      { ...softMap },
+    ];
+    wrapper = getMapsListWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="maps-row-m-soft"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
   });
 
   it('SC-MAP-31/32: pending and needs_revision short badges on Maps list', async () => {

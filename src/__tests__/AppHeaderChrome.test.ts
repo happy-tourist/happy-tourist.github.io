@@ -597,6 +597,16 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(mod.attributes('data-to') ?? '').toContain('content-staff');
   });
 
+  it('SC-BRAND-25 / SC-BRAND-01: brand logo is image mark without wordmark label', async () => {
+    wrapper = mountApp();
+    await flushPromises();
+    const logo = wrapper.find('[data-test-id="brand-logo"]');
+    expect(logo.exists()).toBe(true);
+    expect(logo.find('img.brand-logo').exists()).toBe(true);
+    expect(logo.text().trim()).toBe('');
+    expect(wrapper.text()).not.toContain('СЧАСТЛИВЫЙ ТУРИСТ');
+  });
+
   it('SC-BRAND-21: q-layout mounts with app-page-bg on shared shell', async () => {
     wrapper = mountApp();
     await flushPromises();

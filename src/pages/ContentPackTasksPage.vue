@@ -459,7 +459,7 @@ function resetTaskForm() {
 }
 
 function openCreateTask() {
-  if (!canComposeTasks.value) return;
+  if (!canComposeTasks.value || !checkGate()) return;
   resetTaskForm();
   taskComposeOpen.value = true;
 }
@@ -469,7 +469,7 @@ function onTaskComposeHide() {
 }
 
 function startEditTask(task: ContentTask) {
-  if (!canComposeTasks.value) return;
+  if (!canComposeTasks.value || !checkGate()) return;
   editingTaskId.value = task.id;
   taskForm.question = task.question;
   taskForm.difficulty = task.difficulty;
@@ -487,7 +487,7 @@ function taskFilledSlots(task: ContentTask) {
 }
 
 async function onAddOrUpdateTask() {
-  if (!taskSet.value || readOnly.value || !canSaveQuestion.value) return;
+  if (!taskSet.value || readOnly.value || !canSaveQuestion.value || !checkGate()) return;
   const question = taskForm.question.trim();
   if (!question) return;
   const slots = JSON.parse(JSON.stringify(taskForm.slots)) as TaskSlot[];
@@ -516,18 +516,19 @@ async function onAddOrUpdateTask() {
 }
 
 async function onTasksCsvAppend(tasks: ContentTask[]) {
-  if (!taskSet.value || readOnly.value || !tasks.length) return;
+  if (!taskSet.value || readOnly.value || !tasks.length || !checkGate()) return;
   taskSet.value.tasks.push(...tasks);
   await flushAutosave();
 }
 
 function confirmDeleteTask(taskId: string) {
+  if (!checkGate()) return;
   pendingDeleteTaskId.value = taskId;
   deleteConfirmOpen.value = true;
 }
 
 function doDeleteTask() {
-  if (!taskSet.value || !pendingDeleteTaskId.value) return;
+  if (!taskSet.value || !pendingDeleteTaskId.value || !checkGate()) return;
   const idx = taskSet.value.tasks.findIndex((t) => t.id === pendingDeleteTaskId.value);
   if (idx >= 0) {
     taskSet.value.tasks.splice(idx, 1);
@@ -542,7 +543,7 @@ function doDeleteTask() {
 }
 
 async function doDeleteTaskSet() {
-  if (!canDeleteTaskSet.value || !packId.value || !taskSetId.value) return;
+  if (!canDeleteTaskSet.value || !packId.value || !taskSetId.value || !checkGate()) return;
   try {
     await content.deleteTaskSet(packId.value, taskSetId.value);
     taskSetDeleteConfirmOpen.value = false;
@@ -554,13 +555,15 @@ async function doDeleteTaskSet() {
 
 async function load() {
   if (!packId.value || !taskSetId.value) return;
-  if (!checkGate()) return;
+  // D8 / SC-PACK-288/291: live drill-in (`view=live`) skips login/verify gate on boot
+  // for anonymous + unverified; mutate paths still call checkGate.
+  const forceLiveView = route.query.view === 'live';
+  if (!forceLiveView && !checkGate()) return;
   clearAutosaveTimer();
   stopLockHeartbeat();
   liveViewMode.value = false;
   try {
     let payload: PackContent;
-    const forceLiveView = route.query.view === 'live';
     if (content.staffEditTarget) {
       payload = content.draft!;
       startLockHeartbeat();

@@ -373,13 +373,13 @@ const showFavorite = computed(
 );
 
 /**
- * SC-PACK-108/164: verified non-anonymous may add-task-set without collection;
- * in-catalog only (SC-PACK-117).
+ * SC-PACK-108/164/287/290: show add-task-set on in-catalog live for non-staff
+ * (incl. anonymous + unverified — click → ensureEligible login/verify gate, D3).
+ * Hidden for staff / blocked / not in-catalog (SC-PACK-117).
  */
 const showAddTaskSet = computed(() => {
   if (auth.isStaff || content.pack?.blocked) return false;
   if (content.pack?.inCatalog === false) return false;
-  if (auth.user?.anonymous || auth.needsEmailVerification) return false;
   return true;
 });
 

@@ -87,7 +87,10 @@ const stubs = {
   'q-banner': true,
   'q-badge': true,
   'q-chip': { template: '<span><slot /></span>' },
-  'q-dialog': { template: '<div><slot /></div>' },
+  'q-dialog': {
+    props: ['modelValue'],
+    template: '<div v-if="modelValue" class="q-dialog-stub"><slot /></div>',
+  },
   'q-card': { template: '<div><slot /></div>' },
   'q-card-section': { template: '<div><slot /></div>' },
   'q-card-actions': { template: '<div><slot /></div>' },
@@ -95,7 +98,7 @@ const stubs = {
   PackAnswerCardTile: true,
 };
 
-describe('live pack ACL (SC-PACK-53/106/108/112/154/164/165)', () => {
+describe('live pack ACL (SC-PACK-53/106/108/112/154/164/165/287/290)', () => {
   beforeEach(() => {
     contentState.error = null;
     contentState.pack = {
@@ -138,13 +141,44 @@ describe('live pack ACL (SC-PACK-53/106/108/112/154/164/165)', () => {
     expect(wrapper.text()).toContain('content.taskSets');
   });
 
-  it('SC-PACK-165: guest does not see add-task-set or star', async () => {
+  it('SC-PACK-165/287: guest sees add-task-set CTA; click → login gate, not editor', async () => {
     authState.user = { id: 'g1', anonymous: true };
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
-    const labels = wrapper.findAll('button').map((b) => b.text());
-    expect(labels.some((l) => l.includes('content.addTaskSetNav'))).toBe(false);
+
+    const addBtn = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('content.addTaskSetNav'));
+    expect(addBtn).toBeTruthy();
     expect(wrapper.find('[data-test-id="pack-detail-star"]').exists()).toBe(false);
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(false);
+
+    await addBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.gateLoginTitle');
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it('SC-PACK-290: unverified sees add-task-set CTA; click → verify gate, not editor', async () => {
+    authState.user = { id: 'u1', anonymous: false };
+    authState.needsEmailVerification = true;
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    const addBtn = wrapper
+      .findAll('button')
+      .find((b) => b.text().includes('content.addTaskSetNav'));
+    expect(addBtn).toBeTruthy();
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(false);
+
+    await addBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.gateVerifyTitle');
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it('SC-PACK-154: detail star toggles favorite', async () => {

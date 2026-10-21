@@ -215,6 +215,56 @@ describe('ContentPackTasksPage CSV hide (SC-PACK-235/236)', () => {
   });
 });
 
+describe('live view-only gate bypass (SC-PACK-288/291)', () => {
+  beforeEach(() => {
+    contentState.error = null;
+    contentState.loading = false;
+    contentState.pack.hasLive = true;
+    contentState.draft = null;
+    contentState.staffEditTarget = null;
+    authState.isStaff = false;
+    authState.needsEmailVerification = false;
+    routeState.query = { view: 'live' };
+    loadLivePack.mockClear();
+    loadLivePack.mockResolvedValue({ content: structuredClone(liveBody) });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('SC-PACK-288: anonymous live drill-in is view-only without login gate', async () => {
+    authState.user = { id: 'g1', anonymous: true };
+    const wrapper = shallowMount(ContentPackTasksPage, {
+      global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+    });
+    await flushPromises();
+
+    expect(loadLivePack).toHaveBeenCalledWith('p1');
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.gateLoginTitle');
+    expect(wrapper.find('[data-testid="add-task-question"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="pack-tasks-csv-controls"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="task-card-grid"]').exists()).toBe(true);
+  });
+
+  it('SC-PACK-291: unverified live drill-in is view-only without verify gate', async () => {
+    authState.user = { id: 'u2', anonymous: false };
+    authState.needsEmailVerification = true;
+    const wrapper = shallowMount(ContentPackTasksPage, {
+      global: { stubs: { ...stubs, PackTaskComposeDialog: false } },
+    });
+    await flushPromises();
+
+    expect(loadLivePack).toHaveBeenCalledWith('p1');
+    expect(wrapper.find('.q-dialog-stub').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.gateVerifyTitle');
+    expect(wrapper.find('[data-testid="add-task-question"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="pack-tasks-csv-controls"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="task-card-grid"]').exists()).toBe(true);
+  });
+});
+
 describe('compose slot chrome (SC-PACK-237)', () => {
   it('task compose dialog uses portrait peek-slot-like + mini-card pool (not page-level slot-picker-grid)', () => {
     expect(composeDialogSrc).toMatch(/data-testid="compose-slot-row"/);
@@ -237,7 +287,10 @@ describe('compose slot chrome (SC-PACK-237)', () => {
   });
 
   it('staff Edit: slot chrome appears inside open task compose dialog', async () => {
+    routeState.query = {};
     authState.isStaff = true;
+    authState.user = { id: 's1', anonymous: false };
+    authState.needsEmailVerification = false;
     contentState.staffEditTarget = 'live';
     contentState.draft = structuredClone(liveBody);
 

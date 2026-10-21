@@ -246,11 +246,12 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(false);
   });
 
-  it('SC-PACK-153/286: guest sees only All filter; no identity filters or star', async () => {
+  it('SC-PACK-153/286: guest sees no filter chrome (incl. All); no star', async () => {
     authState.user = { id: 'g1', anonymous: true };
     wrapper = getWrapper();
     await flushPromises();
-    expect(wrapper.find('[data-test-id="packs-filter-all"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filter-all"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-filter-moderation"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-filter-drafts"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-filter-mine"]').exists()).toBe(false);
@@ -258,6 +259,68 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="packs-star-pub1"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-star-contrib1"]').exists()).toBe(false);
+  });
+
+  it('SC-BRAND-25: packs list title chrome with create on title band', async () => {
+    wrapper = getWrapper();
+    await flushPromises();
+    const chrome = wrapper.find('[data-test-id="packs-list-chrome"]');
+    expect(chrome.exists()).toBe(true);
+    expect(chrome.find('[data-test-id="packs-list-title"]').text()).toContain(
+      'content.catalogTitle',
+    );
+    expect(chrome.find('[data-test-id="packs-list-subtitle"]').text()).toContain(
+      'content.catalogSubtitle',
+    );
+    expect(chrome.find('[data-test-id="packs-list-create"]').exists()).toBe(true);
+    // Create on title band — filters are a separate row below, not inside chrome
+    expect(chrome.find('[data-test-id="packs-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('СЧАСТЛИВЫЙ ТУРИСТ');
+  });
+
+  it('SC-BRAND-26: guest packs list keeps create on title band; no filter row chrome', async () => {
+    authState.user = { id: 'g1', anonymous: true };
+    wrapper = getWrapper();
+    await flushPromises();
+    const chrome = wrapper.find('[data-test-id="packs-list-chrome"]');
+    expect(chrome.find('[data-test-id="packs-list-title"]').exists()).toBe(true);
+    expect(chrome.find('[data-test-id="packs-list-subtitle"]').exists()).toBe(true);
+    expect(chrome.find('[data-test-id="packs-list-create"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-filter-all"]').exists()).toBe(false);
+  });
+
+  it('SC-PACK-289: non-staff omits soft-unpublished; staff keeps СНЯТО card', async () => {
+    const softUnpub: ContentPackSummary = {
+      id: 'soft1',
+      title: 'Soft unpublished',
+      description: '',
+      blocked: false,
+      hasLive: true,
+      inCatalog: false,
+      createdBy: 'other',
+      moderationStatus: 'unpublished',
+      isMine: false,
+      isContributor: false,
+      isFavorite: false,
+    };
+    contentState.catalog = [...sampleCatalog(), softUnpub];
+
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-row-soft1"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test-id="packs-row-pub1"]').exists()).toBe(true);
+    wrapper.unmount();
+
+    authState.isStaff = true;
+    contentState.catalog = [...sampleCatalog(), softUnpub];
+    wrapper = getWrapper();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="packs-row-soft1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="packs-status-soft1"]').text()).toContain(
+      'content.taskSetCardBadge.unpublished',
+    );
   });
 
   it('SC-PACK-154: star and unstar call store favorites API', async () => {

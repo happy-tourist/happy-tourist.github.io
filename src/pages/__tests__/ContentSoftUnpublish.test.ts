@@ -225,7 +225,7 @@ describe('soft-unpublish UI (SC-PACK-120…125)', () => {
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardRepublish')),
     ).toBe(true);
-    expect(wrapper.text()).toContain('content.unpublishedByStaff');
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
   });
 
   it('SC-PACK-120 UI: staff sees unpublish/republish inside pack', async () => {

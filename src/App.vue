@@ -216,7 +216,7 @@
     <q-page-container :class="{ 'q-page-container--with-crumbs': breadcrumbItems.length > 0 }">
       <div
         v-if="breadcrumbItems.length"
-        class="app-breadcrumbs q-px-md q-py-sm"
+        class="app-breadcrumbs q-px-md"
         data-test-id="app-breadcrumbs"
       >
         <q-breadcrumbs>
@@ -623,7 +623,8 @@ function onGuestLogin() {
 
 <style scoped>
 .brand-logo {
-  height: 60px;
+  /* Visual Spec brand mark 40–48 (SC-BRAND-25) */
+  height: 44px;
   width: auto;
   object-fit: contain;
   display: block;
@@ -646,9 +647,9 @@ function onGuestLogin() {
   outline-offset: 2px;
 }
 
-/* Page-container offset zone — not inside elevated q-header (SC-BRAND-17). */
+/* Page-container offset zone — not inside elevated q-header (SC-BRAND-17).
+ * Size/color tokens live in app.scss (Visual Spec crumb). */
 .app-breadcrumbs {
-  font-size: 0.875rem;
   background: var(--q-page-bg, transparent);
 }
 </style>

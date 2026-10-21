@@ -42,8 +42,107 @@ body.body--dark .app-page-bg {
   background: transparent;
 }
 
+/* Catalog shell chrome tokens (SC-BRAND-25 Visual Spec — header / crumbs).
+ * Soft blue / navy within Quasar Dark shell — no second theme engine (D4: no wordmark). */
+.app-page-bg > .q-header {
+  background-color: #d6eafb;
+  color: #1c2e44;
+}
+
+.app-page-bg > .q-header .q-toolbar {
+  min-height: 56px; /* header.height ~56–64 */
+}
+
+body.body--dark .app-page-bg > .q-header {
+  background-color: #172236;
+  color: #a8c0d0;
+}
+
+/* Crumb ink must beat Quasar primary on linked els (mock muted blue). */
 .app-page-bg .app-breadcrumbs {
   background: transparent;
+  color: #5a8fb8;
+  /* With catalog q-pt-sm (8): crumb↔title ≈ 4+8 = 12 within 8–14 */
+  padding-top: 8px;
+  padding-bottom: 4px;
+  font-size: 0.8125rem; /* ~13px within crumb 12–14 */
+}
+
+.app-page-bg .app-breadcrumbs .q-breadcrumbs__el,
+.app-page-bg .app-breadcrumbs a {
+  color: inherit;
+}
+
+body.body--dark .app-page-bg .app-breadcrumbs {
+  color: #8aa4bc;
+}
+
+/* Catalog list hero: title + create band (SC-BRAND-25/26 / design Visual Spec). */
+.catalog-list-title-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  /* Guest (no filter row): title band ↔ card grid ~16–24px */
+  margin-bottom: 20px;
+}
+
+.catalog-list-title-block {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.catalog-list-title {
+  font-size: 2.125rem; /* ~34px within 32–40 */
+  font-weight: 700;
+  line-height: 1.15;
+  color: #1e2e3e;
+  margin: 0;
+}
+
+.catalog-list-subtitle {
+  margin-top: 8px; /* title↔subtitle 6–10 */
+  font-size: 0.875rem; /* ~14px within 13–15 */
+  font-weight: 400;
+  line-height: 1.4;
+  color: #5a6a7a;
+}
+
+body.body--dark .catalog-list-title {
+  color: #ffffff;
+}
+
+body.body--dark .catalog-list-subtitle {
+  color: #a8c0d0;
+}
+
+.catalog-list-create {
+  flex: 0 0 auto;
+  min-height: 38px; /* create.height 36–40; not dense */
+  padding: 0 14px; /* pad-x 12–16 */
+  border-radius: 7px; /* 6–8 */
+  font-size: 0.8125rem; /* ~13px */
+  font-weight: 600;
+}
+
+.catalog-list-create .q-icon {
+  font-size: 18px; /* create + ~18 */
+}
+
+/* Registered: title band ↔ filter row 12–20; filter ↔ grid via filters margin */
+.catalog-list-filters {
+  margin-bottom: 16px;
+  margin-top: -4px; /* with title-band 20 → ~16 gap in Visual Spec band */
+}
+
+/* Page canvas under cards on catalog lists only (cream / navy Visual Spec). */
+.catalog-list-page .pack-card-grid {
+  background: #f7f4ec;
+}
+
+body.body--dark .catalog-list-page .pack-card-grid {
+  background: #141b2b;
 }
 
 /* SC-BRAND-23 / D7: shared breadcrumbs sit above q-page inside the container.

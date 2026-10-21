@@ -1,14 +1,25 @@
 <template>
-  <q-page class="q-pa-md">
-    <div class="row items-center justify-between q-mb-md">
-      <div>
-        <div class="text-h5">{{ $t('maps.title') }}</div>
-        <div class="text-subtitle2 text-muted">{{ $t('maps.subtitle') }}</div>
+  <!-- SC-BRAND-25/26: title+create band per Visual Spec; staff Модерация stays in App header (SC-MAP-43) -->
+  <!-- q-pt-sm: crumb↔title 8–14 with App breadcrumbs bottom pad (Visual Spec) -->
+  <q-page class="q-px-md q-pb-md q-pt-sm catalog-list-page">
+    <div class="catalog-list-title-band" data-test-id="maps-list-chrome">
+      <div class="catalog-list-title-block">
+        <div class="catalog-list-title" data-test-id="maps-list-title">
+          {{ $t('maps.title') }}
+        </div>
+        <div class="catalog-list-subtitle" data-test-id="maps-list-subtitle">
+          {{ $t('maps.subtitle') }}
+        </div>
       </div>
-      <div class="q-gutter-sm">
-        <!-- SC-MAP-43: staff «Модерация» is in App header, not list chrome -->
-        <q-btn color="primary" icon="add" :label="$t('maps.create')" @click="onCreateClick" />
-      </div>
+      <q-btn
+        unelevated
+        color="primary"
+        icon="add"
+        class="catalog-list-create"
+        data-test-id="maps-list-create"
+        :label="$t('maps.create')"
+        @click="onCreateClick"
+      />
     </div>
 
     <q-banner v-if="maps.error" dense rounded class="bg-negative text-white q-mb-md">
@@ -18,17 +29,16 @@
       </template>
     </q-banner>
 
-    <!-- SC-MAP-33/34/69: list filters (no favorites); identity hidden for guest (v-if, not disable) -->
-    <div class="row q-gutter-sm q-mb-md" data-test-id="maps-filters">
+    <!-- SC-MAP-33/34/69: entire filter row hidden for guest (D1/D7); no empty chrome -->
+    <div v-if="!isGuest" class="row q-gutter-sm catalog-list-filters" data-test-id="maps-filters">
       <template v-for="opt in filterOptions" :key="opt.value">
         <q-btn
-          v-if="!opt.identityOnly || !isGuest"
           dense
           :outline="listFilter !== opt.value"
           :color="listFilter === opt.value ? 'primary' : undefined"
           :label="opt.label"
           :data-test-id="`maps-filter-${opt.value}`"
-          @click="onFilterClick(opt.value, opt.identityOnly)"
+          @click="onFilterClick(opt.value)"
         />
       </template>
     </div>
@@ -221,10 +231,10 @@ const isGuest = computed(() => Boolean(auth.user?.anonymous));
 const uid = computed(() => auth.user?.id ?? '');
 
 const filterOptions = computed(() => [
-  { value: 'all' as const, label: t('maps.filterAll'), identityOnly: false },
-  { value: 'moderation' as const, label: t('maps.filterModeration'), identityOnly: true },
-  { value: 'drafts' as const, label: t('maps.filterDrafts'), identityOnly: true },
-  { value: 'mine' as const, label: t('maps.filterMine'), identityOnly: true },
+  { value: 'all' as const, label: t('maps.filterAll') },
+  { value: 'moderation' as const, label: t('maps.filterModeration') },
+  { value: 'drafts' as const, label: t('maps.filterDrafts') },
+  { value: 'mine' as const, label: t('maps.filterMine') },
 ]);
 
 const gateTitle = computed(() =>
@@ -239,9 +249,13 @@ const errorLabel = computed(() => {
   return key ? t(key) : (maps.error ?? '');
 });
 
-/** Client-side filters over GET /api/content/maps (SC-MAP-33/34). */
+/** Client-side filters over GET /api/content/maps (SC-MAP-33/34/70). */
 const filteredMaps = computed(() => {
-  const items = maps.list;
+  // D2 / SC-MAP-70: omit soft-unpublished for non-staff (defense-in-depth vs listMaps)
+  let items = maps.list;
+  if (!auth.isStaff) {
+    items = items.filter((m) => !(m.hasLive && m.inCatalog === false));
+  }
   if (isGuest.value && listFilter.value !== 'all') {
     return [];
   }
@@ -267,8 +281,8 @@ onMounted(() => {
   });
 });
 
-function onFilterClick(value: MapsListFilter, identityOnly: boolean) {
-  if (identityOnly && isGuest.value) return;
+function onFilterClick(value: MapsListFilter) {
+  // Guest filter row is unmounted (SC-MAP-69); identity filters only for registered.
   listFilter.value = value;
 }
 
