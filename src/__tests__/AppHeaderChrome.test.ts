@@ -727,6 +727,18 @@ describe('App page backgrounds (SC-BRAND-21 / SC-PACK-285)', () => {
     );
   });
 
+  it('SC-BRAND-28: catalog lists must not override pack-card-grid with solid cream/navy', () => {
+    expect(appScss).not.toMatch(/\.catalog-list-page\s+\.pack-card-grid\s*\{/);
+    expect(appScss).not.toMatch(/#f7f4ec/);
+    expect(appScss).not.toMatch(/#141b2b/);
+    expect(appScss).toMatch(
+      /(?:^|\n)\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/m,
+    );
+    expect(appScss).toMatch(
+      /(?:^|\n)body\.body--dark\s+\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/m,
+    );
+  });
+
   it('SC-BRAND-21: four pack-bg JPG assets exist under src/assets/packs/', () => {
     for (const name of packBgAssets) {
       expect(existsSync(join(packsAssetsDir, name)), name).toBe(true);
@@ -753,5 +765,20 @@ describe('App page backgrounds (SC-BRAND-21 / SC-PACK-285)', () => {
     expect(gameSrc).toMatch(/tile--removed/);
     expect(gameSrc).toMatch(/\.tile-task\.tile--removed\s*\{[\s\S]*background:\s*transparent/);
     expect(gameSrc).toMatch(/game-hud/);
+  });
+
+  it('SC-PRESENCE-34: sticky .game-hud uses translucent underlay (not opaque #fff / #121212)', () => {
+    const gameSrc = readFileSync(join(srcRoot, 'pages/GamePage.vue'), 'utf8');
+    expect(gameSrc).toMatch(
+      /(?:^|\n)\.game-hud\s*\{[^}]*background-color:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/m,
+    );
+    expect(gameSrc).toMatch(
+      /(?:^|\n)body\.body--dark\s+\.game-hud\s*\{[^}]*background-color:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/m,
+    );
+    // Must not regress to fully opaque solid bar fills.
+    expect(gameSrc).not.toMatch(/(?:^|\n)\.game-hud\s*\{[^}]*background-color:\s*#fff\b/m);
+    expect(gameSrc).not.toMatch(
+      /(?:^|\n)body\.body--dark\s+\.game-hud\s*\{[^}]*background-color:\s*#121212\b/m,
+    );
   });
 });

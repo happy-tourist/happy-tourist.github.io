@@ -11,11 +11,10 @@
           {{ $t('maps.subtitle') }}
         </div>
       </div>
+      <!-- SC-BRAND-27 / D9: same Quasar primary as Lobby create (no unelevated / custom sizing) -->
       <q-btn
-        unelevated
         color="primary"
         icon="add"
-        class="catalog-list-create"
         data-test-id="maps-list-create"
         :label="$t('maps.create')"
         @click="onCreateClick"

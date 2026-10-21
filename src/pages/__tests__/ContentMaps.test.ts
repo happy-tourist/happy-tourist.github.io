@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -7,6 +11,11 @@ import MapEditorPage from '@/pages/MapEditorPage.vue';
 import MapsListPage from '@/pages/MapsListPage.vue';
 import type { MyModerationItem, StaffPendingItem } from '@/stores/content';
 import { emptyMapGrid, type MapRevision, type MapSummary } from '@/stores/maps';
+
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const mapsPageSrc = readFileSync(join(srcRoot, 'pages/MapsListPage.vue'), 'utf8');
+const lobbyPageSrc = readFileSync(join(srcRoot, 'pages/LobbyPage.vue'), 'utf8');
+const appScss = readFileSync(join(srcRoot, 'css/app.scss'), 'utf8');
 
 const emptyGrid = emptyMapGrid();
 
@@ -552,6 +561,24 @@ describe('content maps UI (SC-MAP-06…08, 14, 17, 21, 24–25, 29–30)', () =>
     expect(chrome.find('[data-test-id="maps-list-create"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="maps-filters"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="maps-filter-all"]').exists()).toBe(false);
+  });
+
+  it('SC-BRAND-27: maps create matches lobby Quasar primary (no unelevated / custom sizing)', () => {
+    const mapsCreate = mapsPageSrc.match(
+      /<q-btn[\s\S]*?data-test-id="maps-list-create"[\s\S]*?\/>/,
+    )?.[0];
+    const lobbyCreate = lobbyPageSrc.match(
+      /<q-btn[\s\S]*?data-test-id="lobby-create-open"[\s\S]*?\/>/,
+    )?.[0];
+    expect(mapsCreate).toBeTruthy();
+    expect(lobbyCreate).toBeTruthy();
+    expect(mapsCreate).toMatch(/color="primary"/);
+    expect(mapsCreate).toMatch(/icon="add"/);
+    expect(mapsCreate).not.toMatch(/unelevated/);
+    expect(mapsCreate).not.toMatch(/catalog-list-create/);
+    expect(lobbyCreate).toMatch(/color="primary"/);
+    expect(lobbyCreate).toMatch(/icon="add"/);
+    expect(appScss).not.toMatch(/\.catalog-list-create\s*\{/);
   });
 
   it('SC-MAP-70: non-staff omits soft-unpublished; staff keeps СНЯТО card', async () => {

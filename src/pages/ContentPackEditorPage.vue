@@ -897,7 +897,8 @@ function openTaskSet(taskSetId: string) {
 }
 
 function isSetSoftUnpublished(ts: TaskSet): boolean {
-  return ts.inCatalog === false;
+  // Never-live ghosts are not soft-unpublished catalog rows (SC-PACK-188…190).
+  return ts.neverLive !== true && ts.inCatalog === false;
 }
 
 function difficultyCounts(ts: TaskSet): { d1: number; d2: number; d3: number } {
@@ -957,7 +958,10 @@ function hasEditorTaskSetCardActions(ts: TaskSet): boolean {
 
 const canUnpublishSet = computed(() => {
   if (!local.value) return false;
-  return local.value.taskSets.filter((ts) => ts.inCatalog !== false).length > 1;
+  // Never-live ghosts are not published catalog rows (SC-PACK-131 / SC-PACK-188…190).
+  return (
+    local.value.taskSets.filter((ts) => ts.neverLive !== true && ts.inCatalog !== false).length > 1
+  );
 });
 
 function confirmUnpublishSet(taskSetId: string) {

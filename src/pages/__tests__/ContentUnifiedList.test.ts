@@ -1,8 +1,17 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ContentCatalogPage from '@/pages/ContentCatalogPage.vue';
 import type { ContentPackSummary } from '@/stores/content';
+
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
+const packsPageSrc = readFileSync(join(srcRoot, 'pages/ContentCatalogPage.vue'), 'utf8');
+const lobbyPageSrc = readFileSync(join(srcRoot, 'pages/LobbyPage.vue'), 'utf8');
+const appScss = readFileSync(join(srcRoot, 'css/app.scss'), 'utf8');
 
 const { contentState, authState, listCatalog, starPack, unstarPack, routerPush } = vi.hoisted(
   () => {
@@ -289,6 +298,39 @@ describe('unified packs list (SC-PACK-148…155, 166)', () => {
     expect(chrome.find('[data-test-id="packs-list-create"]').exists()).toBe(true);
     expect(wrapper.find('[data-test-id="packs-filters"]').exists()).toBe(false);
     expect(wrapper.find('[data-test-id="packs-filter-all"]').exists()).toBe(false);
+  });
+
+  it('SC-BRAND-27: packs create matches lobby Quasar primary (no unelevated / custom sizing)', () => {
+    const packsCreate = packsPageSrc.match(
+      /<q-btn[\s\S]*?data-test-id="packs-list-create"[\s\S]*?\/>/,
+    )?.[0];
+    const lobbyCreate = lobbyPageSrc.match(
+      /<q-btn[\s\S]*?data-test-id="lobby-create-open"[\s\S]*?\/>/,
+    )?.[0];
+    expect(packsCreate).toBeTruthy();
+    expect(lobbyCreate).toBeTruthy();
+    expect(packsCreate).toMatch(/color="primary"/);
+    expect(packsCreate).toMatch(/icon="add"/);
+    expect(packsCreate).not.toMatch(/unelevated/);
+    expect(packsCreate).not.toMatch(/catalog-list-create/);
+    expect(lobbyCreate).toMatch(/color="primary"/);
+    expect(lobbyCreate).toMatch(/icon="add"/);
+    expect(lobbyCreate).not.toMatch(/unelevated/);
+    expect(appScss).not.toMatch(/\.catalog-list-create\s*\{/);
+  });
+
+  it('SC-BRAND-28: packs catalog grid keeps SC-PACK-285 translucent underlay (no solid cream/navy)', () => {
+    expect(appScss).toMatch(
+      /(?:^|\n)\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/m,
+    );
+    expect(appScss).toMatch(
+      /(?:^|\n)body\.body--dark\s+\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/m,
+    );
+    expect(appScss).not.toMatch(/\.catalog-list-page\s+\.pack-card-grid\s*\{[^}]*#f7f4ec/);
+    expect(appScss).not.toMatch(
+      /body\.body--dark\s+\.catalog-list-page\s+\.pack-card-grid\s*\{[^}]*#141b2b/,
+    );
+    expect(appScss).not.toMatch(/\.catalog-list-page\s+\.pack-card-grid\s*\{/);
   });
 
   it('SC-PACK-289: non-staff omits soft-unpublished; staff keeps СНЯТО card', async () => {

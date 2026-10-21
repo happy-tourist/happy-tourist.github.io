@@ -285,7 +285,10 @@ const backTarget = computed(() => {
   return { name: 'content-pack-edit' as const, params: { id: packId.value } };
 });
 
-const taskSetSoftUnpublished = computed(() => taskSet.value?.inCatalog === false);
+const taskSetSoftUnpublished = computed(
+  // Never-live ghosts are not soft-unpublished catalog rows (SC-PACK-188…190).
+  () => taskSet.value?.neverLive !== true && taskSet.value?.inCatalog === false,
+);
 
 const showSetUnpublish = computed(
   () =>
@@ -305,7 +308,10 @@ const showSetRepublish = computed(
 
 const canUnpublishThisSet = computed(() => {
   if (!local.value) return false;
-  return local.value.taskSets.filter((ts) => ts.inCatalog !== false).length > 1;
+  // Never-live ghosts are not published catalog rows (SC-PACK-131 / SC-PACK-188…190).
+  return (
+    local.value.taskSets.filter((ts) => ts.neverLive !== true && ts.inCatalog !== false).length > 1
+  );
 });
 
 const gateTitle = computed(() =>
@@ -619,13 +625,14 @@ async function load() {
       return;
     }
 
-    // SC-PACK-132: soft-unpublished — non-staff cannot enter.
-    if (found.inCatalog === false && !staffMode.value && !auth.isStaff) {
+    // SC-PACK-132: soft-unpublished — non-staff cannot enter (never-live ghosts stay enterable).
+    const softUnpub = found.neverLive !== true && found.inCatalog === false;
+    if (softUnpub && !staffMode.value && !auth.isStaff) {
       await router.replace({ name: 'content-pack', params: { id: packId.value } });
       return;
     }
     // Soft-unpublished + staff without Edit session: bounce to live (use Edit on row).
-    if (found.inCatalog === false && liveViewMode.value && !staffMode.value) {
+    if (softUnpub && liveViewMode.value && !staffMode.value) {
       await router.replace({ name: 'content-pack', params: { id: packId.value } });
     }
   } catch {

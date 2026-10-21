@@ -311,6 +311,16 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     await flushPromises();
   }
 
+  it('SC-BRAND-27: lobby create is Quasar primary + add (catalog parity baseline)', () => {
+    const lobbyCreate = lobbyPageSrc.match(
+      /<q-btn[\s\S]*?data-test-id="lobby-create-open"[\s\S]*?\/>/,
+    )?.[0];
+    expect(lobbyCreate).toBeTruthy();
+    expect(lobbyCreate).toMatch(/color="primary"/);
+    expect(lobbyCreate).toMatch(/icon="add"/);
+    expect(lobbyCreate).not.toMatch(/unelevated/);
+  });
+
   it('SC-LOBBY-21/29: create requires map; capacity in options only (no duplicate caption)', async () => {
     await openCreate();
     expect(mapsState.listMaps).toHaveBeenCalled();

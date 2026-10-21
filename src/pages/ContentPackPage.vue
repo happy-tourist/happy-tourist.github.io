@@ -120,9 +120,14 @@
         />
       </div>
       <!-- SC-PACK-229/239…246: dedicated task-set summary cards; soft-unpublish / open preserved -->
-      <div v-if="live.taskSets.length" class="pack-card-grid" data-testid="pack-task-set-grid">
+      <!-- D6 / SC-PACK-132/292: soft-unpublished sets staff-only; ordinals among visible -->
+      <div
+        v-if="visibleLiveTaskSets.length"
+        class="pack-card-grid"
+        data-testid="pack-task-set-grid"
+      >
         <PackTaskSetCardTile
-          v-for="(ts, si) in live.taskSets"
+          v-for="(ts, si) in visibleLiveTaskSets"
           :key="ts.id"
           :title="$t('content.taskSetLabel', { n: si + 1 })"
           :total-count="ts.tasks.length"
@@ -321,6 +326,18 @@ const live = computed(() => content.liveContent);
 const isFavorite = computed(() => Boolean(content.pack?.isFavorite));
 const uid = computed(() => auth.user?.id ?? '');
 
+/**
+ * D6 / SC-PACK-132/292: soft-unpublished task sets (`inCatalog === false`) are
+ * staff-only on live pack detail. Non-staff (incl. anonymous) omit those cards;
+ * display ordinals renumber among the visible set. Never-live author ghosts
+ * (SC-PACK-188…190) stay visible even if payload lacks / clears `inCatalog`.
+ */
+const visibleLiveTaskSets = computed(() => {
+  const sets = live.value?.taskSets ?? [];
+  if (auth.isStaff) return sets;
+  return sets.filter((ts) => ts.neverLive === true || ts.inCatalog !== false);
+});
+
 /** Open author pack|task_set request blocks staff content Edit (SC-PACK-157). */
 const hasOpenAuthorRequest = computed(
   () => Boolean(content.pendingPackAuthorId) || Boolean(content.pendingTaskSetAuthorId),
@@ -383,8 +400,11 @@ const showAddTaskSet = computed(() => {
   return true;
 });
 
+/** Published catalog sets only — never-live ghosts must not inflate the count (SC-PACK-131). */
 const publishedSetCount = computed(
-  () => live.value?.taskSets.filter((ts) => ts.inCatalog !== false).length ?? 0,
+  () =>
+    live.value?.taskSets.filter((ts) => ts.neverLive !== true && ts.inCatalog !== false).length ??
+    0,
 );
 
 const editRedirect = computed(() =>
@@ -404,7 +424,8 @@ const errorLabel = computed(() => {
 });
 
 function isSetSoftUnpublished(ts: TaskSet): boolean {
-  return ts.inCatalog === false;
+  // Never-live ghosts are not soft-unpublished catalog rows (SC-PACK-188…190).
+  return ts.neverLive !== true && ts.inCatalog === false;
 }
 
 /** D19 / SC-PACK-188…190: never-live add-task-set ghost for set author. */

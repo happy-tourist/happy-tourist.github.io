@@ -117,18 +117,7 @@ body.body--dark .catalog-list-subtitle {
   color: #a8c0d0;
 }
 
-.catalog-list-create {
-  flex: 0 0 auto;
-  min-height: 38px; /* create.height 36–40; not dense */
-  padding: 0 14px; /* pad-x 12–16 */
-  border-radius: 7px; /* 6–8 */
-  font-size: 0.8125rem; /* ~13px */
-  font-weight: 600;
-}
-
-.catalog-list-create .q-icon {
-  font-size: 18px; /* create + ~18 */
-}
+/* Create on title band uses Lobby Quasar primary defaults (SC-BRAND-27 / D9) — no custom sizing. */
 
 /* Registered: title band ↔ filter row 12–20; filter ↔ grid via filters margin */
 .catalog-list-filters {
@@ -136,14 +125,8 @@ body.body--dark .catalog-list-subtitle {
   margin-top: -4px; /* with title-band 20 → ~16 gap in Visual Spec band */
 }
 
-/* Page canvas under cards on catalog lists only (cream / navy Visual Spec). */
-.catalog-list-page .pack-card-grid {
-  background: #f7f4ec;
-}
-
-body.body--dark .catalog-list-page .pack-card-grid {
-  background: #141b2b;
-}
+/* Catalog lists keep SC-PACK-285 translucent `.pack-card-grid` underlay (SC-BRAND-28 / D10) —
+ * no solid cream/navy page-canvas override. */
 
 /* SC-BRAND-23 / D7: shared breadcrumbs sit above q-page inside the container.
  * Quasar sets q-page min-height ≈ viewport − header; stacking crumbs on top

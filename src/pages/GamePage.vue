@@ -3435,15 +3435,15 @@ onUnmounted(() => {
   margin-inline: auto;
   overflow: visible;
   pointer-events: none;
-  /* Opaque bar so board does not show through under markers. */
-  background-color: #fff;
+  /* Translucent underlay — page art shows through (SC-PRESENCE-34 / SC-PACK-285 alpha). */
+  background-color: rgba(255, 255, 255, 0.78);
   /* Narrow strip 2×2 vs wide row (SC-PIECE-32). */
   container-type: inline-size;
   container-name: game-hud;
 }
 
 body.body--dark .game-hud {
-  background-color: #121212;
+  background-color: rgba(18, 18, 18, 0.78);
 }
 
 /* Horizontal scroll on a wrapper — not on the bar — so Y chrome (say affordance /

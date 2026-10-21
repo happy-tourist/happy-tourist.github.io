@@ -467,25 +467,35 @@ describe('follow-up 4 UI (SC-PACK-129…133)', () => {
     expect(wrapper.text()).not.toContain('Hard?');
   });
 
-  it('SC-PACK-132: soft-unpublished set is gray; non-staff click does not navigate', async () => {
+  it('SC-PACK-132: non-staff omits soft-unpublished set; published remains', async () => {
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
-    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
-    expect(wrapper.find('.pack-task-set-tile--muted').exists()).toBe(true);
-
-    const softRow = wrapper.find('.pack-task-set-tile--muted');
-    expect(softRow.exists()).toBe(true);
-    await softRow.trigger('click');
-    await flushPromises();
-    expect(routerPush).not.toHaveBeenCalled();
+    expect(wrapper.find('[data-test-id="pack-task-set-row-ts1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="pack-task-set-row-ts2"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.taskSetCardBadge.unpublished');
+    expect(wrapper.find('.pack-task-set-tile--muted').exists()).toBe(false);
   });
 
-  it('SC-PACK-132: staff sees republish on soft set; published drill-in navigates', async () => {
+  it('SC-PACK-292: guest does not see soft-unpublished task-set card', async () => {
+    authState.user = { id: 'anon1', anonymous: true };
+    authState.isStaff = false;
+    const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-test-id="pack-task-set-row-ts1"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test-id="pack-task-set-row-ts2"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('content.taskSetCardBadge.unpublished');
+  });
+
+  it('SC-PACK-132: staff keeps muted soft set + republish; published drill-in navigates', async () => {
     authState.isStaff = true;
     const wrapper = shallowMount(ContentPackPage, { global: { stubs } });
     await flushPromises();
 
+    expect(wrapper.find('[data-test-id="pack-task-set-row-ts2"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('content.taskSetCardBadge.unpublished');
+    expect(wrapper.find('.pack-task-set-tile--muted').exists()).toBe(true);
     expect(
       wrapper.findAll('button').some((b) => b.text().includes('content.taskSetCardRepublish')),
     ).toBe(true);
