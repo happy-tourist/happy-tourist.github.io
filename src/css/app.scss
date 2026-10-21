@@ -9,6 +9,43 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* Shell page background — theme × viewport fixed cover (SC-BRAND-21 / D4).
+ * Assets: pack-bg-{desktop|mobile}-{light|dark}.jpg under src/assets/packs/.
+ * Viewport switch = Quasar sm − 1 (599px), independent of header burger md. */
+.app-page-bg {
+  --q-page-bg: transparent;
+  background-color: transparent;
+  background-image: url('../assets/packs/pack-bg-desktop-light.jpg');
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+body.body--dark .app-page-bg {
+  background-image: url('../assets/packs/pack-bg-desktop-dark.jpg');
+}
+
+@media (max-width: 599px) {
+  .app-page-bg {
+    background-image: url('../assets/packs/pack-bg-mobile-light.jpg');
+  }
+
+  body.body--dark .app-page-bg {
+    background-image: url('../assets/packs/pack-bg-mobile-dark.jpg');
+  }
+}
+
+/* Transparent Quasar page canvas so shell art shows through (D4). */
+.app-page-bg .q-page,
+.app-page-bg .q-page-container {
+  background: transparent;
+}
+
+.app-page-bg .app-breadcrumbs {
+  background: transparent;
+}
+
 /* Playing-card wrap grid for pack answer/task tiles (SC-PACK-222…224).
  * Shared resting chrome for PackListCardTile + PackTaskSetCardTile (SC-PACK-255).
  * Also on `.peek-chrome` so game peek / task compose can consume the same tokens
@@ -40,10 +77,18 @@
   --peek-tile-max-w: 43px;
 }
 
+/* Layout-only underlay (SC-PACK-285 / D5) — not on `.peek-chrome`. */
 .pack-card-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+body.body--dark .pack-card-grid {
+  background: rgba(18, 18, 18, 0.78);
 }
 
 body.body--dark .pack-card-grid,

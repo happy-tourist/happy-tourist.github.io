@@ -1,7 +1,22 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from '@/App.vue';
+
+const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const appVueSrc = readFileSync(join(srcRoot, 'App.vue'), 'utf8');
+const appScss = readFileSync(join(srcRoot, 'css/app.scss'), 'utf8');
+const packsAssetsDir = join(srcRoot, 'assets/packs');
+const packBgAssets = [
+  'pack-bg-desktop-light.jpg',
+  'pack-bg-desktop-dark.jpg',
+  'pack-bg-mobile-light.jpg',
+  'pack-bg-mobile-dark.jpg',
+] as const;
 
 const {
   authState,
@@ -136,7 +151,10 @@ vi.mock('@/stores/maps', () => ({
 }));
 
 const stubs = {
-  'q-layout': { template: '<div><slot /></div>' },
+  'q-layout': {
+    inheritAttrs: false,
+    template: '<div data-test-id="q-layout" v-bind="$attrs"><slot /></div>',
+  },
   'q-header': { template: '<div data-test-id="q-header"><slot /></div>' },
   'q-toolbar': { template: '<div data-test-id="q-toolbar"><slot /></div>' },
   'q-page-container': { template: '<div data-test-id="q-page-container"><slot /></div>' },
@@ -484,5 +502,88 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     await flushPromises();
     const mod = wrapper.find('[data-test-id="header-moderation"]');
     expect(mod.attributes('data-to') ?? '').toContain('content-staff');
+  });
+
+  it('SC-BRAND-21: q-layout mounts with app-page-bg on shared shell', async () => {
+    wrapper = mountApp();
+    await flushPromises();
+    expect(wrapper.find('[data-test-id="q-layout"]').classes()).toContain('app-page-bg');
+    expect(appVueSrc).toMatch(/<q-layout[^>]*class="app-page-bg"/);
+  });
+});
+
+describe('App page backgrounds (SC-BRAND-21 / SC-PACK-285)', () => {
+  it('SC-BRAND-21: app.scss fixed cover + four theme×viewport pack-bg urls', () => {
+    expect(appScss).toMatch(/\.app-page-bg\s*\{[\s\S]*background-attachment:\s*fixed/);
+    expect(appScss).toMatch(/url\(['"]?\.\.\/assets\/packs\/pack-bg-desktop-light\.jpg['"]?\)/);
+    expect(appScss).toMatch(
+      /body\.body--dark\s+\.app-page-bg[\s\S]*url\(['"]?\.\.\/assets\/packs\/pack-bg-desktop-dark\.jpg['"]?\)/,
+    );
+    expect(appScss).toMatch(/@media\s*\(\s*max-width:\s*599px\s*\)/);
+    expect(appScss).toMatch(
+      /@media\s*\(\s*max-width:\s*599px\s*\)[\s\S]*url\(['"]?\.\.\/assets\/packs\/pack-bg-mobile-light\.jpg['"]?\)/,
+    );
+    expect(appScss).toMatch(
+      /@media\s*\(\s*max-width:\s*599px\s*\)[\s\S]*body\.body--dark\s+\.app-page-bg[\s\S]*url\(['"]?\.\.\/assets\/packs\/pack-bg-mobile-dark\.jpg['"]?\)/,
+    );
+  });
+
+  it('SC-BRAND-21: transparent page canvas under .app-page-bg', () => {
+    expect(appScss).toMatch(/\.app-page-bg\s*\{[\s\S]*--q-page-bg:\s*transparent/);
+    expect(appScss).toMatch(
+      /\.app-page-bg\s+\.q-page,[\s\S]*\.app-page-bg\s+\.q-page-container[\s\S]*background:\s*transparent/,
+    );
+    expect(appScss).toMatch(/\.app-page-bg\s+\.app-breadcrumbs[\s\S]*background:\s*transparent/);
+  });
+
+  it('SC-PACK-285: underlay rgba + pad/radius only on .pack-card-grid (not .peek-chrome)', () => {
+    // Layout-only block (D5) — underlay on `.pack-card-grid` alone.
+    expect(appScss).toMatch(
+      /(?:^|\n)\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/m,
+    );
+    expect(appScss).toMatch(
+      /(?:^|\n)\.pack-card-grid\s*\{[^}]*(?:padding:\s*0\.75rem[^}]*border-radius:\s*8px|border-radius:\s*8px[^}]*padding:\s*0\.75rem)/m,
+    );
+    expect(appScss).toMatch(
+      /(?:^|\n)body\.body--dark\s+\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/m,
+    );
+    // Shared token selector with .peek-chrome must not paint the underlay.
+    expect(appScss).not.toMatch(
+      /\.pack-card-grid\s*,\s*\.peek-chrome\s*\{[^}]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/,
+    );
+    expect(appScss).not.toMatch(
+      /\.peek-chrome\s*,\s*\.pack-card-grid\s*\{[^}]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/,
+    );
+    expect(appScss).not.toMatch(
+      /body\.body--dark\s+\.pack-card-grid\s*,\s*body\.body--dark\s+\.peek-chrome\s*\{[^}]*background:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/,
+    );
+  });
+
+  it('SC-BRAND-21: four pack-bg JPG assets exist under src/assets/packs/', () => {
+    for (const name of packBgAssets) {
+      expect(existsSync(join(packsAssetsDir, name)), name).toBe(true);
+    }
+  });
+
+  it('smoke SC-BRAND-21 / SC-PACK-285 / SC-THEME-07: Login/Lobby readable; Game holes transparent', () => {
+    const loginSrc = readFileSync(join(srcRoot, 'pages/LoginPage.vue'), 'utf8');
+    const lobbySrc = readFileSync(join(srcRoot, 'pages/LobbyPage.vue'), 'utf8');
+    const gameSrc = readFileSync(join(srcRoot, 'pages/GamePage.vue'), 'utf8');
+
+    // Login / Lobby sit under shared shell bg; elevated surfaces stay readable.
+    expect(appVueSrc).toMatch(/class="app-page-bg"/);
+    expect(loginSrc).toMatch(/login-card/);
+    expect(lobbySrc).toMatch(/pack-card-grid/);
+    expect(appScss).toMatch(
+      /\.pack-card-grid\s*\{[\s\S]*background:\s*rgba\(\s*255,\s*255,\s*255,\s*0\.78\s*\)/,
+    );
+    expect(appScss).toMatch(
+      /body\.body--dark\s+\.pack-card-grid\s*\{[\s\S]*background:\s*rgba\(\s*18,\s*18,\s*18,\s*0\.78\s*\)/,
+    );
+
+    // Game: removed cells remain transparent holes (page bg shows through); HUD chrome retained.
+    expect(gameSrc).toMatch(/tile--removed/);
+    expect(gameSrc).toMatch(/\.tile-task\.tile--removed\s*\{[\s\S]*background:\s*transparent/);
+    expect(gameSrc).toMatch(/game-hud/);
   });
 });
