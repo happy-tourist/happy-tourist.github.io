@@ -9,6 +9,12 @@ export const TOURIST_ROOM = 'tourist';
 /** Built-in Colyseus LobbyRoom name. */
 export const LOBBY_ROOM = 'lobby';
 
+/**
+ * Bound for lobby `leave()` in `unsubscribeLobby` (D3 / SC-LOBBY-37).
+ * Callers that await unsubscribe get a short wait; hang leave cannot block forever.
+ */
+export const LOBBY_LEAVE_TIMEOUT_MS = 1500;
+
 /** localStorage key for tourist reconnection (D3) — never used for lobby. */
 const TOURIST_RECONNECT_KEY = 'ht-tourist-reconnect';
 
@@ -675,6 +681,9 @@ export const useGameStore = defineStore('game', {
     },
 
     async unsubscribeLobby() {
+      // Sync teardown before any await (SC-LOBBY-37): hung leave must not keep
+      // lobby as the active subscription. leaveGame / subscribeLobby may await
+      // this bounded race; _enterRoom must not await it to completion.
       this.lobbyWanted = false;
       // SC-LOBBY-20: clear before leave/resubscribe so remount never flashes stale rows.
       this.rooms = [];
@@ -683,7 +692,14 @@ export const useGameStore = defineStore('game', {
 
       if (lobby) {
         try {
-          await lobby.leave();
+          // .catch on leave: if timeout wins the race, a later leave reject
+          // must not become an unhandled rejection (intentional swallow).
+          await Promise.race([
+            lobby.leave().catch(() => undefined),
+            new Promise<void>((resolve) => {
+              setTimeout(resolve, LOBBY_LEAVE_TIMEOUT_MS);
+            }),
+          ]);
         } catch {
           // lobby may already be closed
         }
@@ -1020,10 +1036,12 @@ export const useGameStore = defineStore('game', {
         // Unsubscribe only after tourist connect succeeds (SC-LOBBY-05 / design D2).
         await this._leaveTouristRoom();
         const room = await connect();
-        // Attach BEFORE lobby leave: JOIN ack → ROOM_STATE can arrive during the
-        // await gap; without a listener seats stay empty on Game forever.
+        // Attach BEFORE initiating lobby leave: JOIN ack → ROOM_STATE can arrive
+        // during any await gap; without a listener seats stay empty on Game forever.
         this._attachRoom(room);
-        await this.unsubscribeLobby();
+        // SC-LOBBY-05/37 (D1): initiate unsubscribe (sync clear runs before first
+        // await inside); do not await leave completion — create/join UX must not hang.
+        void this.unsubscribeLobby();
         return room;
       } catch (e) {
         this.status = 'idle';
