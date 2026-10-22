@@ -604,6 +604,7 @@ import {
   pickNearestActionablePieceId,
   type ActionableCandidate,
 } from '@/lib/focusActionable';
+import { inferSoloEndModalKind } from '@/lib/soloEndModalKind';
 import { tileSkinCssVars } from '@/lib/tileSkins';
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
@@ -3058,18 +3059,9 @@ watch(budgetsInfinite, (infinite, prev) => {
   }
 });
 
-/** Own unfinished piece on a still-present task cell (live `*`). */
-function hasOwnUnfinishedOnLiveTask(): boolean {
-  const seat = mySeat.value;
-  if (!seat) {
-    return false;
-  }
-  return seat.pieces.some((p) => !isFinishedPiece(p) && isPresentTaskCell(p.row, p.col));
-}
-
 /**
- * Own seat time-expired → dual end copy + clear move chrome (SC-PRESENCE-21 / SC-MOVE-45/48).
- * Infer cause locally: steps=0 ∧ ¬on live `*` → steps; else timer.
+ * Own seat time-expired → dual end copy + clear move chrome (SC-PRESENCE-21/35 / SC-MOVE-45/48).
+ * Infer cause locally via `inferSoloEndModalKind` (free unfinished on live `*` only; !trapped).
  * Only this client; skip initial sync (already expired on remount).
  */
 watch(isMySeatTimeExpired, (expired, prev) => {
@@ -3077,7 +3069,8 @@ watch(isMySeatTimeExpired, (expired, prev) => {
     selectedPieceId.value = null;
   }
   if (prev === false && expired) {
-    endModalKind.value = game.steps <= 0 && !hasOwnUnfinishedOnLiveTask() ? 'steps' : 'timer';
+    const pieces = mySeat.value?.pieces ?? [];
+    endModalKind.value = inferSoloEndModalKind(pieces, game.steps, isPresentTaskCell);
     timeoutModalOpen.value = true;
   }
 });
