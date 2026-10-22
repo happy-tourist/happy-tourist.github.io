@@ -2,7 +2,7 @@
   <div
     class="map-grid-preview"
     :class="{ 'map-grid-preview--interactive': interactive }"
-    :style="gridStyle"
+    :style="rootStyle"
     role="img"
     :aria-label="ariaLabel"
   >
@@ -22,6 +22,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import { tileSkinCssVars } from '@/lib/tileSkins';
 import { MAP_CELL, MAP_CELLS, MAP_SIZE, type MapCell } from '@/stores/maps';
 
 const props = withDefaults(
@@ -48,11 +49,12 @@ const cells = computed(() => {
   return g.split('') as MapCell[];
 });
 
-const gridStyle = computed(() => ({
+const rootStyle = computed(() => ({
   width: `${props.size}px`,
   height: `${props.size}px`,
   gridTemplateColumns: `repeat(${MAP_SIZE}, 1fr)`,
   gridTemplateRows: `repeat(${MAP_SIZE}, 1fr)`,
+  ...tileSkinCssVars(),
 }));
 
 function cellClass(cell: string) {
@@ -87,8 +89,11 @@ function onCellClick(index: number) {
   min-height: 0;
   pointer-events: none;
   cursor: default;
-  background: #3a3a3a;
-  /* Slight cell rounding (map-card mock / list preview). */
+  /* Transparent under skins so notched PNG silhouette matches the board (D2). */
+  background-color: transparent;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  /* Slight cell rounding (map-card mock / list preview); D2: 1px OK at ~7px. */
   border-radius: 1px;
 }
 
@@ -102,15 +107,15 @@ function onCellClick(index: number) {
 }
 
 .map-grid-preview__cell.is-start {
-  background: #4caf50;
+  background-image: var(--tile-skin-start);
 }
 
 .map-grid-preview__cell.is-task {
-  background: #8d6e63;
+  background-image: var(--tile-skin-task);
 }
 
 .map-grid-preview__cell.is-finish {
-  background: #fdd835;
+  background-image: var(--tile-skin-finish);
 }
 
 .body--light .map-grid-preview__cell.is-hole {

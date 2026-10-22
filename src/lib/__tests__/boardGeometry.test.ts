@@ -3,17 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { buildBoardTiles, parseBoardGeometry, touristLayoutGrid } from '@/lib/boardGeometry';
 
 describe('boardGeometry (SC-BOARD-01/40)', () => {
-  it('SC-BOARD-01: tourist layout yields start/task/center tiles', () => {
+  it('SC-BOARD-01/55: tourist layout yields start/task/center tiles (one per finish cell)', () => {
     const tiles = buildBoardTiles(touristLayoutGrid());
     expect(tiles.some((t) => t.kind === 'start')).toBe(true);
     expect(tiles.some((t) => t.kind === 'task')).toBe(true);
-    expect(tiles.filter((t) => t.kind === 'center')).toHaveLength(1);
-    const center = tiles.find((t) => t.kind === 'center')!;
-    expect(center.style.gridColumn).toContain('span');
-    expect(center.style.gridRow).toContain('span');
+    const centers = tiles.filter((t) => t.kind === 'center');
+    expect(centers).toHaveLength(4);
+    for (const center of centers) {
+      expect(center.style.gridColumn).not.toContain('span');
+      expect(center.style.gridRow).not.toContain('span');
+    }
   });
 
-  it('SC-BOARD-40: custom map grid differs from hardcoded tourist layout', () => {
+  it('SC-BOARD-40/55: custom map grid differs from hardcoded tourist layout', () => {
     // Minimal map: one start, one task, 2×2 finish — not the legacy tourist ASCII.
     const custom = `${'1'.padEnd(10, '.')}${'*'.padEnd(10, '.')}${'7'.repeat(2).padEnd(10, '.')}${'7'.repeat(2).padEnd(10, '.')}${'.'.repeat(60)}`;
     expect(custom).toHaveLength(100);
@@ -29,7 +31,12 @@ describe('boardGeometry (SC-BOARD-01/40)', () => {
     const tiles = buildBoardTiles(custom);
     expect(tiles.filter((t) => t.kind === 'start')).toHaveLength(1);
     expect(tiles.filter((t) => t.kind === 'task')).toHaveLength(1);
-    expect(tiles.filter((t) => t.kind === 'center')).toHaveLength(1);
+    const centers = tiles.filter((t) => t.kind === 'center');
+    expect(centers).toHaveLength(4);
+    for (const center of centers) {
+      expect(center.style.gridColumn).not.toContain('span');
+      expect(center.style.gridRow).not.toContain('span');
+    }
   });
 
   it('empty grid (pre-sync) falls back to tourist layout; corrupt length throws', () => {

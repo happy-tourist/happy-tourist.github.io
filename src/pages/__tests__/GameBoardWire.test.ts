@@ -152,6 +152,109 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     const digit = wrapper.find('.tile-difficulty');
     expect(digit.exists()).toBe(true);
     expect(digit.text()).toBe('3');
+    expect(digit.classes()).toContain('tile-difficulty');
+    const flipped = wrapper.find('.tile-task.tile--flipped');
+    expect(flipped.exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('SC-BOARD-01/02/04/42/56/57: playable tiles use skin vars, radius 0, dark flip digit', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    const skinsSrc = readFileSync(path.resolve(__dirname, '../../lib/tileSkins.ts'), 'utf8');
+
+    expect(skinsSrc).toMatch(/assets\/tiles\/start\.png/);
+    expect(skinsSrc).toMatch(/assets\/tiles\/tile\.png/);
+    expect(skinsSrc).toMatch(/assets\/tiles\/tile-back\.png/);
+    expect(skinsSrc).toMatch(/assets\/tiles\/finish\.png/);
+
+    expect(pageSrc).toMatch(/\.tile\s*\{[^}]*border-radius:\s*0/s);
+    expect(pageSrc).toMatch(/--gap:\s*2px/);
+    expect(pageSrc).toMatch(/\.tile-start\s*\{[^}]*--tile-skin-start/s);
+    expect(pageSrc).toMatch(/\.tile-task\s*\{[^}]*--tile-skin-task/s);
+    expect(pageSrc).toMatch(/\.tile-task\.tile--flipped\s*\{[^}]*--tile-skin-task-flipped/s);
+    expect(pageSrc).toMatch(/\.tile-center\s*\{[^}]*--tile-skin-finish/s);
+    expect(pageSrc).toMatch(/\.tile-difficulty\s*\{[^}]*color:\s*#212121/s);
+    expect(pageSrc).toMatch(/\.tile-difficulty\s*\{[^}]*text-shadow:\s*none/s);
+    expect(pageSrc).not.toMatch(/\.tile-start\s*\{[^}]*background:\s*#4caf50/s);
+    expect(pageSrc).not.toMatch(/\.tile\s*\{[^}]*border-radius:\s*var\(--radius\)/s);
+
+    const game = seedPlayingSeat(1);
+    game.flippedCells = [{ key: '1,3', taskId: 't1', difficulty: 2 }];
+    const wrapper = mountPage();
+    await flushPromises();
+    const board = wrapper.find('.tourist-board');
+    expect(board.exists()).toBe(true);
+    const style = board.attributes('style') ?? '';
+    expect(style).toMatch(/--tile-skin-start/);
+    expect(style).toMatch(/--tile-skin-task/);
+    expect(style).toMatch(/--tile-skin-task-flipped/);
+    expect(style).toMatch(/--tile-skin-finish/);
+    expect(wrapper.findAll('.tile-center').length).toBe(4);
+    expect(wrapper.find('.tile-start').exists()).toBe(true);
+    expect(wrapper.find('.tile-task.tile--flipped').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('SC-MOVE-65: finish click/outline is per-cell (no nearest-legal remap)', async () => {
+    // Piece at (3,3): Chebyshev-1 to center (4,4) only — not (4,5)/(5,4)/(5,5).
+    const game = seedPlayingSeat(1);
+    const seat = game.seats[0]!;
+    seat.pieces = [
+      {
+        pieceId: '0',
+        row: 3,
+        col: 3,
+        finished: false,
+        trapped: false,
+      },
+    ];
+    const sendMove = vi.spyOn(game, 'sendMove').mockReturnValue(true);
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const piece = wrapper.find('.piece');
+    expect(piece.exists()).toBe(true);
+    await piece.trigger('click');
+    await flushPromises();
+
+    const centers = wrapper.findAll('.tile-center');
+    expect(centers).toHaveLength(4);
+
+    const styleOf = (el: (typeof centers)[number]) => el.attributes('style') ?? '';
+    const centerAt = (row: number, col: number) =>
+      centers.find(
+        (t) =>
+          styleOf(t).includes(`grid-column: ${col + 1}`) &&
+          styleOf(t).includes(`grid-row: ${row + 1}`),
+      );
+
+    const legalFinish = centerAt(4, 4);
+    const illegalFinish = centerAt(4, 5);
+    expect(legalFinish).toBeTruthy();
+    expect(illegalFinish).toBeTruthy();
+
+    expect(legalFinish!.classes()).toContain('tile--target');
+    expect(illegalFinish!.classes()).not.toContain('tile--target');
+    // Only the legal finish among centers is outlined.
+    expect(centers.filter((t) => t.classes().includes('tile--target'))).toHaveLength(1);
+
+    await illegalFinish!.trigger('click');
+    await flushPromises();
+    expect(sendMove).not.toHaveBeenCalled();
+
+    await legalFinish!.trigger('click');
+    await flushPromises();
+    expect(sendMove).toHaveBeenCalledTimes(1);
+    expect(sendMove).toHaveBeenCalledWith('0', 4, 4);
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(pageSrc).not.toMatch(/nearestLegalCenterCell/);
+
     wrapper.unmount();
   });
 

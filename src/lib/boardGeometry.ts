@@ -31,7 +31,7 @@ export type TileKind = 'start' | 'task' | 'center';
 
 export interface BoardTile {
   kind: TileKind;
-  /** Top-left cell for this tile (center covers 2×2 from here). */
+  /** Grid cell for this tile (one tile per cell, including finish/`center`). */
   row: number;
   col: number;
   style: Record<string, string>;
@@ -107,12 +107,11 @@ export function parseBoardGeometry(grid: string): BoardGeometry {
 
 /**
  * Build CSS-grid tiles from a 100-char grid.
- * Adjacent finish (`7`) cells become one 2×2 center tile from the min row/col.
+ * Each finish (`7`) cell is its own center tile (no multi-cell span) — SC-BOARD-55.
  */
 export function buildBoardTiles(grid: string): BoardTile[] {
   const geo = parseBoardGeometry(grid);
   const tiles: BoardTile[] = [];
-  const visitedCenter = new Set<string>();
 
   for (let row = 0; row < 10; row++) {
     for (let col = 0; col < 10; col++) {
@@ -120,54 +119,8 @@ export function buildBoardTiles(grid: string): BoardTile[] {
       if (ch === '.') {
         continue;
       }
-      if (ch === '7') {
-        const key = cellKey(row, col);
-        if (visitedCenter.has(key)) {
-          continue;
-        }
-        // Expand contiguous finish block from this origin (product: solid 2×2).
-        let maxR = row;
-        let maxC = col;
-        const stack = [{ row, col }];
-        const block = new Set<string>([key]);
-        while (stack.length) {
-          const cur = stack.pop()!;
-          for (const [dr, dc] of [
-            [0, 1],
-            [1, 0],
-            [0, -1],
-            [-1, 0],
-          ] as const) {
-            const nr = cur.row + dr;
-            const nc = cur.col + dc;
-            const nk = cellKey(nr, nc);
-            if (block.has(nk) || geo.charAt(nr, nc) !== '7') {
-              continue;
-            }
-            block.add(nk);
-            stack.push({ row: nr, col: nc });
-            maxR = Math.max(maxR, nr);
-            maxC = Math.max(maxC, nc);
-          }
-        }
-        for (const k of block) {
-          visitedCenter.add(k);
-        }
-        const spanR = maxR - row + 1;
-        const spanC = maxC - col + 1;
-        tiles.push({
-          kind: 'center',
-          row,
-          col,
-          style: {
-            gridColumn: `${col + 1} / span ${spanC}`,
-            gridRow: `${row + 1} / span ${spanR}`,
-          },
-        });
-        continue;
-      }
       tiles.push({
-        kind: ch === '1' ? 'start' : 'task',
+        kind: ch === '1' ? 'start' : ch === '7' ? 'center' : 'task',
         row,
         col,
         style: {

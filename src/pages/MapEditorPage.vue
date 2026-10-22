@@ -82,6 +82,7 @@
             data-test-id="map-paint-tools"
             role="toolbar"
             :aria-label="$t('maps.palette')"
+            :style="tileSkinCssVars()"
           >
             <button
               v-for="tool in paintTools"
@@ -244,6 +245,7 @@ import { useQuasar } from 'quasar';
 
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import { fingerprintEditorContent, isEditorContentDirty } from '@/lib/editorDirty';
+import { tileSkinCssVars } from '@/lib/tileSkins';
 import { useAuthStore } from '@/stores/auth';
 import { type ModerationMessage } from '@/stores/content';
 import {
@@ -862,20 +864,23 @@ onBeforeUnmount(() => {
   display: block;
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  /* SC-MAP-54 / D2: do not clip notched skins. */
+  border-radius: 0;
   border: 1px solid rgba(0, 0, 0, 0.25);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
 
 .map-paint-tile.is-start .map-paint-tile__swatch {
-  background: #4caf50;
+  background-image: var(--tile-skin-start);
 }
 
 .map-paint-tile.is-task .map-paint-tile__swatch {
-  background: #8d6e63;
+  background-image: var(--tile-skin-task);
 }
 
 .map-paint-tile.is-finish .map-paint-tile__swatch {
-  background: #fdd835;
+  background-image: var(--tile-skin-finish);
 }
 
 .map-paint-tile__label {

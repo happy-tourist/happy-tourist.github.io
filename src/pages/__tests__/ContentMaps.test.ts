@@ -1136,6 +1136,55 @@ describe('map View/Edit and never-published → Edit (SC-MAP-45…49)', () => {
         tile.html().indexOf('map-paint-tile__label'),
       );
     }
+
+    // Kind skins on swatch faces (not flat hex-only); radius 0 (SC-MAP-54 / D2)
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const editorSrc = readFileSync(path.resolve(__dirname, '../MapEditorPage.vue'), 'utf8');
+    expect(editorSrc).toMatch(/tileSkinCssVars/);
+    expect(editorSrc).toMatch(/\.map-paint-tile__swatch\s*\{[^}]*border-radius:\s*0/s);
+    expect(editorSrc).toMatch(
+      /\.map-paint-tile\.is-start\s+\.map-paint-tile__swatch\s*\{[^}]*--tile-skin-start/s,
+    );
+    expect(editorSrc).toMatch(
+      /\.map-paint-tile\.is-task\s+\.map-paint-tile__swatch\s*\{[^}]*--tile-skin-task/s,
+    );
+    expect(editorSrc).toMatch(
+      /\.map-paint-tile\.is-finish\s+\.map-paint-tile__swatch\s*\{[^}]*--tile-skin-finish/s,
+    );
+    expect(editorSrc).not.toMatch(
+      /\.map-paint-tile\.is-start\s+\.map-paint-tile__swatch\s*\{[^}]*background:\s*#4caf50/s,
+    );
+
+    const style = tools.attributes('style') ?? '';
+    expect(style).toMatch(/--tile-skin-start/);
+    expect(style).toMatch(/--tile-skin-task/);
+    expect(style).toMatch(/--tile-skin-finish/);
+  });
+
+  it('SC-MAP-71/72: MapGridPreview uses shared kind skins (no flipped; holes empty)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const previewSrc = readFileSync(
+      path.resolve(__dirname, '../../components/MapGridPreview.vue'),
+      'utf8',
+    );
+    const skinsSrc = readFileSync(path.resolve(__dirname, '../../lib/tileSkins.ts'), 'utf8');
+
+    expect(previewSrc).toMatch(/tileSkinCssVars/);
+    expect(previewSrc).toMatch(/\.is-start\s*\{[^}]*--tile-skin-start/s);
+    expect(previewSrc).toMatch(/\.is-task\s*\{[^}]*--tile-skin-task/s);
+    expect(previewSrc).toMatch(/\.is-finish\s*\{[^}]*--tile-skin-finish/s);
+    expect(previewSrc).not.toMatch(/tile-skin-task-flipped/);
+    expect(previewSrc).not.toMatch(/\.is-start\s*\{[^}]*background:\s*#4caf50/s);
+    expect(previewSrc).not.toMatch(/\.is-task\s*\{[^}]*background:\s*#8d6e63/s);
+    expect(previewSrc).not.toMatch(/\.is-finish\s*\{[^}]*background:\s*#fdd835/s);
+    expect(previewSrc).toMatch(/\.is-hole\s*\{[^}]*background:\s*#2c2c2c/s);
+
+    // Same shared module as GamePage / palette (D1/D2)
+    expect(skinsSrc).toMatch(/assets\/tiles\/start\.png/);
+    expect(skinsSrc).toMatch(/assets\/tiles\/tile\.png/);
+    expect(skinsSrc).toMatch(/assets\/tiles\/finish\.png/);
   });
 
   it('SC-MAP-55: maps list renders card grid with mini preview, capacity rows, and bottom Edit', async () => {

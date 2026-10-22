@@ -244,7 +244,11 @@
         </div>
       </div>
 
-      <div class="tourist-board" :class="{ 'tourist-board--interactive': isInteractive }">
+      <div
+        class="tourist-board"
+        :class="{ 'tourist-board--interactive': isInteractive }"
+        :style="tileSkinCssVars()"
+      >
         <div
           v-for="(tile, i) in boardTiles"
           :key="`tile-${i}`"
@@ -600,6 +604,7 @@ import {
   pickNearestActionablePieceId,
   type ActionableCandidate,
 } from '@/lib/focusActionable';
+import { tileSkinCssVars } from '@/lib/tileSkins';
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -813,30 +818,6 @@ function nearestCenterCell(to: Cell): Cell {
   for (const c of centers) {
     const d = chebyshevDistance(c, to);
     if (
-      d < bestDist ||
-      (d === bestDist && (c.row < best.row || (c.row === best.row && c.col < best.col)))
-    ) {
-      bestDist = d;
-      best = { row: c.row, col: c.col };
-    }
-  }
-  return best;
-}
-
-/**
- * Nearest legal center among CENTER_CELLS ∩ legalKeys relative to `from`
- * (Chebyshev; tie lower row, then col — SC-MOVE-63). No quadrant mapping.
- */
-function nearestLegalCenterCell(from: Cell, legalKeys: Set<string>): Cell | null {
-  let best: Cell | null = null;
-  let bestDist = Infinity;
-  for (const c of CENTER_CELLS.value) {
-    if (!legalKeys.has(cellKey(c.row, c.col))) {
-      continue;
-    }
-    const d = chebyshevDistance(from, c);
-    if (
-      best === null ||
       d < bestDist ||
       (d === bestDist && (c.row < best.row || (c.row === best.row && c.col < best.col)))
     ) {
@@ -1707,9 +1688,7 @@ function isTileSelected(tile: BoardTile): boolean {
   if (!sel || !isInteractive.value || returningPieceId.value) {
     return false;
   }
-  if (tile.kind === 'center') {
-    return isCenterCell(sel.row, sel.col);
-  }
+  // Per-cell finish chrome — no block-wide center outline (SC-MOVE-65).
   return tile.row === sel.row && tile.col === sel.col;
 }
 
@@ -1730,12 +1709,13 @@ function isTileTarget(tile: BoardTile): boolean {
   if (legalTargetKeys.value.size === 0) {
     return false;
   }
-  if (tile.kind === 'center') {
-    // Selection chrome wins when the selected piece sits on the center block.
-    if (selectedCell.value && isCenterCell(selectedCell.value.row, selectedCell.value.col)) {
-      return false;
-    }
-    return CENTER_CELLS.value.some((c) => legalTargetKeys.value.has(cellKey(c.row, c.col)));
+  // Selection chrome wins over target on the selected piece’s own cell (SC-MOVE-65).
+  if (
+    selectedCell.value &&
+    tile.row === selectedCell.value.row &&
+    tile.col === selectedCell.value.col
+  ) {
+    return false;
   }
   return legalTargetKeys.value.has(cellKey(tile.row, tile.col));
 }
@@ -2003,19 +1983,7 @@ function onTileClick(tile: BoardTile) {
     return;
   }
 
-  if (tile.kind === 'center') {
-    // Any click on visual 2×2 → nearest legal center vs selected piece (SC-MOVE-63).
-    const from = selectedCell.value;
-    if (!from) {
-      return;
-    }
-    const cell = nearestLegalCenterCell(from, legalTargetKeys.value);
-    if (cell) {
-      submitMove(selectedPieceId.value, cell.row, cell.col);
-    }
-    return;
-  }
-
+  // Finish cells: submit the activated cell only — no nearest-legal remap (SC-MOVE-65).
   if (legalTargetKeys.value.has(cellKey(tile.row, tile.col))) {
     submitMove(selectedPieceId.value, tile.row, tile.col);
   }
@@ -3870,7 +3838,6 @@ body.body--dark .say-picker {
 
 .tourist-board {
   --gap: 2px;
-  --radius: 2px;
   --cell: calc((100% - 9 * var(--gap)) / 10);
   position: relative;
 
@@ -3888,7 +3855,10 @@ body.body--dark .say-picker {
 }
 
 .tile {
-  border-radius: var(--radius);
+  /* Skin silhouette — do not clip notched art with --radius: 2 (SC-BOARD-02). */
+  border-radius: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
   pointer-events: none;
   z-index: 0;
 }
@@ -3902,12 +3872,16 @@ body.body--dark .say-picker {
 }
 
 .tile-start {
-  background: #4caf50;
+  background-image: var(--tile-skin-start);
 }
 
 .tile-task {
-  background: #8d6e63;
+  background-image: var(--tile-skin-task);
   position: relative;
+}
+
+.tile-task.tile--flipped {
+  background-image: var(--tile-skin-task-flipped);
 }
 
 .tile-difficulty {
@@ -3918,8 +3892,9 @@ body.body--dark .say-picker {
   justify-content: center;
   font-weight: 700;
   font-size: clamp(14px, 40%, 28px);
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  /* Readable on beige flip face (SC-BOARD-42 / D4). */
+  color: #212121;
+  text-shadow: none;
   pointer-events: none;
   z-index: 1;
 }
@@ -3993,11 +3968,12 @@ body.body--dark .say-picker {
 
 /* Removed task cells = page background hole (not a red target; SC-BOARD-11/12/15). */
 .tile-task.tile--removed {
+  background-image: none;
   background: transparent;
 }
 
 .tile-center {
-  background: #ffeb3b;
+  background-image: var(--tile-skin-finish);
 }
 
 /* Local move chrome — current-turn client only (SC-MOVE-11/12).
