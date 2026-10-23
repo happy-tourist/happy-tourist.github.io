@@ -738,19 +738,19 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     }
     // ×2 glyph + enlarged hits (flag size unchanged).
     const glyphCss = pageSrc.match(/\.board-action-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
-    expect(glyphCss).toMatch(/width:\s*36px/);
-    expect(glyphCss).toMatch(/height:\s*36px/);
+    expect(glyphCss).toMatch(/width:\s*18px/);
+    expect(glyphCss).toMatch(/height:\s*18px/);
     const boardHitCss =
       pageSrc.match(
         /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
       )?.[1] ?? '';
-    expect(boardHitCss).toMatch(/width:\s*52px/);
-    // Clearance above sprite: anchor at cell/slot top −8px, translate(-50%,-100%) (D10 / SC-BOARD-71).
+    expect(boardHitCss).toMatch(/width:\s*32px/);
+    // Clearance above sprite: anchor at cell/slot top −8px, translate(-50%,-100%) (SC-BOARD-71).
     expect(boardHitCss).toMatch(/translate\(-50%,\s*-100%\)/);
     expect(boardHitCss).toMatch(/-\s*8px/);
     expect(boardHitCss).not.toMatch(/translateX\(-50%\)/);
     const returnCss = pageSrc.match(/\.return-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
-    expect(returnCss).toMatch(/width:\s*52px/);
+    expect(returnCss).toMatch(/width:\s*32px/);
     expect(returnCss).toMatch(/translate\(-50%,\s*-100%\)/);
     expect(returnCss).toMatch(/top:\s*-8px/);
     expect(returnCss).not.toMatch(/translateX\(-50%\)/);

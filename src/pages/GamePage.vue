@@ -503,6 +503,18 @@
                   <img class="board-action-icon" :src="boardEndTurnIcon" alt="" />
                 </button>
 
+                <!-- Focus under end-turn at bottom-right corner of avatar’s bounding square (SC-PRESENCE-30). -->
+                <button
+                  v-if="canShowFocusControl"
+                  type="button"
+                  class="focus-affordance"
+                  data-test-id="focus-actionable"
+                  :aria-label="$t('game.focusActionable')"
+                  @click.stop="onFocusActionableClick"
+                >
+                  <img class="board-action-icon" :src="boardFocusIcon" alt="" />
+                </button>
+
                 <div
                   v-if="sayPickerOpen && canSendSay(item.marker)"
                   class="say-picker"
@@ -522,7 +534,7 @@
                 </div>
               </div>
 
-              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); focus under peeks (SC-PRESENCE-30/37). -->
+              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); end-turn/focus on avatar edge. -->
               <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
                 <div class="budget-counters">
                   <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
@@ -549,17 +561,6 @@
                       +{{ fall.n }}
                     </span>
                   </div>
-                  <!-- Focus under peeks — not on marker @9 (D11 / SC-PRESENCE-30/33/37). -->
-                  <button
-                    v-if="canShowFocusControl"
-                    type="button"
-                    class="focus-affordance"
-                    data-test-id="focus-actionable"
-                    :aria-label="$t('game.focusActionable')"
-                    @click.stop="onFocusActionableClick"
-                  >
-                    <img class="board-action-icon" :src="boardFocusIcon" alt="" />
-                  </button>
                 </div>
               </div>
             </div>
@@ -3472,12 +3473,12 @@ body.body--dark .game-hud {
 }
 
 /* Own cluster: avatar | budgets to the right (SC-PRESENCE-15).
-   Gap ≥ end-turn half-hit past marker edge (~30px at left:100% + 60px hit) so icon does not cover budgets (SC-PRESENCE-25). */
+   Gap ≥ end-turn/focus half-hit past marker edge (~18px at left:100% + 36px hit) so icons do not cover budgets (SC-PRESENCE-25). */
 .presence-slot--own {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 36px;
+  gap: 24px;
 }
 
 /* Own private budgets beside avatar (SC-PRESENCE-15 / D3). */
@@ -3724,26 +3725,26 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Illustrated board-action glyph (~36px / ×2) inside transparent hit (scale D1). Flag uses .my-tourist-finish-icon — unchanged. */
+/* Illustrated board-action glyph (~18px, pre-×2) inside transparent hit. Flag uses .my-tourist-finish-icon — unchanged. */
 .board-action-icon {
-  width: 36px;
-  height: 36px;
+  width: 18px;
+  height: 18px;
   object-fit: contain;
   display: block;
   pointer-events: none;
 }
 
-/* Say affordance top-center / 12 o’clock — hit-center on marker circumference (D2 / SC-SAY-07 / SC-PRESENCE-33). */
+/* Say affordance top-center / 12 o’clock — hit-center on marker circumference (SC-SAY-07 / SC-PRESENCE-33). */
 .say-affordance {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 5;
-  width: 60px;
-  height: 60px;
-  min-width: 60px;
-  min-height: 60px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3761,22 +3762,26 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* Focus under peeks in budget-counters — not on marker @9 (D11 / SC-PRESENCE-30/33/37). */
+/*
+ * Focus under end-turn at bottom-right corner of the 72px avatar’s bounding square
+ * (avatar centered in 96px marker → ±36px from center).
+ */
 .focus-affordance {
-  position: relative;
+  position: absolute;
+  left: calc(50% + 36px);
+  top: calc(50% + 36px);
+  transform: translate(-50%, -50%);
   z-index: 5;
-  width: 60px;
-  height: 60px;
-  min-width: 60px;
-  min-height: 60px;
-  margin: 2px auto 0;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  align-self: center;
   cursor: pointer;
   background: transparent;
   pointer-events: auto;
@@ -3788,17 +3793,17 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* End-turn right-center / 3 o’clock — hit-center on circumference; no dock label (D2 / SC-PRESENCE-17/25). */
+/* End-turn right-center / 3 o’clock — hit-center on circumference; no dock label (SC-PRESENCE-17/25). */
 .end-turn-affordance {
   position: absolute;
   top: 50%;
   left: 100%;
   transform: translate(-50%, -50%);
   z-index: 5;
-  width: 60px;
-  height: 60px;
-  min-width: 60px;
-  min-height: 60px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3816,12 +3821,12 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* Shifted right so left edge of presets stays fully visible in HUD (D12 / SC-SAY-15). */
+/* Shifted right so left edge of presets stays fully visible in HUD (SC-SAY-15). */
 .say-picker {
   position: absolute;
   z-index: 6;
   left: 50%;
-  bottom: calc(100% + 40px);
+  bottom: calc(100% + 24px);
   transform: none;
   display: flex;
   flex-direction: column;
@@ -4012,16 +4017,16 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Peek / rescue / push — hit entirely above sprite (~8px gap; D10 / SC-BOARD-13/71 / SC-MOVE-74/77). */
+/* Peek / rescue / push — hit entirely above sprite (~8px gap; SC-BOARD-13/71 / SC-MOVE-74/77). */
 .peek-affordance,
 .rescue-affordance,
 .push-affordance {
   position: absolute;
   z-index: 4;
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  min-height: 52px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4251,14 +4256,14 @@ body.body--dark .say-picker {
   z-index: 2;
 }
 
-/* Return — hit entirely above strip tourist (~8px gap; D10 / SC-FINISH-13; flag size unchanged). */
+/* Return — hit entirely above strip tourist (~8px gap; SC-FINISH-13; flag size unchanged). */
 .return-affordance {
   position: absolute;
   z-index: 5;
-  width: 52px;
-  height: 52px;
-  min-width: 52px;
-  min-height: 52px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4327,10 +4332,10 @@ body.body--dark .say-picker {
   }
 
   .return-affordance {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
     top: -8px;
     transform: translate(-50%, -100%);
   }
