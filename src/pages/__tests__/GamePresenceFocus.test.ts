@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,6 +9,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GamePage from '@/pages/GamePage.vue';
 import { touristLayoutGrid } from '@/lib/boardGeometry';
 import { useGameStore, type GameSeat } from '@/stores/game';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
 
 const routerPush = vi.fn().mockResolvedValue(undefined);
 
@@ -113,6 +120,20 @@ function mountPage() {
   });
 }
 
+/** Extract a CSS rule body for a class from the SFC (jsdom does not resolve scoped CSS). */
+function cssRuleBody(className: string): string {
+  const re = new RegExp(`\\.${className}\\s*\\{([^}]+)\\}`, 'm');
+  const m = pageSrc.match(re);
+  expect(m, `missing .${className} rule`).toBeTruthy();
+  return m![1]!;
+}
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+function boxesOverlap(a: Box, b: Box): boolean {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
 describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -123,7 +144,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     });
   });
 
-  it('SC-PRESENCE-30: focus control sits between say and end-turn', async () => {
+  it('SC-PRESENCE-30 / SC-SAY-07: clock-axis placement (say 12 / focus 9 / end-turn 3)', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -143,13 +164,49 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(focus.classes()).toContain('focus-affordance');
     expect(endTurn.exists()).toBe(true);
 
-    const children = Array.from(marker.element.children) as HTMLElement[];
-    const sayIdx = children.findIndex((el) => el.classList.contains('say-affordance'));
-    const focusIdx = children.findIndex((el) => el.classList.contains('focus-affordance'));
-    const endIdx = children.findIndex((el) => el.classList.contains('end-turn-affordance'));
-    expect(sayIdx).toBeGreaterThanOrEqual(0);
-    expect(focusIdx).toBeGreaterThan(sayIdx);
-    expect(endIdx).toBeGreaterThan(focusIdx);
+    // Authoritative CSS (jsdom may not resolve scoped rules via getComputedStyle).
+    const sayCss = cssRuleBody('say-affordance');
+    const focusCss = cssRuleBody('focus-affordance');
+    const endCss = cssRuleBody('end-turn-affordance');
+
+    expect(sayCss).toMatch(/top:\s*-40px/);
+    expect(sayCss).toMatch(/left:\s*50%/);
+    expect(sayCss).toMatch(/translateX\(-50%\)/);
+    expect(sayCss).not.toMatch(/right:/);
+
+    expect(focusCss).toMatch(/top:\s*50%/);
+    expect(focusCss).toMatch(/left:\s*-8px/);
+    expect(focusCss).toMatch(/translateY\(-50%\)/);
+    expect(focusCss).not.toMatch(/right:/);
+
+    expect(endCss).toMatch(/top:\s*50%/);
+    expect(endCss).toMatch(/right:\s*-8px/);
+    expect(endCss).toMatch(/translateY\(-50%\)/);
+
+    // Geometry clock-axis (marker 96px, circular chrome 36px) — DOM order alone is insufficient.
+    const markerW = 96;
+    const markerH = 96;
+    const btn = 36;
+    const sayCenterX = markerW * 0.5;
+    const sayCenterY = -40 + btn / 2;
+    const focusLeft = -8;
+    const focusCenterX = focusLeft + btn / 2;
+    const focusCenterY = markerH * 0.5;
+    const endRight = markerW + 8;
+    const endCenterX = endRight - btn / 2;
+    const endCenterY = markerH * 0.5;
+
+    expect(sayCenterX / markerW).toBeCloseTo(0.5, 5);
+    expect(focusLeft).toBeLessThan(0);
+    expect(focusCenterX).toBeLessThan(sayCenterX);
+    expect(endCenterX).toBeGreaterThan(sayCenterX);
+    expect(endRight).toBeGreaterThan(markerW);
+
+    // Circular hit areas do not overlap (centers ≥ 36px apart).
+    const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
+    expect(dist(sayCenterX, sayCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
+    expect(dist(sayCenterX, sayCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
+    expect(dist(focusCenterX, focusCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
 
     wrapper.unmount();
   });
@@ -237,7 +294,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     wrapper2.unmount();
   });
 
-  it('SC-PRESENCE-33: say is above focus without overlap', async () => {
+  it('SC-PRESENCE-33 / SC-PRESENCE-14: clock positions without hit overlap; ready+say clear', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -250,20 +307,60 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const marker = wrapper.find('.presence-slot--own .presence-marker');
     const say = marker.find('.say-affordance');
     const focus = marker.find('.focus-affordance');
+    const endTurn = marker.find('.end-turn-affordance');
     expect(say.exists()).toBe(true);
     expect(focus.exists()).toBe(true);
+    expect(endTurn.exists()).toBe(true);
 
-    // Authoritative CSS (jsdom may not resolve scoped rules via getComputedStyle).
-    // Marker is 96px; say top -32px (center −14); focus top 32% with translateY(-50%)
-    // (center ≈ 30.7). Centers ≥ 36px apart → 36px hit circles do not overlap.
+    // Clock geometry (design D3): say 12, focus 9, end-turn 3 — not vertical stack (focusTopPct=32).
+    const markerW = 96;
     const markerH = 96;
     const btn = 36;
-    const sayTopPx = -32;
-    const focusTopPct = 32;
-    const sayCenter = sayTopPx + btn / 2;
-    const focusCenter = (focusTopPct / 100) * markerH;
-    expect(sayCenter).toBeLessThan(focusCenter);
-    expect(Math.abs(focusCenter - sayCenter)).toBeGreaterThanOrEqual(btn);
+    const sayTop = -40;
+    const sayBox: Box = {
+      left: markerW * 0.5 - btn / 2,
+      top: sayTop,
+      right: markerW * 0.5 + btn / 2,
+      bottom: sayTop + btn,
+    };
+    const focusBox: Box = {
+      left: -8,
+      top: markerH * 0.5 - btn / 2,
+      right: -8 + btn,
+      bottom: markerH * 0.5 + btn / 2,
+    };
+    // right: -8 → right edge = W+8; left = W+8-36
+    const endBox: Box = {
+      left: markerW + 8 - btn,
+      top: markerH * 0.5 - btn / 2,
+      right: markerW + 8,
+      bottom: markerH * 0.5 + btn / 2,
+    };
+
+    expect(sayBox.left + btn / 2).toBeCloseTo(markerW * 0.5, 5);
+    expect(focusBox.left).toBeLessThan(0);
+    expect(endBox.right).toBeGreaterThan(markerW);
+    expect(boxesOverlap(sayBox, focusBox)).toBe(false);
+    expect(boxesOverlap(sayBox, endBox)).toBe(false);
+    expect(boxesOverlap(focusBox, endBox)).toBe(false);
+    // Say remains higher than focus (SC-PRESENCE-33 historic sense).
+    expect(sayBox.top + btn / 2).toBeLessThan(focusBox.top + btn / 2);
+
+    // Ready TL + say 12 co-visible: hit boxes must not intersect (D3 top: -40px).
+    const readyCss = cssRuleBody('ready-affordance');
+    expect(readyCss).toMatch(/top:\s*-4px/);
+    expect(readyCss).toMatch(/left:\s*-4px/);
+    // Conservative ready size (padding 2×8 + short RU label ≈ 18×48).
+    const readyBox: Box = { left: -4, top: -4, right: -4 + 48, bottom: -4 + 18 };
+    expect(boxesOverlap(sayBox, readyBox)).toBe(false);
+    // Old top:-32 would overlap ready:
+    const oldSayBox: Box = { ...sayBox, top: -32, bottom: -32 + btn };
+    expect(boxesOverlap(oldSayBox, readyBox)).toBe(true);
+
+    // Say-picker stays marker-centered above avatar (SC-SAY-15 / D3).
+    const pickerCss = cssRuleBody('say-picker');
+    expect(pickerCss).toMatch(/left:\s*50%/);
+    expect(pickerCss).toMatch(/bottom:\s*calc\(100%\s*\+\s*28px\)/);
 
     wrapper.unmount();
   });

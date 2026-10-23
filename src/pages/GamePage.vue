@@ -296,7 +296,7 @@
           alt=""
           :style="grilleStyle(grille)"
         />
-        <!-- Catapult reveal — sequential overlay; broken 300+300 hold (SC-BOARD-23…26). -->
+        <!-- Catapult reveal — sequential overlay; broken 450+450 hold (SC-BOARD-23…26). -->
         <img
           v-for="catapult in catapultOverlays"
           :key="`catapult-${catapult.key}`"
@@ -481,7 +481,7 @@
                   {{ $t('game.readyButton') }}
                 </button>
 
-                <!-- Say top-right own only (SC-PRESENCE-14 / SC-SAY-07) -->
+                <!-- Say top-center / 12 o’clock own only (SC-PRESENCE-14 / SC-SAY-07) -->
                 <button
                   v-if="canSendSay(item.marker)"
                   type="button"
@@ -492,7 +492,7 @@
                   <q-icon name="chat_bubble_outline" size="18px" />
                 </button>
 
-                <!-- Focus nearest actionable — between say and end-turn (SC-PRESENCE-30/31/32). -->
+                <!-- Focus left-center / 9 o’clock (SC-PRESENCE-30/31/32). -->
                 <button
                   v-if="canShowFocusControl"
                   type="button"
@@ -504,7 +504,7 @@
                   <q-icon name="center_focus_strong" size="18px" />
                 </button>
 
-                <!-- End-turn right-center own avatar — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
+                <!-- End-turn right-center / 3 o’clock — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
                 <button
                   v-if="canSendEndTurn && !isBoardBusy"
                   type="button"
@@ -621,12 +621,12 @@ const PIPELINE_SETTLE_MS = 600;
 const FINISH_FADE_MS = 200;
 /** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
 const GRILLE_ANIM_MS = 1000;
-/** Successful catapult fade in→out (SC-BOARD-23 / D5). */
-const CATAPULT_ANIM_MS = 1000;
-/** Broken timeline holds: intact then broken (SC-BOARD-24 / D5). */
-const CATAPULT_BROKEN_HOLD_MS = 300;
-/** Broken vanish fade after second hold. */
-const CATAPULT_BROKEN_VANISH_MS = 200;
+/** Successful catapult fade in→out (SC-BOARD-23 / D2). */
+const CATAPULT_ANIM_MS = 1500;
+/** Broken timeline holds: intact then broken (SC-BOARD-24 / D2). */
+const CATAPULT_BROKEN_HOLD_MS = 450;
+/** Broken vanish fade after second hold (SC-BOARD-24 / D2). */
+const CATAPULT_BROKEN_VANISH_MS = 300;
 
 const TOURIST_SRC: Record<number, string> = {
   1: tourist1,
@@ -1630,7 +1630,7 @@ const actionableCandidates = computed((): ActionableCandidate[] => {
   return out;
 });
 
-/** Circular focus between say and end-turn when ≥1 actionable (SC-PRESENCE-30/32). */
+/** Circular focus at left-center (9 o’clock) when ≥1 actionable (SC-PRESENCE-30/32). */
 const canShowFocusControl = computed(
   () => isInteractive.value && actionableCandidates.value.length > 0,
 );
@@ -1677,6 +1677,7 @@ function catapultStyle(catapult: CatapultOverlay): Record<string, string> {
     '--prow': String(catapult.row),
     '--pcol': String(catapult.col),
     '--catapult-anim-ms': `${CATAPULT_ANIM_MS}ms`,
+    '--catapult-broken-vanish-ms': `${CATAPULT_BROKEN_VANISH_MS}ms`,
   };
 }
 
@@ -3703,13 +3704,13 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Say affordance top-right own only (SC-PRESENCE-14 / SC-SAY-07 / SC-SAY-15).
-   Hit-area ≥ ~32px; icon glyph may stay smaller. */
+/* Say affordance top-center / 12 o’clock (SC-PRESENCE-14 / SC-SAY-07 / SC-SAY-15).
+   Hit-area ≥ ~32px; raised to clear ready/finish TL (design D3). */
 .say-affordance {
   position: absolute;
-  /* Raised above focus so hit areas do not overlap (SC-PRESENCE-33 / D8). */
-  top: -32px;
-  right: -8px;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   width: 36px;
   height: 36px;
@@ -3733,11 +3734,11 @@ body.body--dark .say-bubble {
   background: #1e88e5;
 }
 
-/* Focus between say (above) and end-turn (right-center) — SC-PRESENCE-30/33. */
+/* Focus left-center / 9 o’clock — SC-PRESENCE-30/33. */
 .focus-affordance {
   position: absolute;
-  top: 32%;
-  right: -8px;
+  top: 50%;
+  left: -8px;
   transform: translateY(-50%);
   z-index: 5;
   width: 36px;
@@ -3762,7 +3763,7 @@ body.body--dark .say-bubble {
   background: #1e88e5;
 }
 
-/* End-turn right-center on own avatar — mirror of say top; no dock label (SC-PRESENCE-17/25). */
+/* End-turn right-center / 3 o’clock — no dock label (SC-PRESENCE-17/25). */
 .end-turn-affordance {
   position: absolute;
   top: 50%;
@@ -4030,7 +4031,7 @@ body.body--dark .say-picker {
   background: #388e3c;
 }
 
-/* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27). */
+/* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27 / SC-BOARD-58). */
 .grille-overlay {
   position: absolute;
   z-index: 3;
@@ -4042,6 +4043,7 @@ body.body--dark .say-picker {
   pointer-events: none;
   padding: 1px;
   box-sizing: border-box;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
 }
 
 .grille-overlay--drop {
@@ -4052,7 +4054,7 @@ body.body--dark .say-picker {
   animation: grille-rise var(--grille-anim-ms, 1000ms) ease-out both;
 }
 
-/* Catapult reveal — successful fade ~1000 ms; broken intact/hold/vanish (SC-BOARD-23/24). */
+/* Catapult reveal — successful fade ~1500 ms; broken intact/hold/vanish (SC-BOARD-23/24/58). */
 .catapult-overlay {
   position: absolute;
   z-index: 3;
@@ -4064,10 +4066,11 @@ body.body--dark .say-picker {
   pointer-events: none;
   padding: 1px;
   box-sizing: border-box;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
 }
 
 .catapult-overlay--reveal {
-  animation: catapult-reveal var(--catapult-anim-ms, 1000ms) ease-in-out both;
+  animation: catapult-reveal var(--catapult-anim-ms, 1500ms) ease-in-out both;
 }
 
 .catapult-overlay--intact,
@@ -4076,7 +4079,7 @@ body.body--dark .say-picker {
 }
 
 .catapult-overlay--vanish {
-  animation: catapult-broken-vanish 200ms ease-out both;
+  animation: catapult-broken-vanish var(--catapult-broken-vanish-ms, 300ms) ease-out both;
 }
 
 @keyframes catapult-reveal {
@@ -4264,6 +4267,7 @@ body.body--dark .say-picker {
   z-index: 1;
   padding: 1px;
   box-sizing: border-box;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.4));
 }
 
 .my-tourist-chrome-grille--drop {

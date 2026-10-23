@@ -608,4 +608,29 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
 
     wrapper.unmount();
   });
+
+  it('SC-BOARD-23/24/58: catapult timings ×1.5 + drop-shadow on overlays (SFC source)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+
+    expect(pageSrc).toMatch(/const CATAPULT_ANIM_MS = 1500/);
+    expect(pageSrc).toMatch(/const CATAPULT_BROKEN_HOLD_MS = 450/);
+    expect(pageSrc).toMatch(/const CATAPULT_BROKEN_VANISH_MS = 300/);
+    expect(pageSrc).toMatch(/--catapult-anim-ms,\s*1500ms/);
+    expect(pageSrc).toMatch(
+      /\.catapult-overlay--vanish\s*\{[^}]*--catapult-broken-vanish-ms,\s*300ms/s,
+    );
+
+    const dropShadow =
+      /drop-shadow\(0 0 1px rgba\(0,\s*0,\s*0,\s*0\.55\)\)[\s\S]*?drop-shadow\(0 0 2px rgba\(255,\s*255,\s*255,\s*0\.4\)\)/;
+    expect(pageSrc).toMatch(new RegExp(`\\.grille-overlay\\s*\\{[^}]*${dropShadow.source}`, 's'));
+    expect(pageSrc).toMatch(new RegExp(`\\.catapult-overlay\\s*\\{[^}]*${dropShadow.source}`, 's'));
+    expect(pageSrc).toMatch(
+      new RegExp(`\\.my-tourist-chrome-grille\\s*\\{[^}]*${dropShadow.source}`, 's'),
+    );
+    expect(pageSrc).not.toMatch(
+      /\.my-tourist-chrome-grille\s*\{[^}]*background:\s*(?:#|rgba?\(|opaque)/s,
+    );
+  });
 });
