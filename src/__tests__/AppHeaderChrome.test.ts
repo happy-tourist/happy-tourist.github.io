@@ -11,6 +11,7 @@ const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const appVueSrc = readFileSync(join(srcRoot, 'App.vue'), 'utf8');
 const appScss = readFileSync(join(srcRoot, 'css/app.scss'), 'utf8');
 const packsAssetsDir = join(srcRoot, 'assets/packs');
+const brandAssetsDir = join(srcRoot, 'assets/brand');
 const packBgAssets = [
   'pack-bg-desktop-light.jpg',
   'pack-bg-desktop-dark.jpg',
@@ -26,6 +27,7 @@ const {
   mapsState,
   routeState,
   screenLtMd,
+  darkIsActive,
   logout,
   leaveGame,
   routerPush,
@@ -95,6 +97,7 @@ const {
     fullPath: '/lobby',
   };
   const screenLtMd = { value: false };
+  const darkIsActive = { value: false };
   return {
     authState,
     gameState,
@@ -103,6 +106,7 @@ const {
     mapsState,
     routeState,
     screenLtMd,
+    darkIsActive,
     logout: vi.fn().mockResolvedValue(undefined),
     leaveGame: gameState.leaveGame,
     routerPush: vi.fn(),
@@ -126,7 +130,11 @@ vi.mock('quasar', async (importOriginal) => {
   return {
     ...actual,
     useQuasar: () => ({
-      dark: { isActive: false },
+      dark: {
+        get isActive() {
+          return darkIsActive.value;
+        },
+      },
       screen: { lt: { md: screenLtMd.value, sm: false } },
     }),
   };
@@ -170,7 +178,7 @@ const stubs = {
   'q-btn': {
     props: ['label', 'to', 'icon', 'ariaLabel'],
     template:
-      '<button v-bind="$attrs" :data-to="to ? JSON.stringify(to) : undefined" :data-icon="icon">{{ label }}<slot /></button>',
+      '<button v-bind="$attrs" :aria-label="ariaLabel" :data-to="to ? JSON.stringify(to) : undefined" :data-icon="icon">{{ label }}<slot /></button>',
   },
   'q-menu': { template: '<div data-test-id="header-burger-menu"><slot /></div>' },
   'q-list': { template: '<div><slot /></div>' },
@@ -198,7 +206,14 @@ function mountApp() {
     global: {
       stubs,
       mocks: {
-        $q: { dark: { isActive: false }, screen: { lt: { md: screenLtMd.value } } },
+        $q: {
+          dark: {
+            get isActive() {
+              return darkIsActive.value;
+            },
+          },
+          screen: { lt: { md: screenLtMd.value } },
+        },
       },
     },
   });
@@ -218,6 +233,7 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     routeState.path = '/lobby';
     routeState.fullPath = '/lobby';
     screenLtMd.value = false;
+    darkIsActive.value = false;
     gameState.isSeated = false;
     gameState.isPlaying = false;
     gameState.phase = 'waiting';
@@ -615,6 +631,78 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(logo.find('img.brand-logo').exists()).toBe(true);
     expect(logo.text().trim()).toBe('');
     expect(wrapper.text()).not.toContain('СЧАСТЛИВЫЙ ТУРИСТ');
+  });
+
+  it('SC-BRAND-29: header mark switches between logo-light and logo-dark with theme', async () => {
+    expect(existsSync(join(brandAssetsDir, 'logo-light.png'))).toBe(true);
+    expect(existsSync(join(brandAssetsDir, 'logo-dark.png'))).toBe(true);
+    expect(existsSync(join(brandAssetsDir, 'logo.png'))).toBe(false);
+    expect(appVueSrc).toMatch(/logo-light\.png/);
+    expect(appVueSrc).toMatch(/logo-dark\.png/);
+    expect(appVueSrc).not.toMatch(/assets\/brand\/logo\.png/);
+
+    darkIsActive.value = false;
+    wrapper = mountApp();
+    await flushPromises();
+    const lightSrc = wrapper.find('img.brand-logo').attributes('src') ?? '';
+    expect(lightSrc).toMatch(/logo-light/);
+
+    wrapper.unmount();
+    darkIsActive.value = true;
+    wrapper = mountApp();
+    await flushPromises();
+    const darkSrc = wrapper.find('img.brand-logo').attributes('src') ?? '';
+    expect(darkSrc).toMatch(/logo-dark/);
+    expect(darkSrc).not.toBe(lightSrc);
+  });
+
+  it('SC-BRAND-30: brand logo height 60px; toolbar min-height ≥ 64px', () => {
+    expect(appVueSrc).toMatch(/\.brand-logo\s*\{[\s\S]*?height:\s*60px/);
+    expect(appVueSrc).toMatch(/\.app-header-toolbar\s*\{[\s\S]*?min-height:\s*64px/);
+    expect(appVueSrc).not.toMatch(/\.brand-logo\s*\{[^}]*height:\s*4[0-8]px/);
+  });
+
+  it('SC-BRAND-31: wide toolbar login/logout are icon-only with aria-label', async () => {
+    screenLtMd.value = false;
+    authState.user = { id: 'u1', anonymous: false };
+    wrapper = mountApp();
+    await flushPromises();
+    const logoutBtn = wrapper.find('[data-test-id="header-logout"]');
+    expect(logoutBtn.exists()).toBe(true);
+    expect(logoutBtn.attributes('data-icon')).toBe('logout');
+    expect(logoutBtn.attributes('aria-label')).toBe('auth.logout');
+    expect(logoutBtn.text().trim()).toBe('');
+    expect(appVueSrc).not.toMatch(/data-test-id="header-logout"[^>]*:label=/);
+    expect(appVueSrc).toMatch(/data-test-id="header-logout"[^>]*:aria-label="t\('auth\.logout'\)"/);
+
+    wrapper.unmount();
+    authState.user = { id: 'guest1', anonymous: true };
+    wrapper = mountApp();
+    await flushPromises();
+    const loginBtn = wrapper.find('[data-test-id="header-login"]');
+    expect(loginBtn.exists()).toBe(true);
+    expect(loginBtn.attributes('data-icon')).toBe('login');
+    expect(loginBtn.attributes('aria-label')).toBe('auth.login');
+    expect(loginBtn.text().trim()).toBe('');
+    expect(appVueSrc).not.toMatch(/data-test-id="header-login"[^>]*:label=/);
+  });
+
+  it('SC-LEAVE-13: Game right leave is icon-only with game.leave aria', async () => {
+    routeState.name = 'game';
+    routeState.params = { roomId: 'r1' };
+    routeState.path = '/game/r1';
+    routeState.fullPath = '/game/r1';
+    wrapper = mountApp();
+    await flushPromises();
+    const leaveBtn = wrapper.find('[data-test-id="header-game-leave"]');
+    expect(leaveBtn.exists()).toBe(true);
+    expect(leaveBtn.attributes('data-icon')).toBe('exit_to_app');
+    expect(leaveBtn.attributes('aria-label')).toBe('game.leave');
+    expect(leaveBtn.text().trim()).toBe('');
+    expect(appVueSrc).not.toMatch(/data-test-id="header-game-leave"[^>]*:label=/);
+    expect(appVueSrc).toMatch(
+      /data-test-id="header-game-leave"[^>]*:aria-label="t\('game\.leave'\)"/,
+    );
   });
 
   it('SC-BRAND-21: q-layout mounts with app-page-bg on shared shell', async () => {

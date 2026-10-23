@@ -1,7 +1,7 @@
 <template>
   <q-layout view="hHh lpR fFf" class="app-page-bg">
     <q-header bordered>
-      <q-toolbar>
+      <q-toolbar class="app-header-toolbar">
         <button
           type="button"
           class="brand-logo-control"
@@ -85,31 +85,31 @@
         <q-btn
           v-if="isGameRoute"
           flat
+          round
           dense
           icon="exit_to_app"
           data-test-id="header-game-leave"
           :aria-label="t('game.leave')"
-          :label="t('game.leave')"
           @click="onExitClick"
         />
         <q-btn
           v-else-if="showSessionLogout && !foldChromeIntoBurger"
           flat
+          round
           dense
           icon="logout"
           data-test-id="header-logout"
           :aria-label="t('auth.logout')"
-          :label="t('auth.logout')"
           @click="onSessionLogout"
         />
         <q-btn
           v-else-if="showGuestLogin && !foldChromeIntoBurger"
           flat
+          round
           dense
           icon="login"
           data-test-id="header-login"
           :aria-label="t('auth.login')"
-          :label="t('auth.login')"
           @click="onGuestLogin"
         />
 
@@ -253,7 +253,8 @@ import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router';
 
-import brandLogoUrl from '@/assets/brand/logo.png';
+import logoDark from '@/assets/brand/logo-dark.png';
+import logoLight from '@/assets/brand/logo-light.png';
 import { useAuthStore } from '@/stores/auth';
 import { useContentStore } from '@/stores/content';
 import { useGameStore } from '@/stores/game';
@@ -292,6 +293,9 @@ const game = useGameStore();
 const content = useContentStore();
 const maps = useMapsStore();
 const theme = useThemeStore();
+
+/** Theme-aware wordmark (D2): dark UI → light letters; light UI → dark letters. */
+const brandLogoUrl = computed(() => ($q.dark.isActive ? logoDark : logoLight));
 
 const leaveConfirmOpen = ref(false);
 const emailVerifyReminderOpen = ref(false);
@@ -656,9 +660,13 @@ function onGuestLogin() {
 </script>
 
 <style scoped>
+/* D3: 60px mark + 2px inset → toolbar content band ≥ 64px */
+.app-header-toolbar {
+  min-height: 64px;
+}
+
 .brand-logo {
-  /* Visual Spec brand mark 40–48 (SC-BRAND-25) */
-  height: 44px;
+  height: 60px;
   width: auto;
   object-fit: contain;
   display: block;

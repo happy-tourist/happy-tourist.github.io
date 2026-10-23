@@ -9,7 +9,9 @@
         <q-btn
           flat
           color="negative"
-          :label="$t('auth.logout')"
+          icon="logout"
+          :aria-label="$t('auth.logout')"
+          data-test-id="account-logout"
           :loading="auth.loading"
           @click="onLogout"
         />
