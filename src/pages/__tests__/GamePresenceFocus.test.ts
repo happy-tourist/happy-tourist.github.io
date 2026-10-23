@@ -182,8 +182,8 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const endCss = cssRuleBody('end-turn-affordance');
     const glyphCss = cssRuleBody('board-action-icon');
 
-    expect(glyphCss).toMatch(/width:\s*18px/);
-    expect(glyphCss).toMatch(/height:\s*18px/);
+    expect(glyphCss).toMatch(/width:\s*36px/);
+    expect(glyphCss).toMatch(/height:\s*36px/);
 
     expect(sayCss).toMatch(/top:\s*0/);
     expect(sayCss).toMatch(/left:\s*50%/);

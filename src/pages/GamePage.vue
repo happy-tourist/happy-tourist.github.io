@@ -3725,10 +3725,10 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Illustrated board-action glyph (~18px, pre-×2) inside transparent hit. Flag uses .my-tourist-finish-icon — unchanged. */
+/* Illustrated board-action glyph fills the 36×36 transparent hit. Flag uses .my-tourist-finish-icon — unchanged. */
 .board-action-icon {
-  width: 18px;
-  height: 18px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   display: block;
   pointer-events: none;
@@ -4017,16 +4017,16 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Peek / rescue / push — hit entirely above sprite (~8px gap; SC-BOARD-13/71 / SC-MOVE-74/77). */
+/* Peek / rescue / push — above sprite, then 20px down (SC-BOARD-13/71 / SC-MOVE-74/77). */
 .peek-affordance,
 .rescue-affordance,
 .push-affordance {
   position: absolute;
   z-index: 4;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4038,7 +4038,7 @@ body.body--dark .say-picker {
   background: transparent;
   left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) / 2);
   top: calc(var(--prow) * (var(--cell) + var(--gap)) - 8px);
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, calc(-100% + 20px));
 }
 
 .peek-affordance:hover,
@@ -4256,14 +4256,14 @@ body.body--dark .say-picker {
   z-index: 2;
 }
 
-/* Return — hit entirely above strip tourist (~8px gap; SC-FINISH-13; flag size unchanged). */
+/* Return — above strip tourist, then 20px down (SC-FINISH-13; flag size unchanged). */
 .return-affordance {
   position: absolute;
   z-index: 5;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4275,7 +4275,7 @@ body.body--dark .say-picker {
   background: transparent;
   left: 50%;
   top: -8px;
-  transform: translate(-50%, -100%);
+  transform: translate(-50%, calc(-100% + 20px));
 }
 
 .return-affordance:hover,
@@ -4332,12 +4332,12 @@ body.body--dark .say-picker {
   }
 
   .return-affordance {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
     top: -8px;
-    transform: translate(-50%, -100%);
+    transform: translate(-50%, calc(-100% + 20px));
   }
 }
 </style>
