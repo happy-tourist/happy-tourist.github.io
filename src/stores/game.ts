@@ -201,8 +201,23 @@ export interface OpenPeek {
 /** Live say bubble lifetime (ms) — mirrors server SAY_TTL_MS. */
 export const SAY_TTL_MS = 10_000;
 
+/** Header match-status peek-outcome flash duration (SC-PRESENCE-36 / D4). */
+export const PEEK_STATUS_FLASH_MS = 10_000;
+
+/** Peek-close outcome kind for App `game-status` flash (SC-PRESENCE-36). */
+export type PeekStatusFlashKind = 'correct' | 'wrong' | 'timeout';
+
+export interface PeekStatusFlash {
+  kind: PeekStatusFlashKind;
+  /** Unix ms — flash ends at this time (local timer). */
+  until: number;
+}
+
 /** Max concurrent live says per session — mirrors server SAY_MAX_LIVE. */
 export const SAY_MAX_LIVE = 3;
+
+/** Clears local peekStatusFlash timeout across leave / new flash. */
+let peekStatusFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
 const SAY_PRESETS: ReadonlySet<string> = new Set(['hello', 'luck', 'ready']);
 
@@ -465,6 +480,11 @@ export const useGameStore = defineStore('game', {
      */
     openPeek: OpenPeek | null;
     /**
+     * Ephemeral peek-outcome flash for App header `game-status` (SC-PRESENCE-36 / D4).
+     * Set from room-wide `peekClose`; cleared after PEEK_STATUS_FLASH_MS or leave.
+     */
+    peekStatusFlash: PeekStatusFlash | null;
+    /**
      * Private all-jail warning for this seat only (`allJailWarning`).
      * Page shows informational modal; clear via `clearAllJailWarning` (SC-MOVE-63).
      */
@@ -508,6 +528,7 @@ export const useGameStore = defineStore('game', {
     budgetsInfinite: false,
     peekedThisTurn: false,
     openPeek: null,
+    peekStatusFlash: null,
     allJailWarning: false,
     sayEvents: [],
     consentedLeaving: false,
@@ -1009,6 +1030,7 @@ export const useGameStore = defineStore('game', {
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this._clearPeekStatusFlash();
       this.allJailWarning = false;
       this.sayEvents = [];
 
@@ -1312,6 +1334,7 @@ export const useGameStore = defineStore('game', {
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this._clearPeekStatusFlash();
       this.allJailWarning = false;
 
       // D3: persist tourist reconnection token only (never lobby).
@@ -1442,9 +1465,56 @@ export const useGameStore = defineStore('game', {
       this.openPeek = { ...this.openPeek, placements: next };
     },
 
-    _onPeekCloseMessage(_message?: unknown) {
-      void _message;
+    _clearPeekStatusFlashTimer() {
+      if (peekStatusFlashTimer !== null) {
+        clearTimeout(peekStatusFlashTimer);
+        peekStatusFlashTimer = null;
+      }
+    },
+
+    _clearPeekStatusFlash() {
+      this._clearPeekStatusFlashTimer();
+      this.peekStatusFlash = null;
+    },
+
+    /**
+     * Room-wide peek outcome → header flash 10s (SC-PRESENCE-36 / D4).
+     * Overwrites any in-flight flash and restarts the timer.
+     */
+    _setPeekStatusFlash(kind: PeekStatusFlashKind) {
+      this._clearPeekStatusFlashTimer();
+      const until = Date.now() + PEEK_STATUS_FLASH_MS;
+      this.peekStatusFlash = { kind, until };
+      peekStatusFlashTimer = setTimeout(() => {
+        peekStatusFlashTimer = null;
+        if (this.peekStatusFlash?.until === until) {
+          this.peekStatusFlash = null;
+        }
+      }, PEEK_STATUS_FLASH_MS);
+    },
+
+    /**
+     * Clear shared peek; set header flash from `correct` + `reason` (SC-PRESENCE-36).
+     * Legacy `correct:false` without reason → no flash (timeout needs explicit reason).
+     */
+    _onPeekCloseMessage(message?: unknown) {
       this.openPeek = null;
+      if (!message || typeof message !== 'object') {
+        return;
+      }
+      const raw = message as Record<string, unknown>;
+      if (raw.correct === true) {
+        this._setPeekStatusFlash('correct');
+        return;
+      }
+      if (raw.correct !== false) {
+        return;
+      }
+      if (raw.reason === 'timeout') {
+        this._setPeekStatusFlash('timeout');
+      } else if (raw.reason === 'wrong') {
+        this._setPeekStatusFlash('wrong');
+      }
     },
 
     _onSayMessage(message: unknown) {
@@ -1506,6 +1576,7 @@ export const useGameStore = defineStore('game', {
       this.budgetsInfinite = false;
       this.peekedThisTurn = false;
       this.openPeek = null;
+      this._clearPeekStatusFlash();
       this.allJailWarning = false;
       this.sayEvents = [];
       this.status = 'idle';

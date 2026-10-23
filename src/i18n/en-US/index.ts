@@ -685,6 +685,12 @@ export default {
     peekSubmit: 'Ответить',
     peekSpectatorHint: 'Игрок отвечает на вопрос…',
     peekAffordance: 'Посмотреть под плиткой',
+    /** Peek-close header flash in `game-status` slot ~10s (SC-PRESENCE-36 / D4). */
+    peekStatusFlash: {
+      correct: 'Правильно!',
+      wrong: 'Ошибка!',
+      timeout: 'Не успел!',
+    },
     /** Solo peeks∞ / finite steps modal (SC-PRESENCE-19). */
     soloUnlimitedModal: 'Вы один в игре. Просмотры безлимитны, шаги по-прежнему ограничены.',
     soloUnlimitedModalOk: 'ОК',

@@ -697,8 +697,21 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
       expect(body).not.toMatch(/background:\s*#[0-9a-fA-F]{3,8}/);
       expect(body).not.toMatch(/box-shadow:/);
     }
-    // Flag: glyph swap only — no Material color tint.
+    // ×2 glyph + enlarged hits (flag size unchanged).
+    const glyphCss = pageSrc.match(/\.board-action-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
+    expect(glyphCss).toMatch(/width:\s*36px/);
+    expect(glyphCss).toMatch(/height:\s*36px/);
+    const boardHitCss =
+      pageSrc.match(
+        /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
+      )?.[1] ?? '';
+    expect(boardHitCss).toMatch(/width:\s*52px/);
+    const returnCss = pageSrc.match(/\.return-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
+    expect(returnCss).toMatch(/width:\s*52px/);
+    // Flag: glyph swap only — size stays ~18px; no Material color tint.
     const flagCss = pageSrc.match(/\.my-tourist-finish-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
+    expect(flagCss).toMatch(/width:\s*18px/);
+    expect(flagCss).toMatch(/height:\s*18px/);
     expect(flagCss).toMatch(/object-fit:\s*contain/);
     expect(flagCss).not.toMatch(/color:\s*#2e7d32/);
 

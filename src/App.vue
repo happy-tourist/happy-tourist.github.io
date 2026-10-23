@@ -50,7 +50,13 @@
         </div>
 
         <q-space />
-        <div v-if="isGameRoute" class="text-subtitle1 text-center" data-test-id="game-status">
+        <div
+          v-if="isGameRoute"
+          class="text-subtitle1 text-center"
+          :class="statusFlashClass"
+          data-test-id="game-status"
+          aria-live="polite"
+        >
           {{ statusLabel }}
         </div>
         <q-space />
@@ -466,8 +472,36 @@ const breadcrumbItems = computed((): Crumb[] => {
   return [];
 });
 
-/** Same branches as former GamePage statusLabel (SC-PRESENCE-23). */
+/**
+ * Active peek-outcome flash (SC-PRESENCE-36 / D4).
+ * Store timer clears `peekStatusFlash` after PEEK_STATUS_FLASH_MS; until is a guard only.
+ */
+const activePeekStatusFlash = computed(() => {
+  const flash = game.peekStatusFlash;
+  return flash && flash.until > Date.now() ? flash : null;
+});
+
+/** Quasar semantic color while flash replaces ordinary match-status. */
+const statusFlashClass = computed(() => {
+  const flash = activePeekStatusFlash.value;
+  if (!flash) {
+    return undefined;
+  }
+  if (flash.kind === 'correct') {
+    return 'text-positive';
+  }
+  if (flash.kind === 'wrong') {
+    return 'text-negative';
+  }
+  return 'text-warning';
+});
+
+/** Same branches as former GamePage statusLabel (SC-PRESENCE-23); flash first (D4). */
 const statusLabel = computed(() => {
+  const flash = activePeekStatusFlash.value;
+  if (flash) {
+    return t(`game.peekStatusFlash.${flash.kind}`);
+  }
   if (game.phase === 'countdown') {
     return 'Старт…';
   }

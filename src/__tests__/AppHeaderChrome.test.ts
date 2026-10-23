@@ -52,6 +52,10 @@ const {
     isMySeatFinished: false,
     isMySeatTimeExpired: false,
     consentedLeaving: false,
+    peekStatusFlash: null as {
+      kind: 'correct' | 'wrong' | 'timeout';
+      until: number;
+    } | null,
     leaveGame: vi.fn().mockResolvedValue(undefined),
   };
   const themeState = {
@@ -216,6 +220,12 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     screenLtMd.value = false;
     gameState.isSeated = false;
     gameState.isPlaying = false;
+    gameState.phase = 'waiting';
+    gameState.status = 'waiting';
+    gameState.currentTurnSessionId = null;
+    gameState.isMyTurn = false;
+    gameState.mySeat = null;
+    gameState.peekStatusFlash = null;
     contentState.pack = { id: 'p1', title: 'Пак Альфа' };
     contentState.staffPreview = null;
     mapsState.map = null;
@@ -612,6 +622,58 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     await flushPromises();
     expect(wrapper.find('[data-test-id="q-layout"]').classes()).toContain('app-page-bg');
     expect(appVueSrc).toMatch(/<q-layout[^>]*class="app-page-bg"/);
+  });
+
+  it('SC-PRESENCE-36: peek flash replaces game-status with color then restores', async () => {
+    routeState.name = 'game';
+    routeState.path = '/game/r1';
+    routeState.fullPath = '/game/r1';
+    gameState.phase = 'playing';
+    gameState.status = 'playing';
+    gameState.currentTurnSessionId = 's1';
+    gameState.isMyTurn = true;
+    gameState.mySeat = { sessionId: 's1' };
+
+    const remountStatus = async () => {
+      wrapper?.unmount();
+      wrapper = mountApp();
+      await flushPromises();
+      return wrapper.find('[data-test-id="game-status"]');
+    };
+
+    let status = await remountStatus();
+    expect(status.exists()).toBe(true);
+    expect(status.text()).toBe('Ваш ход');
+    expect(status.classes()).not.toContain('text-positive');
+
+    gameState.peekStatusFlash = {
+      kind: 'correct',
+      until: Date.now() + 10_000,
+    };
+    status = await remountStatus();
+    expect(status.text()).toBe('game.peekStatusFlash.correct');
+    expect(status.classes()).toContain('text-positive');
+
+    gameState.peekStatusFlash = {
+      kind: 'wrong',
+      until: Date.now() + 10_000,
+    };
+    status = await remountStatus();
+    expect(status.text()).toBe('game.peekStatusFlash.wrong');
+    expect(status.classes()).toContain('text-negative');
+
+    gameState.peekStatusFlash = {
+      kind: 'timeout',
+      until: Date.now() + 10_000,
+    };
+    status = await remountStatus();
+    expect(status.text()).toBe('game.peekStatusFlash.timeout');
+    expect(status.classes()).toContain('text-warning');
+
+    gameState.peekStatusFlash = null;
+    status = await remountStatus();
+    expect(status.text()).toBe('Ваш ход');
+    expect(status.classes()).not.toContain('text-warning');
   });
 });
 

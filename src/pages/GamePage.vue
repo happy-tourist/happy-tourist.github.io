@@ -3460,12 +3460,12 @@ body.body--dark .game-hud {
 }
 
 /* Own cluster: avatar | budgets to the right (SC-PRESENCE-15).
-   Gap ≥ end-turn hit (36px at right:-8px) so end-turn icon does not cover budgets (SC-PRESENCE-25). */
+   Gap ≥ end-turn half-hit past marker edge (~30px at left:100% + 60px hit) so icon does not cover budgets (SC-PRESENCE-25). */
 .presence-slot--own {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 20px;
+  gap: 36px;
 }
 
 /* Own private budgets beside avatar (SC-PRESENCE-15 / D3). */
@@ -3712,27 +3712,26 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Illustrated board-action glyph (~18px) inside transparent hit (D1). */
+/* Illustrated board-action glyph (~36px / ×2) inside transparent hit (scale D1). Flag uses .my-tourist-finish-icon — unchanged. */
 .board-action-icon {
-  width: 18px;
-  height: 18px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   display: block;
   pointer-events: none;
 }
 
-/* Say affordance top-center / 12 o’clock (SC-PRESENCE-14 / SC-SAY-07 / SC-SAY-15).
-   Hit-area ≥ ~32px; raised to clear ready/finish TL (design D3). */
+/* Say affordance top-center / 12 o’clock — hit-center on marker circumference (D2 / SC-SAY-07 / SC-PRESENCE-33). */
 .say-affordance {
   position: absolute;
-  top: -40px;
+  top: 0;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 5;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  min-height: 60px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3750,17 +3749,17 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* Focus left-center / 9 o’clock — SC-PRESENCE-30/33. */
+/* Focus left-center / 9 o’clock — hit-center on circumference (D2 / SC-PRESENCE-30/33). */
 .focus-affordance {
   position: absolute;
   top: 50%;
-  left: -8px;
-  transform: translateY(-50%);
+  left: 0;
+  transform: translate(-50%, -50%);
   z-index: 5;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  min-height: 60px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3778,17 +3777,17 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* End-turn right-center / 3 o’clock — no dock label (SC-PRESENCE-17/25). */
+/* End-turn right-center / 3 o’clock — hit-center on circumference; no dock label (D2 / SC-PRESENCE-17/25). */
 .end-turn-affordance {
   position: absolute;
   top: 50%;
-  right: -8px;
-  transform: translateY(-50%);
+  left: 100%;
+  transform: translate(-50%, -50%);
   z-index: 5;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
+  width: 60px;
+  height: 60px;
+  min-width: 60px;
+  min-height: 60px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -3810,7 +3809,7 @@ body.body--dark .say-bubble {
   position: absolute;
   z-index: 6;
   left: 50%;
-  bottom: calc(100% + 28px);
+  bottom: calc(100% + 40px);
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -4001,16 +4000,16 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Peek / rescue / push — top-center above piece (same family as strip return; SC-BOARD-13 / SC-MOVE-74/77). */
+/* Peek / rescue / push — top-center above piece (×2 glyph/hit family; SC-BOARD-13 / SC-MOVE-74/77). */
 .peek-affordance,
 .rescue-affordance,
 .push-affordance {
   position: absolute;
   z-index: 4;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4239,14 +4238,14 @@ body.body--dark .say-picker {
   z-index: 2;
 }
 
-/* Return affordance over finished strip tourist (SC-FINISH-13 — same family as rescue/push). */
+/* Return affordance over finished strip tourist (SC-FINISH-13 — ×2 family as rescue/push; flag size unchanged). */
 .return-affordance {
   position: absolute;
   z-index: 5;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -4315,10 +4314,10 @@ body.body--dark .say-picker {
   }
 
   .return-affordance {
-    width: 26px;
-    height: 26px;
-    min-width: 26px;
-    min-height: 26px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
     top: -8px;
   }
 }
