@@ -434,7 +434,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-10/45: peeks=0 finite hides eye on flipped task cell', async () => {
+  it('SC-BOARD-10/45/13: peeks=0 finite hides eye; peeks>0 shows illustrated peek icon', async () => {
     const game = seedPlayingSeat(1);
     game.peeks = 0;
     game.budgetsInfinite = false;
@@ -451,10 +451,13 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
 
     expect(wrapper.find('.peek-affordance').exists()).toBe(false);
 
-    // With peeks remaining, eye appears on the same flipped cell.
+    // With peeks remaining, illustrated peek icon appears on the same flipped cell.
     game.peeks = 1;
     await flushPromises();
-    expect(wrapper.find('.peek-affordance').exists()).toBe(true);
+    const peek = wrapper.find('.peek-affordance');
+    expect(peek.exists()).toBe(true);
+    expect(peek.find('img.board-action-icon').exists()).toBe(true);
+    expect(peek.find('i').exists()).toBe(false);
 
     wrapper.unmount();
   });
@@ -632,5 +635,142 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     expect(pageSrc).not.toMatch(
       /\.my-tourist-chrome-grille\s*\{[^}]*background:\s*(?:#|rgba?\(|opaque)/s,
     );
+  });
+
+  it('SC-BOARD-13 / SC-MOVE-74/77 / SC-FINISH-09/13: illustrated board-action icons + transparent chrome', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+
+    // Assets + img glyphs (D2 / D4) — not Material names on affordance slots.
+    for (const asset of [
+      'peek.png',
+      'push.png',
+      'return.png',
+      'flag.png',
+      'focus.png',
+      'end-turn.png',
+      'rescue.png',
+      'say.png',
+    ]) {
+      expect(pageSrc).toContain(`@/assets/board/${asset}`);
+    }
+    expect(pageSrc).toMatch(/class="peek-affordance"[\s\S]*?boardPeekIcon/);
+    expect(pageSrc).toMatch(/class="rescue-affordance"[\s\S]*?boardRescueIcon/);
+    expect(pageSrc).toMatch(/class="push-affordance"[\s\S]*?boardPushIcon/);
+    expect(pageSrc).toMatch(/class="return-affordance"[\s\S]*?boardReturnIcon/);
+    expect(pageSrc).toMatch(/:src="boardFlagIcon"/);
+    expect(pageSrc).toMatch(/class="my-tourist-finish-icon"/);
+    // Affordance Material glyphs removed (budgets keep visibility / directions_walk).
+    for (const name of [
+      'lock_open',
+      'swipe',
+      'undo',
+      'flag',
+      'center_focus_strong',
+      'skip_next',
+      'chat_bubble_outline',
+    ]) {
+      expect(pageSrc).not.toMatch(new RegExp(`name=["']${name}["']`));
+    }
+    expect(pageSrc).not.toMatch(/peek-affordance[\s\S]{0,200}name=["']visibility["']/);
+
+    // Budgets still Material (out of scope).
+    expect(pageSrc).toMatch(/name=["']directions_walk["']/);
+    expect(pageSrc).toMatch(/name=["']visibility["']/);
+    expect(pageSrc).toMatch(/class="ready-affordance"/);
+
+    // Transparent hit — no solid fill / medallion box-shadow on affordances (D1).
+    const affordanceBlocks = [
+      /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
+      /\.return-affordance\s*\{([^}]+)\}/m,
+      /\.say-affordance\s*\{([^}]+)\}/m,
+      /\.focus-affordance\s*\{([^}]+)\}/m,
+      /\.end-turn-affordance\s*\{([^}]+)\}/m,
+    ];
+    for (const re of affordanceBlocks) {
+      const m = pageSrc.match(re);
+      expect(m, `missing rule ${re}`).toBeTruthy();
+      const body = m![1]!;
+      expect(body).toMatch(/background:\s*transparent/);
+      expect(body).not.toMatch(/background:\s*rgba\(/);
+      expect(body).not.toMatch(/background:\s*#[0-9a-fA-F]{3,8}/);
+      expect(body).not.toMatch(/box-shadow:/);
+    }
+    // Flag: glyph swap only — no Material color tint.
+    const flagCss = pageSrc.match(/\.my-tourist-finish-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
+    expect(flagCss).toMatch(/object-fit:\s*contain/);
+    expect(flagCss).not.toMatch(/color:\s*#2e7d32/);
+
+    // DOM: rescue (SC-MOVE-77).
+    {
+      const game = seedPlayingSeat(2);
+      game.$patch({
+        seats: [
+          {
+            sessionId: 's1',
+            touristId: 1,
+            pieces: [
+              { pieceId: '0', row: 3, col: 3, finished: false, trapped: true },
+              { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
+            ],
+            connected: true,
+            reconnectUntil: 0,
+            ready: false,
+            finishPlace: 0,
+            timeExpired: false,
+          },
+        ],
+        holdingGrilleKeys: ['3,3'],
+      });
+      const wrapper = mountPage();
+      await flushPromises();
+      expect(wrapper.find('.rescue-affordance img.board-action-icon').exists()).toBe(true);
+      wrapper.unmount();
+    }
+
+    // Finished strip → flag + return (SC-FINISH-09/13).
+    {
+      setActivePinia(createPinia());
+      const game = seedPlayingSeat(2);
+      game.$patch({
+        seats: [
+          {
+            sessionId: 's1',
+            touristId: 1,
+            pieces: [
+              { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
+              { pieceId: '1', row: 3, col: 3, finished: false, trapped: false },
+            ],
+            connected: true,
+            reconnectUntil: 0,
+            ready: false,
+            finishPlace: 0,
+            timeExpired: false,
+          },
+        ],
+        holdingGrilleKeys: [],
+      });
+      const wrapper = mountPage();
+      await flushPromises();
+      const finishIcon = wrapper.find('.my-tourist-finish-icon');
+      expect(finishIcon.exists()).toBe(true);
+      expect(finishIcon.element.tagName.toLowerCase()).toBe('img');
+      expect(wrapper.find('.return-affordance img.board-action-icon').exists()).toBe(true);
+      wrapper.unmount();
+    }
+
+    // Push: select free piece adjacent to another free piece (SC-MOVE-74).
+    {
+      setActivePinia(createPinia());
+      seedPlayingSeat(2);
+      const wrapper = mountPage();
+      await flushPromises();
+      const slots = wrapper.findAll('.my-tourist-slot');
+      await slots[0]!.trigger('click');
+      await flushPromises();
+      expect(wrapper.find('.push-affordance img.board-action-icon').exists()).toBe(true);
+      wrapper.unmount();
+    }
   });
 });

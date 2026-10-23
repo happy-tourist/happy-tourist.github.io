@@ -128,6 +128,14 @@ function cssRuleBody(className: string): string {
   return m![1]!;
 }
 
+/** Transparent hit chrome — no solid fill / medallion box-shadow (D1 / D4). */
+function assertTransparentAffordanceChrome(css: string) {
+  expect(css).toMatch(/background:\s*transparent/);
+  expect(css).not.toMatch(/background:\s*rgba\(/);
+  expect(css).not.toMatch(/background:\s*#[0-9a-fA-F]{3,8}/);
+  expect(css).not.toMatch(/box-shadow:/);
+}
+
 type Box = { left: number; top: number; right: number; bottom: number };
 
 function boxesOverlap(a: Box, b: Box): boolean {
@@ -144,7 +152,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     });
   });
 
-  it('SC-PRESENCE-30 / SC-SAY-07: clock-axis placement (say 12 / focus 9 / end-turn 3)', async () => {
+  it('SC-PRESENCE-30 / SC-SAY-07 / SC-PRESENCE-17: clock-axis + illustrated icons (say 12 / focus 9 / end-turn 3)', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -164,6 +172,14 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(focus.classes()).toContain('focus-affordance');
     expect(endTurn.exists()).toBe(true);
 
+    // Illustrated PNG glyphs — not Material q-icon (D1 / D4).
+    expect(say.find('img.board-action-icon').exists()).toBe(true);
+    expect(focus.find('img.board-action-icon').exists()).toBe(true);
+    expect(endTurn.find('img.board-action-icon').exists()).toBe(true);
+    expect(say.find('i').exists()).toBe(false);
+    expect(focus.find('i').exists()).toBe(false);
+    expect(endTurn.find('i').exists()).toBe(false);
+
     // Authoritative CSS (jsdom may not resolve scoped rules via getComputedStyle).
     const sayCss = cssRuleBody('say-affordance');
     const focusCss = cssRuleBody('focus-affordance');
@@ -173,17 +189,20 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(sayCss).toMatch(/left:\s*50%/);
     expect(sayCss).toMatch(/translateX\(-50%\)/);
     expect(sayCss).not.toMatch(/right:/);
+    assertTransparentAffordanceChrome(sayCss);
 
     expect(focusCss).toMatch(/top:\s*50%/);
     expect(focusCss).toMatch(/left:\s*-8px/);
     expect(focusCss).toMatch(/translateY\(-50%\)/);
     expect(focusCss).not.toMatch(/right:/);
+    assertTransparentAffordanceChrome(focusCss);
 
     expect(endCss).toMatch(/top:\s*50%/);
     expect(endCss).toMatch(/right:\s*-8px/);
     expect(endCss).toMatch(/translateY\(-50%\)/);
+    assertTransparentAffordanceChrome(endCss);
 
-    // Geometry clock-axis (marker 96px, circular chrome 36px) — DOM order alone is insufficient.
+    // Geometry clock-axis (marker 96px, circular hit 36px) — DOM order alone is insufficient.
     const markerW = 96;
     const markerH = 96;
     const btn = 36;
@@ -361,6 +380,16 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const pickerCss = cssRuleBody('say-picker');
     expect(pickerCss).toMatch(/left:\s*50%/);
     expect(pickerCss).toMatch(/bottom:\s*calc\(100%\s*\+\s*28px\)/);
+
+    // Transparent hit chrome on clock affordances (SC-PRESENCE-33 / SC-SAY-15 / D1).
+    assertTransparentAffordanceChrome(cssRuleBody('say-affordance'));
+    assertTransparentAffordanceChrome(cssRuleBody('focus-affordance'));
+    assertTransparentAffordanceChrome(cssRuleBody('end-turn-affordance'));
+    expect(say.find('img.board-action-icon').exists()).toBe(true);
+
+    // Ready stays Material text chrome (budgets/ready out of scope — D3).
+    expect(pageSrc).toMatch(/class="ready-affordance"/);
+    expect(pageSrc).toMatch(/directions_walk|visibility/);
 
     wrapper.unmount();
   });

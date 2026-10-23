@@ -320,7 +320,7 @@
           :style="peekAffordanceStyle"
           @click.stop="onPeekClick"
         >
-          <q-icon name="visibility" size="18px" />
+          <img class="board-action-icon" :src="boardPeekIcon" alt="" />
         </button>
         <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
         <button
@@ -332,7 +332,7 @@
           :style="rescueAffordanceStyle(rescue)"
           @click.stop="onRescueClick(rescue.pieceId)"
         >
-          <q-icon name="lock_open" size="18px" />
+          <img class="board-action-icon" :src="boardRescueIcon" alt="" />
         </button>
         <!-- Push over pushable free neighbors of selected pusher (SC-MOVE-74/75). -->
         <button
@@ -344,7 +344,7 @@
           :style="pushAffordanceStyle(push)"
           @click.stop="onPushClick(push)"
         >
-          <q-icon name="swipe" size="18px" />
+          <img class="board-action-icon" :src="boardPushIcon" alt="" />
         </button>
       </div>
     </div>
@@ -392,14 +392,14 @@
                     :style="chromeGrilleStyle"
                     alt=""
                   />
-                  <q-icon
+                  <img
                     v-if="isStripSlotFinished(pieceId)"
                     class="my-tourist-finish-icon"
-                    name="flag"
-                    size="18px"
+                    :src="boardFlagIcon"
+                    alt=""
                     :aria-label="$t('game.finishStripAria')"
                   />
-                  <!-- Green return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
+                  <!-- Return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
                   <button
                     v-if="canReturn(pieceId)"
                     type="button"
@@ -407,7 +407,7 @@
                     :aria-label="$t('game.returnAffordance')"
                     @click.stop="onReturnAffordanceClick(pieceId)"
                   >
-                    <q-icon name="undo" size="18px" />
+                    <img class="board-action-icon" :src="boardReturnIcon" alt="" />
                   </button>
                 </div>
               </div>
@@ -489,7 +489,7 @@
                   :aria-label="$t('game.say.affordance')"
                   @click.stop="toggleSayPicker"
                 >
-                  <q-icon name="chat_bubble_outline" size="18px" />
+                  <img class="board-action-icon" :src="boardSayIcon" alt="" />
                 </button>
 
                 <!-- Focus left-center / 9 o’clock (SC-PRESENCE-30/31/32). -->
@@ -501,7 +501,7 @@
                   :aria-label="$t('game.focusActionable')"
                   @click.stop="onFocusActionableClick"
                 >
-                  <q-icon name="center_focus_strong" size="18px" />
+                  <img class="board-action-icon" :src="boardFocusIcon" alt="" />
                 </button>
 
                 <!-- End-turn right-center / 3 o’clock — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
@@ -512,7 +512,7 @@
                   :aria-label="$t('game.endTurn')"
                   @click.stop="onEndTurnClick"
                 >
-                  <q-icon name="skip_next" size="18px" />
+                  <img class="board-action-icon" :src="boardEndTurnIcon" alt="" />
                 </button>
 
                 <div
@@ -584,6 +584,14 @@ import tourist4 from '@/assets/tourists/tourist4.png';
 import grilleSrc from '@/assets/grilles/grille.png';
 import catapultSrc from '@/assets/catapults/catapult.png';
 import catapultBrokenSrc from '@/assets/catapults/catapult-broken.png';
+import boardPeekIcon from '@/assets/board/peek.png';
+import boardPushIcon from '@/assets/board/push.png';
+import boardReturnIcon from '@/assets/board/return.png';
+import boardFlagIcon from '@/assets/board/flag.png';
+import boardFocusIcon from '@/assets/board/focus.png';
+import boardEndTurnIcon from '@/assets/board/end-turn.png';
+import boardRescueIcon from '@/assets/board/rescue.png';
+import boardSayIcon from '@/assets/board/say.png';
 import {
   useGameStore,
   type GamePiece,
@@ -3452,7 +3460,7 @@ body.body--dark .game-hud {
 }
 
 /* Own cluster: avatar | budgets to the right (SC-PRESENCE-15).
-   Gap ≥ end-turn hit (36px at right:-8px) so skip_next does not cover budgets (SC-PRESENCE-25). */
+   Gap ≥ end-turn hit (36px at right:-8px) so end-turn icon does not cover budgets (SC-PRESENCE-25). */
 .presence-slot--own {
   flex-direction: row;
   align-items: center;
@@ -3704,6 +3712,15 @@ body.body--dark .say-bubble {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
+/* Illustrated board-action glyph (~18px) inside transparent hit (D1). */
+.board-action-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
 /* Say affordance top-center / 12 o’clock (SC-PRESENCE-14 / SC-SAY-07 / SC-SAY-15).
    Hit-area ≥ ~32px; raised to clear ready/finish TL (design D3). */
 .say-affordance {
@@ -3723,15 +3740,14 @@ body.body--dark .say-bubble {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: rgba(33, 150, 243, 0.92);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  background: transparent;
   pointer-events: auto;
   flex-shrink: 0;
 }
 
-.say-affordance:hover {
-  background: #1e88e5;
+.say-affordance:hover,
+.say-affordance:active {
+  opacity: 0.85;
 }
 
 /* Focus left-center / 9 o’clock — SC-PRESENCE-30/33. */
@@ -3752,15 +3768,14 @@ body.body--dark .say-bubble {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: rgba(33, 150, 243, 0.92);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  background: transparent;
   pointer-events: auto;
   flex-shrink: 0;
 }
 
-.focus-affordance:hover {
-  background: #1e88e5;
+.focus-affordance:hover,
+.focus-affordance:active {
+  opacity: 0.85;
 }
 
 /* End-turn right-center / 3 o’clock — no dock label (SC-PRESENCE-17/25). */
@@ -3781,15 +3796,14 @@ body.body--dark .say-bubble {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: rgba(33, 150, 243, 0.92);
-  color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  background: transparent;
   pointer-events: auto;
   flex-shrink: 0;
 }
 
-.end-turn-affordance:hover {
-  background: #1e88e5;
+.end-turn-affordance:hover,
+.end-turn-affordance:active {
+  opacity: 0.85;
 }
 
 .say-picker {
@@ -3987,7 +4001,7 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Eye / rescue / push — top-center above piece (same family as strip return; SC-BOARD-13 / SC-MOVE-74/77). */
+/* Peek / rescue / push — top-center above piece (same family as strip return; SC-BOARD-13 / SC-MOVE-74/77). */
 .peek-affordance,
 .rescue-affordance,
 .push-affordance {
@@ -4005,30 +4019,24 @@ body.body--dark .say-picker {
   justify-content: center;
   cursor: pointer;
   pointer-events: auto;
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  background: transparent;
   left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) / 2);
   top: calc(var(--prow) * (var(--cell) + var(--gap)) - 10px);
   transform: translateX(-50%);
 }
 
-.peek-affordance {
-  background: rgba(33, 150, 243, 0.95);
-}
-
-.peek-affordance:hover {
-  background: #1e88e5;
+.peek-affordance:hover,
+.peek-affordance:active,
+.rescue-affordance:hover,
+.rescue-affordance:active,
+.push-affordance:hover,
+.push-affordance:active {
+  opacity: 0.85;
 }
 
 .rescue-affordance,
 .push-affordance {
   z-index: 5;
-  background: rgba(67, 160, 71, 0.95);
-}
-
-.rescue-affordance:hover,
-.push-affordance:hover {
-  background: #388e3c;
 }
 
 /* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27 / SC-BOARD-58). */
@@ -4223,13 +4231,15 @@ body.body--dark .say-picker {
   position: absolute;
   top: 2px;
   right: 2px;
-  color: #2e7d32;
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
   filter: drop-shadow(0 0 1px #fff);
   pointer-events: none;
   z-index: 2;
 }
 
-/* Return affordance over finished strip tourist (SC-FINISH-13 — same green family as rescue/push). */
+/* Return affordance over finished strip tourist (SC-FINISH-13 — same family as rescue/push). */
 .return-affordance {
   position: absolute;
   z-index: 5;
@@ -4245,16 +4255,15 @@ body.body--dark .say-picker {
   justify-content: center;
   cursor: pointer;
   pointer-events: auto;
-  color: #fff;
-  background: rgba(67, 160, 71, 0.95);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  background: transparent;
   left: 50%;
   top: -10px;
   transform: translateX(-50%);
 }
 
-.return-affordance:hover {
-  background: #388e3c;
+.return-affordance:hover,
+.return-affordance:active {
+  opacity: 0.85;
 }
 
 .my-tourist-chrome-grille {
