@@ -146,7 +146,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     });
   });
 
-  it('SC-PRESENCE-30 / SC-SAY-07 / SC-PRESENCE-17: clock-axis + illustrated icons (say 12 / focus 9 / end-turn 3)', async () => {
+  it('SC-PRESENCE-30 / SC-SAY-07 / SC-PRESENCE-17: say@12 + end-turn@3; focus under peeks', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -156,15 +156,25 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    const marker = wrapper.find('.presence-slot--own .presence-marker');
+    const own = wrapper.find('.presence-slot--own');
+    const marker = own.find('.presence-marker');
     expect(marker.exists()).toBe(true);
     const say = marker.find('.say-affordance');
-    const focus = marker.find('[data-test-id="focus-actionable"]');
     const endTurn = marker.find('.end-turn-affordance');
     expect(say.exists()).toBe(true);
+    expect(endTurn.exists()).toBe(true);
+    // Focus lives under peeks in budgets — not on marker @9 (D11 / SC-PRESENCE-30/37).
+    expect(marker.find('[data-test-id="focus-actionable"]').exists()).toBe(false);
+    expect(marker.find('.focus-affordance').exists()).toBe(false);
+    const budgets = own.find('.presence-budgets .budget-counters');
+    expect(budgets.exists()).toBe(true);
+    const focus = budgets.find('[data-test-id="focus-actionable"]');
     expect(focus.exists()).toBe(true);
     expect(focus.classes()).toContain('focus-affordance');
-    expect(endTurn.exists()).toBe(true);
+    // Focus immediately after peeks counter in the stack.
+    const counters = budgets.findAll('.budget-counter');
+    expect(counters).toHaveLength(2);
+    expect(focus.element.previousElementSibling).toBe(counters[1]!.element);
 
     // Illustrated PNG glyphs — not Material q-icon (D1 / D4).
     expect(say.find('img.board-action-icon').exists()).toBe(true);
@@ -183,7 +193,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(glyphCss).toMatch(/width:\s*36px/);
     expect(glyphCss).toMatch(/height:\s*36px/);
 
-    // Circumference anchors (D2): say 12 / focus 9 / end-turn 3 — translate(-50%,-50%).
+    // Circumference anchors: say 12 / end-turn 3 — translate(-50%,-50%).
     expect(sayCss).toMatch(/top:\s*0/);
     expect(sayCss).toMatch(/left:\s*50%/);
     expect(sayCss).toMatch(/translate\(-50%,\s*-50%\)/);
@@ -192,12 +202,12 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(sayCss).not.toMatch(/right:/);
     assertTransparentAffordanceChrome(sayCss);
 
-    expect(focusCss).toMatch(/top:\s*50%/);
-    expect(focusCss).toMatch(/left:\s*0/);
-    expect(focusCss).toMatch(/translate\(-50%,\s*-50%\)/);
+    // Focus under peeks: relative in budgets, ×2 presence hit; no 9 o’clock left:0.
+    expect(focusCss).toMatch(/position:\s*relative/);
     expect(focusCss).toMatch(/width:\s*60px/);
-    expect(focusCss).not.toMatch(/left:\s*-8px/);
-    expect(focusCss).not.toMatch(/right:/);
+    expect(focusCss).not.toMatch(/left:\s*0/);
+    expect(focusCss).not.toMatch(/top:\s*50%/);
+    expect(focusCss).not.toMatch(/translate\(-50%,\s*-50%\)/);
     assertTransparentAffordanceChrome(focusCss);
 
     expect(endCss).toMatch(/top:\s*50%/);
@@ -207,29 +217,22 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(endCss).not.toMatch(/right:\s*-8px/);
     assertTransparentAffordanceChrome(endCss);
 
-    // Geometry clock-axis (marker 96px R=48, circular hit 60px) — hit-centers on circumference.
+    // Say @12 and end-turn @3 on circumference — hits do not overlap.
     const markerW = 96;
     const markerH = 96;
     const btn = 60;
     const sayCenterX = markerW * 0.5;
     const sayCenterY = 0;
-    const focusCenterX = 0;
-    const focusCenterY = markerH * 0.5;
     const endCenterX = markerW;
     const endCenterY = markerH * 0.5;
 
     expect(sayCenterX / markerW).toBeCloseTo(0.5, 5);
     expect(sayCenterY).toBe(0);
-    expect(focusCenterX).toBe(0);
-    expect(focusCenterX).toBeLessThan(sayCenterX);
     expect(endCenterX).toBe(markerW);
     expect(endCenterX).toBeGreaterThan(sayCenterX);
 
-    // Circular hit areas do not overlap (centers ≥ hit diameter).
     const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
-    expect(dist(sayCenterX, sayCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
     expect(dist(sayCenterX, sayCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
-    expect(dist(focusCenterX, focusCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
 
     wrapper.unmount();
   });
@@ -317,7 +320,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     wrapper2.unmount();
   });
 
-  it('SC-PRESENCE-33 / SC-PRESENCE-14: clock positions without hit overlap; ready+say clear', async () => {
+  it('SC-PRESENCE-33 / SC-PRESENCE-14 / SC-SAY-15: say@12 end-turn@3; focus under peeks; picker right', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -327,50 +330,45 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    const marker = wrapper.find('.presence-slot--own .presence-marker');
+    const own = wrapper.find('.presence-slot--own');
+    const marker = own.find('.presence-marker');
     const say = marker.find('.say-affordance');
-    const focus = marker.find('.focus-affordance');
     const endTurn = marker.find('.end-turn-affordance');
+    const focus = own.find('.presence-budgets .focus-affordance');
     expect(say.exists()).toBe(true);
     expect(focus.exists()).toBe(true);
     expect(endTurn.exists()).toBe(true);
+    expect(marker.find('.focus-affordance').exists()).toBe(false);
 
-    // Clock geometry (D2 circumference): say 12, focus 9, end-turn 3 — hit-centers on R=48 rim.
+    // Circumference: say 12 / end-turn 3 — hit-centers on R=48 rim (focus not on marker).
     const markerW = 96;
     const markerH = 96;
     const btn = 60;
     const sayCenterX = markerW * 0.5;
     const sayCenterY = 0;
-    const focusCenterX = 0;
-    const focusCenterY = markerH * 0.5;
     const endCenterX = markerW;
     const endCenterY = markerH * 0.5;
 
     expect(sayCenterX).toBeCloseTo(markerW * 0.5, 5);
     expect(sayCenterY).toBe(0);
-    expect(focusCenterX).toBe(0);
     expect(endCenterX).toBe(markerW);
-    expect(focusCenterX).toBeLessThan(sayCenterX);
     expect(endCenterX).toBeGreaterThan(sayCenterX);
-    // Circular hits do not overlap (AABB of 60px circles on 45° rim corners may touch as boxes).
     const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
-    expect(dist(sayCenterX, sayCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
     expect(dist(sayCenterX, sayCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
-    expect(dist(focusCenterX, focusCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
-    // Say remains higher than focus (SC-PRESENCE-33 historic sense).
-    expect(sayCenterY).toBeLessThan(focusCenterY);
 
     // Ready stays top-left (unchanged); say z-index sits above during waiting co-visibility.
     const readyCss = cssRuleBody('ready-affordance');
     expect(readyCss).toMatch(/top:\s*-4px/);
     expect(readyCss).toMatch(/left:\s*-4px/);
 
-    // Say-picker stays marker-centered above avatar, cleared for larger say hit (SC-SAY-15 / D2).
+    // Say-picker shifted right: left edge at marker center (not centered / not clipped left) — SC-SAY-15 / D12.
     const pickerCss = cssRuleBody('say-picker');
     expect(pickerCss).toMatch(/left:\s*50%/);
     expect(pickerCss).toMatch(/bottom:\s*calc\(100%\s*\+\s*40px\)/);
+    expect(pickerCss).toMatch(/transform:\s*none/);
+    expect(pickerCss).not.toMatch(/translateX\(-50%\)/);
 
-    // Transparent hit chrome on clock affordances (SC-PRESENCE-33 / SC-SAY-15 / D1).
+    // Transparent hit chrome (SC-PRESENCE-33 / SC-SAY-15 / D1).
     assertTransparentAffordanceChrome(cssRuleBody('say-affordance'));
     assertTransparentAffordanceChrome(cssRuleBody('focus-affordance'));
     assertTransparentAffordanceChrome(cssRuleBody('end-turn-affordance'));

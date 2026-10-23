@@ -492,18 +492,6 @@
                   <img class="board-action-icon" :src="boardSayIcon" alt="" />
                 </button>
 
-                <!-- Focus left-center / 9 o’clock (SC-PRESENCE-30/31/32). -->
-                <button
-                  v-if="canShowFocusControl"
-                  type="button"
-                  class="focus-affordance"
-                  data-test-id="focus-actionable"
-                  :aria-label="$t('game.focusActionable')"
-                  @click.stop="onFocusActionableClick"
-                >
-                  <img class="board-action-icon" :src="boardFocusIcon" alt="" />
-                </button>
-
                 <!-- End-turn right-center / 3 o’clock — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
                 <button
                   v-if="canSendEndTurn && !isBoardBusy"
@@ -534,7 +522,7 @@
                 </div>
               </div>
 
-              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); end-turn on avatar edge. -->
+              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); focus under peeks (SC-PRESENCE-30/37). -->
               <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
                 <div class="budget-counters">
                   <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
@@ -561,6 +549,17 @@
                       +{{ fall.n }}
                     </span>
                   </div>
+                  <!-- Focus under peeks — not on marker @9 (D11 / SC-PRESENCE-30/33/37). -->
+                  <button
+                    v-if="canShowFocusControl"
+                    type="button"
+                    class="focus-affordance"
+                    data-test-id="focus-actionable"
+                    :aria-label="$t('game.focusActionable')"
+                    @click.stop="onFocusActionableClick"
+                  >
+                    <img class="board-action-icon" :src="boardFocusIcon" alt="" />
+                  </button>
                 </div>
               </div>
             </div>
@@ -618,15 +617,20 @@ import { tileSkinCssVars } from '@/lib/tileSkins';
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
 
-/** Piece travel animation (D6) — matches CSS transition. */
+/** Piece travel animation (D6) — matches CSS transition on `.piece`. */
 const MOVE_ANIM_MS = 250;
 /**
  * After move travel ends, keep pipeline lock briefly so server paced trap reveal
  * (MOVE_ANIM_MS then holding/revealing sync) can own busy without a click gap (D4).
  */
 const PIPELINE_SETTLE_MS = 600;
-/** Short fade after landing on center before DOM removal (SC-FINISH-01). */
-const FINISH_FADE_MS = 200;
+/**
+ * Enter-center finish slide (move/push/catapult→center) — matches `.piece--disappearing`
+ * left/top (D13 / SC-FINISH-01/17/19). Ordinary board moves stay on MOVE_ANIM_MS.
+ */
+const FINISH_TRAVEL_MS = 550;
+/** Fade after finish slide; CSS delay = FINISH_TRAVEL_MS (D13 / SC-FINISH-01). */
+const FINISH_FADE_MS = 300;
 /** Grille drop / rise animation — board + chrome (SC-BOARD-18/19/21, SC-PIECE-31). */
 const GRILLE_ANIM_MS = 1000;
 /** Successful catapult fade in→out (SC-BOARD-23 / D2). */
@@ -964,7 +968,7 @@ let rejoinInFlight = false;
 
 /**
  * Keys of pieces that just finished — keep on board for slide + fade (SC-FINISH-01).
- * Cleared after MOVE_ANIM_MS + FINISH_FADE_MS; mid-join finished pieces never enter here.
+ * Cleared after FINISH_TRAVEL_MS + FINISH_FADE_MS; mid-join finished pieces never enter here.
  */
 const disappearingKeys = ref<Set<string>>(new Set());
 const finishFadeTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1638,7 +1642,7 @@ const actionableCandidates = computed((): ActionableCandidate[] => {
   return out;
 });
 
-/** Circular focus at left-center (9 o’clock) when ≥1 actionable (SC-PRESENCE-30/32). */
+/** Focus under peeks in own budgets when ≥1 actionable (SC-PRESENCE-30/32/37). */
 const canShowFocusControl = computed(
   () => isInteractive.value && actionableCandidates.value.length > 0,
 );
@@ -1831,8 +1835,11 @@ function submitMove(pieceId: string, row: number, col: number) {
     return;
   }
   // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
+  // Center finish: lock busy for FINISH_TRAVEL_MS so slide stays covered before disappearingKeys (D13).
   if (isCenterCell(row, col)) {
     selectedPieceId.value = null;
+    beginMoveAnimation(FINISH_TRAVEL_MS);
+    return;
   }
   beginMoveAnimation();
 }
@@ -1946,8 +1953,13 @@ function onPushClick(push: PushAffordance) {
   }
   returningPieceId.value = null;
   // Keep selection on the pusher (SC-MOVE-75); approach/back via rescueAnimOverride.
+  // Push→center: cover finish slide (≥ FINISH_TRAVEL_MS) as well as approach+back (D13).
   selectedPieceId.value = push.pusherPieceId;
-  beginMoveAnimation(MOVE_ANIM_MS * 2);
+  beginMoveAnimation(
+    isCenterCell(push.row, push.col)
+      ? Math.max(MOVE_ANIM_MS * 2, FINISH_TRAVEL_MS)
+      : MOVE_ANIM_MS * 2,
+  );
   const seatId = mySeat.value.sessionId;
   rescueAnimOverride.value = {
     sessionId: seatId,
@@ -2955,7 +2967,7 @@ async function releaseDeferredFinishAfterVanish(pieceKeyStr: string, from: Cell)
         next.delete(pieceKeyStr);
         disappearingKeys.value = next;
         resolve();
-      }, MOVE_ANIM_MS + FINISH_FADE_MS),
+      }, FINISH_TRAVEL_MS + FINISH_FADE_MS),
     );
   });
 }
@@ -3191,7 +3203,7 @@ watch(
           const cleared = new Set(disappearingKeys.value);
           cleared.delete(key);
           disappearingKeys.value = cleared;
-        }, MOVE_ANIM_MS + FINISH_FADE_MS),
+        }, FINISH_TRAVEL_MS + FINISH_FADE_MS),
       );
     }
 
@@ -3749,23 +3761,22 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
-/* Focus left-center / 9 o’clock — hit-center on circumference (D2 / SC-PRESENCE-30/33). */
+/* Focus under peeks in budget-counters — not on marker @9 (D11 / SC-PRESENCE-30/33/37). */
 .focus-affordance {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  transform: translate(-50%, -50%);
+  position: relative;
   z-index: 5;
   width: 60px;
   height: 60px;
   min-width: 60px;
   min-height: 60px;
+  margin: 2px auto 0;
   padding: 0;
   border: none;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
   cursor: pointer;
   background: transparent;
   pointer-events: auto;
@@ -3805,12 +3816,13 @@ body.body--dark .say-bubble {
   opacity: 0.85;
 }
 
+/* Shifted right so left edge of presets stays fully visible in HUD (D12 / SC-SAY-15). */
 .say-picker {
   position: absolute;
   z-index: 6;
   left: 50%;
   bottom: calc(100% + 40px);
-  transform: translateX(-50%);
+  transform: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -4000,7 +4012,7 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Peek / rescue / push — top-center above piece (×2 glyph/hit family; SC-BOARD-13 / SC-MOVE-74/77). */
+/* Peek / rescue / push — hit entirely above sprite (~8px gap; D10 / SC-BOARD-13/71 / SC-MOVE-74/77). */
 .peek-affordance,
 .rescue-affordance,
 .push-affordance {
@@ -4020,8 +4032,8 @@ body.body--dark .say-picker {
   pointer-events: auto;
   background: transparent;
   left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) / 2);
-  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 10px);
-  transform: translateX(-50%);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) - 8px);
+  transform: translate(-50%, -100%);
 }
 
 .peek-affordance:hover,
@@ -4156,10 +4168,11 @@ body.body--dark .say-picker {
 .piece--disappearing {
   pointer-events: none;
   opacity: 0;
+  /* D13 / SC-FINISH-01: ~550 ms slide then ~300 ms fade (delay = slide). */
   transition:
-    left 250ms ease-out,
-    top 250ms ease-out,
-    opacity 200ms ease-out 250ms;
+    left 550ms ease-out,
+    top 550ms ease-out,
+    opacity 300ms ease-out 550ms;
 }
 
 .piece--trapped {
@@ -4238,7 +4251,7 @@ body.body--dark .say-picker {
   z-index: 2;
 }
 
-/* Return affordance over finished strip tourist (SC-FINISH-13 — ×2 family as rescue/push; flag size unchanged). */
+/* Return — hit entirely above strip tourist (~8px gap; D10 / SC-FINISH-13; flag size unchanged). */
 .return-affordance {
   position: absolute;
   z-index: 5;
@@ -4256,8 +4269,8 @@ body.body--dark .say-picker {
   pointer-events: auto;
   background: transparent;
   left: 50%;
-  top: -10px;
-  transform: translateX(-50%);
+  top: -8px;
+  transform: translate(-50%, -100%);
 }
 
 .return-affordance:hover,
@@ -4319,6 +4332,7 @@ body.body--dark .say-picker {
     min-width: 48px;
     min-height: 48px;
     top: -8px;
+    transform: translate(-50%, -100%);
   }
 }
 </style>

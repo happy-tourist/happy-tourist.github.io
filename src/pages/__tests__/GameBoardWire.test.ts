@@ -637,6 +637,45 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     );
   });
 
+  it('SC-FINISH-01/17/19/20: longer finish travel + deferred race (SFC source)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+
+    // D13: enter-center slide ~550 / fade ~300; ordinary move + catapult overlay unchanged.
+    expect(pageSrc).toMatch(/const MOVE_ANIM_MS = 250/);
+    expect(pageSrc).toMatch(/const FINISH_TRAVEL_MS = 550/);
+    expect(pageSrc).toMatch(/const FINISH_FADE_MS = 300/);
+    expect(pageSrc).toMatch(/const CATAPULT_ANIM_MS = 1500/);
+    expect(pageSrc).toMatch(
+      /\.piece--disappearing\s*\{[^}]*left\s+550ms\s+ease-out[^}]*top\s+550ms\s+ease-out[^}]*opacity\s+300ms\s+ease-out\s+550ms/s,
+    );
+    // Ordinary non-finish piece travel stays ~250 ms.
+    expect(pageSrc).toMatch(/\.piece\s*\{[^}]*left\s+250ms\s+ease-out[^}]*top\s+250ms\s+ease-out/s);
+    expect(pageSrc).toMatch(/FINISH_TRAVEL_MS\s*\+\s*FINISH_FADE_MS/);
+    expect(pageSrc).not.toMatch(/MOVE_ANIM_MS\s*\+\s*FINISH_FADE_MS/);
+    // Own center move / push→center busy lock covers finish slide (D13).
+    expect(pageSrc).toMatch(/beginMoveAnimation\(FINISH_TRAVEL_MS\)/);
+    expect(pageSrc).toMatch(/Math\.max\(MOVE_ANIM_MS\s*\*\s*2,\s*FINISH_TRAVEL_MS\)/);
+
+    // Race: fading before clearing deferred; keep finished while deferred/pinned/visual.
+    expect(pageSrc).toMatch(
+      /disappearingKeys\.value\s*=\s*fading;[\s\S]*?catapultDeferFinishKeys\.value\s*=\s*deferred/,
+    );
+    expect(pageSrc).toMatch(
+      /!fading\.has\(key\)\s*&&\s*!deferredFinish\.has\(key\)\s*&&\s*!pinned\.has\(key\)\s*&&\s*!visual\.has\(key\)/,
+    );
+    // Catapult→center always paints finishAnimFrom then clears after paint (SC-FINISH-19/20).
+    expect(pageSrc).toMatch(/async function releaseDeferredFinishAfterVanish/);
+    expect(pageSrc).toMatch(
+      /finishAnimFromByKey\.value\s*=\s*nextFrom;[\s\S]*?requestAnimationFrame[\s\S]*?finishAnimFromByKey\.value\s*=\s*cleared/,
+    );
+    expect(pageSrc).toMatch(/function shouldFinishTravelAfterVanish/);
+    expect(pageSrc).toMatch(
+      /catapultDeferFinishKeys\.value\.has\(key\)\s*\|\|\s*catapultOwnsPiece\(key\)/,
+    );
+  });
+
   it('SC-BOARD-13 / SC-MOVE-74/77 / SC-FINISH-09/13: illustrated board-action icons + transparent chrome', async () => {
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
@@ -706,14 +745,22 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
         /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
       )?.[1] ?? '';
     expect(boardHitCss).toMatch(/width:\s*52px/);
+    // Clearance above sprite: anchor at cell/slot top −8px, translate(-50%,-100%) (D10 / SC-BOARD-71).
+    expect(boardHitCss).toMatch(/translate\(-50%,\s*-100%\)/);
+    expect(boardHitCss).toMatch(/-\s*8px/);
+    expect(boardHitCss).not.toMatch(/translateX\(-50%\)/);
     const returnCss = pageSrc.match(/\.return-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(returnCss).toMatch(/width:\s*52px/);
+    expect(returnCss).toMatch(/translate\(-50%,\s*-100%\)/);
+    expect(returnCss).toMatch(/top:\s*-8px/);
+    expect(returnCss).not.toMatch(/translateX\(-50%\)/);
     // Flag: glyph swap only — size stays ~18px; no Material color tint.
     const flagCss = pageSrc.match(/\.my-tourist-finish-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(flagCss).toMatch(/width:\s*18px/);
     expect(flagCss).toMatch(/height:\s*18px/);
     expect(flagCss).toMatch(/object-fit:\s*contain/);
     expect(flagCss).not.toMatch(/color:\s*#2e7d32/);
+    expect(flagCss).not.toMatch(/translate\(-50%,\s*-100%\)/);
 
     // DOM: rescue (SC-MOVE-77).
     {
