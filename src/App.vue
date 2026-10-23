@@ -660,13 +660,13 @@ function onGuestLogin() {
 </script>
 
 <style scoped>
-/* D3: 60px mark + 2px inset → toolbar content band ≥ 64px */
+/* D3: 28px mark + inset → toolbar content band 40px */
 .app-header-toolbar {
-  min-height: 64px;
+  min-height: 40px;
 }
 
 .brand-logo {
-  height: 60px;
+  height: 28px;
   width: auto;
   object-fit: contain;
   display: block;

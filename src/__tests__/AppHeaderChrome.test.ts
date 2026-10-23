@@ -656,10 +656,10 @@ describe('App header chrome (SC-BRAND / SC-LEAVE / crumbs)', () => {
     expect(darkSrc).not.toBe(lightSrc);
   });
 
-  it('SC-BRAND-30: brand logo height 60px; toolbar min-height ≥ 64px', () => {
-    expect(appVueSrc).toMatch(/\.brand-logo\s*\{[\s\S]*?height:\s*60px/);
-    expect(appVueSrc).toMatch(/\.app-header-toolbar\s*\{[\s\S]*?min-height:\s*64px/);
-    expect(appVueSrc).not.toMatch(/\.brand-logo\s*\{[^}]*height:\s*4[0-8]px/);
+  it('SC-BRAND-30: brand logo height 28px; toolbar min-height ≥ 40px', () => {
+    expect(appVueSrc).toMatch(/\.brand-logo\s*\{[\s\S]*?height:\s*28px/);
+    expect(appVueSrc).toMatch(/\.app-header-toolbar\s*\{[\s\S]*?min-height:\s*40px/);
+    expect(appVueSrc).not.toMatch(/\.brand-logo\s*\{[^}]*height:\s*60px/);
   });
 
   it('SC-BRAND-31: wide toolbar login/logout are icon-only with aria-label', async () => {
