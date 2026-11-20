@@ -35,7 +35,7 @@ export interface BoardTile {
   row: number;
   col: number;
   style: Record<string, string>;
-  /** Removed task cell — visual hole; not landable; piece may stand. */
+  /** Removed task cell — visual hole; still landable; piece may stand. */
   removed?: boolean;
   /** Public difficulty digit on flipped still-present task (SC-BOARD-42). */
   difficulty?: 1 | 2 | 3;

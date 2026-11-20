@@ -40,7 +40,7 @@ describe('soloEndModalKind (SC-PRESENCE-21/35)', () => {
       expect(hasOwnUnfinishedOnLiveTask([freeOnLive], liveTaskAt22)).toBe(true);
     });
 
-    it('is false when only trapped on live task (SC-PRESENCE-35)', () => {
+    it('is false when only trapped on live task', () => {
       expect(hasOwnUnfinishedOnLiveTask([trappedOnLive], liveTaskAt22)).toBe(false);
     });
 
@@ -53,21 +53,16 @@ describe('soloEndModalKind (SC-PRESENCE-21/35)', () => {
     });
   });
 
-  describe('inferSoloEndModalKind', () => {
-    it('SC-PRESENCE-35: steps=0 + only trapped/start → steps', () => {
-      expect(inferSoloEndModalKind([trappedOnLive, freeOnStart], 0, liveTaskAt22)).toBe('steps');
+  describe('inferSoloEndModalKind — timer-only', () => {
+    it('SC-PRESENCE-21: one-minute deadline → timer copy (never steps-exhausted)', () => {
+      expect(inferSoloEndModalKind()).toBe('timer');
     });
 
-    it('SC-PRESENCE-35: steps=0 + only start remainder → steps', () => {
-      expect(inferSoloEndModalKind([freeOnStart], 0, liveTaskAt22)).toBe('steps');
-    });
-
-    it('SC-PRESENCE-21 regression: steps=0 + free unfinished on live * → timer', () => {
-      expect(inferSoloEndModalKind([freeOnLive], 0, liveTaskAt22)).toBe('timer');
-    });
-
-    it('steps>0 → timer even without live task', () => {
-      expect(inferSoloEndModalKind([freeOnStart], 3, liveTaskAt22)).toBe('timer');
+    it('SC-PRESENCE-35: trapped/start remainder under ∞ steps → still timer (no steps-exhausted)', () => {
+      // Pieces/steps no longer affect kind; assert helper still classifies remainder
+      // and end modal stays timer-only.
+      expect(hasOwnUnfinishedOnLiveTask([trappedOnLive, freeOnStart], liveTaskAt22)).toBe(false);
+      expect(inferSoloEndModalKind()).toBe('timer');
     });
   });
 });

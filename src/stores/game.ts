@@ -140,9 +140,26 @@ export function isTimeExpiredSeat(seat: GameSeat): boolean {
   return seat.timeExpired;
 }
 
-/** Solo five-minute budget is active (turnBudgetSeconds === 300). */
-export function isSoloBudgetSeconds(turnBudgetSeconds: number): boolean {
-  return turnBudgetSeconds === 300;
+/**
+ * Eligible seat for solo/multi turn accent: non-finished and not time-expired
+ * (SC-PRESENCE-09 / game/move solo). Spectators see synced seats.
+ */
+export function isEligibleSeat(seat: Pick<GameSeat, 'finishPlace' | 'timeExpired'>): boolean {
+  return seat.finishPlace === 0 && !seat.timeExpired;
+}
+
+/** Count eligible seats — exactly one ⇒ solo red ring (SC-PRESENCE-09). */
+export function countEligibleSeats(
+  seats: readonly Pick<GameSeat, 'finishPlace' | 'timeExpired'>[],
+): number {
+  return seats.filter(isEligibleSeat).length;
+}
+
+/** Solo one-minute red ring when exactly one eligible seat (not via turnBudgetSeconds). */
+export function isSoloBudgetFromSeats(
+  seats: readonly Pick<GameSeat, 'finishPlace' | 'timeExpired'>[],
+): boolean {
+  return countEligibleSeats(seats) === 1;
 }
 
 /**
@@ -263,14 +280,14 @@ type TouristRoomState = {
   currentTurnSessionId?: string;
   /** Unix ms turn deadline; 0 = no active timer. */
   turnUntil?: number;
-  /** Active turn budget seconds (60 multi / 300 solo); 0 when none. */
+  /** Active turn budget seconds (60 multi / 60 solo); 0 when none. */
   turnBudgetSeconds?: number;
   /** Map snapshot grid (100 chars) — authoritative board layout. */
   grid?: string;
   /** Pieces per seat from map snapshot. */
   touristsPerPlayer?: number;
   packTitle?: string;
-  /** Synced removed task cell keys `"r,c"` (holes: not landable; stand OK). */
+  /** Synced removed task cell keys `"r,c"` (visual holes; landable; stand OK). */
   removedTaskKeys?: {
     forEach: (cb: (key: string) => void) => void;
     length?: number;
@@ -427,11 +444,11 @@ export const useGameStore = defineStore('game', {
     currentTurnSessionId: string;
     /** Unix ms turn deadline; `0` = no active turn timer (game/move). */
     turnUntil: number;
-    /** Active turn budget in seconds (60 multi / 300 solo); `0` when none. */
+    /** Active turn budget in seconds (60 multi / 60 solo); `0` when none. */
     turnBudgetSeconds: number;
     seats: GameSeat[];
     /**
-     * Synced removed task cell keys `"r,c"` (visual holes; not landable).
+     * Synced removed task cell keys `"r,c"` (visual holes; landable).
      * Mirrored from MyRoomState.removedTaskKeys. Piece may stand on a hole.
      */
     removedTaskKeys: string[];
@@ -465,8 +482,7 @@ export const useGameStore = defineStore('game', {
     /** Own private peeks budget from `budgets` (0 for spectators / unset). */
     peeks: number;
     /**
-     * Solo peeks∞ flag from `budgets.infinite` — does **not** make steps infinite
-     * (SC-PRESENCE-16 / SC-MOVE-40).
+     * Solo ∞ flag from `budgets.infinite` — both peeks and steps (SC-PRESENCE-16 / SC-MOVE-40).
      */
     budgetsInfinite: boolean;
     /**
@@ -596,9 +612,12 @@ export const useGameStore = defineStore('game', {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       return Boolean(seat && seat.finishPlace > 0);
     },
-    /** Solo five-minute budget is active (SC-PRESENCE-09 / SC-MOVE-29). */
-    isSoloBudget: (state): boolean => isSoloBudgetSeconds(state.turnBudgetSeconds),
-    /** Own seat is locked after solo timer or steps exhaustion (SC-MOVE-45/48). */
+    /**
+     * Solo red-ring: exactly one eligible seat (finishPlace===0 ∧ !timeExpired).
+     * Not via turnBudgetSeconds — solo and multi both use 60s (SC-PRESENCE-09).
+     */
+    isSoloBudget: (state): boolean => isSoloBudgetFromSeats(state.seats),
+    /** Own seat is locked after solo timer expiry (SC-MOVE-45). */
     isMySeatTimeExpired: (state): boolean => {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
       return Boolean(seat && seat.timeExpired);
@@ -795,7 +814,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        this.steps <= 0 ||
+        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -817,7 +836,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        this.steps <= 0 ||
+        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -845,7 +864,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        this.steps <= 0 ||
+        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pusherPieceId !== 'string' ||
         pusherPieceId.length === 0 ||
         typeof targetSessionId !== 'string' ||
@@ -881,7 +900,7 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        this.steps <= 0 ||
+        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -1177,12 +1196,9 @@ export const useGameStore = defineStore('game', {
       const turnUntilRaw = Number(s.turnUntil ?? 0);
       this.turnUntil = Number.isFinite(turnUntilRaw) && turnUntilRaw > 0 ? turnUntilRaw : 0;
       const budgetRaw = Number(s.turnBudgetSeconds ?? 0);
+      // Multi and solo both use 60s (SC-PRESENCE-09 / SC-MOVE-29); accept any positive.
       this.turnBudgetSeconds =
-        budgetRaw === 60 || budgetRaw === 300
-          ? budgetRaw
-          : budgetRaw > 0
-            ? Math.floor(budgetRaw)
-            : 0;
+        budgetRaw === 60 ? budgetRaw : budgetRaw > 0 ? Math.floor(budgetRaw) : 0;
 
       const next: GameSeat[] = [];
       s.seats?.forEach((seat, sessionId) => {

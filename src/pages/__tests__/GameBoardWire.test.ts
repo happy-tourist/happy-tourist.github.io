@@ -258,6 +258,53 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     wrapper.unmount();
   });
 
+  it('SC-BOARD-15: red hints include free removed task holes (not layout never-playable)', async () => {
+    // Piece at (3,3): Chebyshev-1 neighbor (2,3) is a task; (0,0) is layout `.` never-playable.
+    const game = seedPlayingSeat(1);
+    const seat = game.seats[0]!;
+    seat.pieces = [
+      {
+        pieceId: '0',
+        row: 3,
+        col: 3,
+        finished: false,
+        trapped: false,
+      },
+    ];
+    game.removedTaskKeys = ['2,3'];
+    const sendMove = vi.spyOn(game, 'sendMove').mockReturnValue(true);
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.piece').trigger('click');
+    await flushPromises();
+
+    const styleOf = (el: ReturnType<typeof wrapper.find>) => el.attributes('style') ?? '';
+    const tileAt = (row: number, col: number) =>
+      wrapper
+        .findAll('.tile')
+        .find(
+          (t) =>
+            styleOf(t).includes(`grid-column: ${col + 1}`) &&
+            styleOf(t).includes(`grid-row: ${row + 1}`),
+        );
+
+    const removedHole = tileAt(2, 3);
+    expect(removedHole).toBeTruthy();
+    expect(removedHole!.classes()).toContain('tile--removed');
+    expect(removedHole!.classes()).toContain('tile--target');
+
+    // Layout never-playable corners have no tile element at all.
+    expect(tileAt(0, 0)).toBeUndefined();
+
+    await removedHole!.trigger('click');
+    await flushPromises();
+    expect(sendMove).toHaveBeenCalledWith('0', 2, 3);
+
+    wrapper.unmount();
+  });
+
   it('SC-BOARD-46: shared peek modal shows question; peeker can place/submit', async () => {
     const game = seedPlayingSeat(2);
     openPeekFixture(game);

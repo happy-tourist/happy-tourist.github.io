@@ -1,12 +1,11 @@
 /**
- * Solo end-modal infer: steps-exhausted vs timer-expired (SC-PRESENCE-21/35).
- * Legal peek target = free unfinished on a still-present task cell (**!trapped**),
- * mirroring server `hasLegalPeek`.
+ * Solo end-modal infer: timer-only (SC-PRESENCE-21/35).
+ * Solo steps are infinite — no distinct steps-exhausted copy.
  */
 
-export type SoloEndModalKind = 'steps' | 'timer';
+export type SoloEndModalKind = 'timer';
 
-/** Minimal piece fields needed for legal-peek / end-modal infer. */
+/** Minimal piece fields (kept for legal-peek helper / tests). */
 export type SoloEndPiece = {
   finished: boolean;
   trapped: boolean;
@@ -16,7 +15,7 @@ export type SoloEndPiece = {
 
 /**
  * True when any own unfinished free piece stands on a still-present task cell.
- * Trapped pieces do not count (SC-PRESENCE-35).
+ * Trapped pieces do not count (legacy legal-peek helper).
  */
 export function hasOwnUnfinishedOnLiveTask(
   pieces: readonly SoloEndPiece[],
@@ -27,15 +26,8 @@ export function hasOwnUnfinishedOnLiveTask(
 
 /**
  * Infer end-modal copy kind when the seat becomes time-expired.
- * steps ≤ 0 ∧ no legal peek target → `'steps'`; otherwise `'timer'`.
+ * Always `'timer'` — steps-exhausted branch removed (SC-PRESENCE-21/35).
  */
-export function inferSoloEndModalKind(
-  pieces: readonly SoloEndPiece[],
-  steps: number,
-  isPresentTaskCell: (row: number, col: number) => boolean,
-): SoloEndModalKind {
-  if (steps <= 0 && !hasOwnUnfinishedOnLiveTask(pieces, isPresentTaskCell)) {
-    return 'steps';
-  }
+export function inferSoloEndModalKind(): SoloEndModalKind {
   return 'timer';
 }
