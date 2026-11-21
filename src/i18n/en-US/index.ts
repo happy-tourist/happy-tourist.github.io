@@ -646,8 +646,13 @@ export default {
     leaveConfirm: 'Вы уверены? Если выйдете, прогресс будет сброшен.',
     leaveCancel: 'Отмена',
     leaveExit: 'Выйти',
-    /** Delivered-knowledge modal on full finish / cut (SC-FINISH-31/34) — no place number. */
-    knowledgeDeliveredModal: 'Вы доставили {n} знаний',
+    /**
+     * Delivered-knowledge modal — full finish vs penultimate cut (SC-FINISH-31/32/34).
+     * No place number. `outcome` from private `knowledge` selects the key.
+     */
+    knowledgeDeliveredModal: 'Все ваши туристы дошли до финиша и доставили {n} знаний',
+    knowledgeDeliveredModalCut:
+      'Соперники финишировали. Ваши туристы, что успели, доставили {n} знаний',
     knowledgeDeliveredModalOk: 'ОК',
     /** a11y for strip finish icon. */
     finishStripAria: 'Финиш',
@@ -665,7 +670,10 @@ export default {
     peekSubmit: 'Ответить',
     peekSpectatorHint: 'Игрок отвечает на вопрос…',
     peekAffordance: 'Посмотреть под плиткой',
-    /** Peek-close header flash in `game-status` slot ~10s (SC-PRESENCE-36 / D4). */
+    /**
+     * Peek-close outcome — top-center Notify toast (SC-PRESENCE-36 / SC-BOARD-88 / D9).
+     * Header flash may still mirror the same keys; toast is required.
+     */
     peekStatusFlash: {
       correct: 'Правильно!',
       wrong: 'Ошибка!',
@@ -677,7 +685,7 @@ export default {
     pushAffordance: 'Толкнуть туриста',
     /** Return finished tourist onto center ring (SC-FINISH-13). */
     returnAffordance: 'Вернуть на поле',
-    /** All-jail reset warning — own seat only (SC-MOVE-63). */
+    /** Retired all-jail teleport warning (SC-MOVE-119) — keys kept inert for mid-rollout. */
     allJailWarningModal: 'Все туристы попали в решётки. Они отправлены на стартовые клетки.',
     allJailWarningModalOk: 'ОК',
   },

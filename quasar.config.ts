@@ -117,8 +117,8 @@ export default defineConfig((ctx) => {
       // components: [],
       // directives: [],
 
-      // Quasar plugins
-      plugins: ['Dark'],
+      // Quasar plugins — Notify for peek outcome toasts (SC-PRESENCE-36 / SC-BOARD-88 / D9)
+      plugins: ['Dark', 'Notify'],
     },
 
     // animations: 'all', // --- includes all animations

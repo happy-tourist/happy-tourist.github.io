@@ -479,6 +479,7 @@ const breadcrumbItems = computed((): Crumb[] => {
 /**
  * Active peek-outcome flash (SC-PRESENCE-36 / D4).
  * Store timer clears `peekStatusFlash` after PEEK_STATUS_FLASH_MS; until is a guard only.
+ * Top-center Notify toast is fired from the game store on peekClose (SC-BOARD-88 / D9).
  */
 const activePeekStatusFlash = computed(() => {
   const flash = game.peekStatusFlash;

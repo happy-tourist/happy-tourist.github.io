@@ -503,7 +503,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-85: trapped piece shows red TR grille counter on board + strip', async () => {
+  it('SC-BOARD-85 / SC-PRESENCE-52: red TR grille above overlay; knowledge strip-only', async () => {
     const game = seedPlayingSeat(2);
     game.$patch({
       seats: [
@@ -532,15 +532,25 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     expect(boardBadge.exists()).toBe(true);
     expect(boardBadge.text()).toBe('3');
     expect(boardBadge.classes()).toContain('piece-badge--grille');
+    expect(boardBadge.classes()).toContain('piece-badge--board-overlay');
 
     const stripBadge = wrapper.find('[data-testid="strip-grille-badge"]');
     expect(stripBadge.exists()).toBe(true);
     expect(stripBadge.text()).toBe('3');
 
-    const knowledge = wrapper.find('[data-testid="piece-knowledge-badge"]');
-    expect(knowledge.exists()).toBe(true);
-    expect(knowledge.text()).toBe('2');
-    expect(knowledge.classes()).toContain('piece-badge--knowledge');
+    // Carried knowledge: strip TR only — no board yellow badge (SC-PRESENCE-52 / D9).
+    expect(wrapper.find('[data-testid="piece-knowledge-badge"]').exists()).toBe(false);
+    const stripKnowledge = wrapper.find('[data-testid="strip-knowledge-badge"]');
+    expect(stripKnowledge.exists()).toBe(true);
+    expect(stripKnowledge.text()).toContain('2');
+    expect(stripKnowledge.classes()).toContain('piece-badge--knowledge');
+
+    const { readFileSync } = await import('node:fs');
+    const path = await import('node:path');
+    const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
+    expect(pageSrc).toMatch(/\.piece-badge--grille\s*\{[^}]*z-index:\s*4/s);
+    expect(pageSrc).toMatch(/\.piece-badge--board-overlay\s*\{[^}]*z-index:\s*4/s);
+    expect(pageSrc).toMatch(/mdi-lightbulb-on/);
 
     wrapper.unmount();
   });
@@ -823,6 +833,10 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     expect(pageSrc).toMatch(
       /catapultDeferFinishKeys\.value\.has\(key\)\s*\|\|\s*catapultOwnsPiece\(key\)/,
     );
+    // SC-FINISH-35: click→center seeds lastKnown + boardActionPreCell fallback; always slide+fade.
+    expect(pageSrc).toMatch(/boardActionPreCell\.value/);
+    expect(pageSrc).toMatch(/isCenterCell\(row, col\).*lastKnownBoardCellByKey/s);
+    expect(pageSrc).toMatch(/FINISH_TRAVEL_MS\s*\+\s*FINISH_FADE_MS/);
   });
 
   it('SC-BOARD-84 / SC-MOVE-77 / SC-FINISH-09/13: illustrated rescue/return + no peek/push', async () => {

@@ -13,12 +13,12 @@
       </div>
     </div>
 
-    <!-- Full finish / penultimate cut: delivered knowledge only (SC-FINISH-31/34; D8). -->
+    <!-- Full finish / penultimate cut: delivered knowledge; distinct i18n by outcome (SC-FINISH-31/32/34). -->
     <q-dialog v-model="knowledgeModalOpen" persistent>
       <q-card style="min-width: 280px" data-testid="knowledge-delivered-modal">
         <q-card-section>
           <div class="text-h6 text-center">
-            {{ $t('game.knowledgeDeliveredModal', { n: game.knowledgeDelivered }) }}
+            {{ $t(knowledgeModalI18nKey, { n: game.knowledgeDelivered }) }}
           </div>
         </q-card-section>
         <q-card-actions align="right">
@@ -114,27 +114,7 @@
       </q-card>
     </q-dialog>
 
-    <!-- All-jail warning — own seat only (SC-MOVE-63); informational. -->
-    <q-dialog
-      :model-value="game.allJailWarning"
-      persistent
-      @update:model-value="onAllJailDialogUpdate"
-    >
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-body1 text-center">
-            {{ $t('game.allJailWarningModal') }}
-          </div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn
-            color="primary"
-            :label="$t('game.allJailWarningModalOk')"
-            @click="onAllJailDialogUpdate(false)"
-          />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
+    <!-- All-jail teleport modal retired (SC-MOVE-119 / block 8.8) — server waits on ticks. -->
 
     <q-banner
       v-if="game.error"
@@ -234,22 +214,7 @@
           @transitionend="onPieceTransitionEnd($event)"
         >
           <img class="piece__img" :src="touristSrc(piece.touristId)" alt="" />
-          <!-- Public grille remaining-turns TR (SC-BOARD-85). -->
-          <span
-            v-if="pieceGrilleRemaining(piece) > 0"
-            class="piece-badge piece-badge--grille"
-            data-testid="piece-grille-badge"
-          >
-            {{ pieceGrilleRemaining(piece) }}
-          </span>
-          <!-- Own carried knowledge BR from private knowledge.pieces (D9). -->
-          <span
-            v-if="ownPieceKnowledge(piece) > 0"
-            class="piece-badge piece-badge--knowledge"
-            data-testid="piece-knowledge-badge"
-          >
-            {{ ownPieceKnowledge(piece) }}
-          </span>
+          <!-- Board carried-knowledge badge retired — strip TR only (SC-PRESENCE-52 / D9). -->
         </div>
         <!-- Revealed holding grilles — drop/rise for all clients (SC-BOARD-17…19). -->
         <img
@@ -264,6 +229,16 @@
           alt=""
           :style="grilleStyle(grille)"
         />
+        <!-- Grille counter above grille overlay (sibling z-index — SC-BOARD-85). -->
+        <span
+          v-for="badge in boardGrilleBadges"
+          :key="`grille-badge-${badge.key}`"
+          class="piece-badge piece-badge--grille piece-badge--board-overlay"
+          data-testid="piece-grille-badge"
+          :style="boardGrilleBadgeStyle(badge)"
+        >
+          {{ badge.remainingTurns }}
+        </span>
         <!-- Catapult reveal — sequential overlay; broken 450+450 hold (SC-BOARD-23…26). -->
         <img
           v-for="catapult in catapultOverlays"
@@ -351,11 +326,13 @@
                   >
                     {{ stripGrilleRemaining(pieceId) }}
                   </span>
+                  <!-- Carried knowledge strip TR + lightbulb only (SC-PRESENCE-52 / D9). -->
                   <span
                     v-if="stripPieceKnowledge(pieceId) > 0"
                     class="piece-badge piece-badge--knowledge"
                     data-testid="strip-knowledge-badge"
                   >
+                    <q-icon name="mdi-lightbulb-on" size="12px" aria-hidden="true" />
                     {{ stripPieceKnowledge(pieceId) }}
                   </span>
                   <!-- Return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
@@ -473,13 +450,19 @@
                 </div>
               </div>
 
-              <!-- Delivered knowledge to the right of own avatar (SC-PRESENCE-50/51). -->
+              <!-- Delivered knowledge + lightbulb beside own avatar (SC-PRESENCE-50/51 / D9). -->
               <div v-if="showOwnKnowledge(item.marker)" class="presence-knowledge">
                 <div
                   class="knowledge-counter"
                   data-testid="knowledge-counter"
                   :aria-label="$t('game.knowledgeCounterAria')"
                 >
+                  <q-icon
+                    name="mdi-lightbulb-on"
+                    size="16px"
+                    class="knowledge-counter__icon"
+                    aria-hidden="true"
+                  />
                   <span class="knowledge-value">{{ game.knowledgeDelivered }}</span>
                   <span
                     v-for="fall in knowledgeFalls"
@@ -526,6 +509,7 @@ import {
   type SayPresetId,
   SAY_TTL_MS,
   isFinishedPiece,
+  turnRemainingSeconds,
 } from '@/stores/game';
 import {
   buildBoardTiles as buildTilesFromGrid,
@@ -812,6 +796,13 @@ const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 const sayPickerOpen = ref(false);
 /** Delivered-knowledge outcome modal on finishPlace 0→1 (SC-FINISH-31/34; D8). */
 const knowledgeModalOpen = ref(false);
+
+/** Distinct finish vs cut copy from private `knowledge.outcome` (SC-FINISH-31/32/34). */
+const knowledgeModalI18nKey = computed(() =>
+  game.knowledgeOutcome === 'cut'
+    ? 'game.knowledgeDeliveredModalCut'
+    : 'game.knowledgeDeliveredModal',
+);
 
 /** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
 const grilleOverlays = ref<GrilleOverlay[]>([]);
@@ -1257,22 +1248,43 @@ function submitPeek() {
   game.sendPeekSubmit();
 }
 
-/** Public grille counter for board piece (SC-BOARD-85). */
-function pieceGrilleRemaining(piece: BoardPiece): number {
-  if (piece.disappearing) {
-    return 0;
-  }
-  const n = piece.remainingTurns ?? 0;
-  return piece.trapped && n > 0 ? n : 0;
+/** Board-level grille counters (above grille overlay sibling — SC-BOARD-85). */
+interface BoardGrilleBadge {
+  key: string;
+  row: number;
+  col: number;
+  remainingTurns: number;
 }
 
-/** Own carried knowledge for board piece (private knowledge.pieces — D9). */
-function ownPieceKnowledge(piece: BoardPiece): number {
-  if (!isOwnPiece(piece) || piece.disappearing) {
-    return 0;
+const boardGrilleBadges = computed((): BoardGrilleBadge[] => {
+  const out: BoardGrilleBadge[] = [];
+  for (const piece of boardPieces.value) {
+    if (piece.disappearing || !piece.trapped) {
+      continue;
+    }
+    const n = piece.remainingTurns ?? 0;
+    if (n <= 0) {
+      continue;
+    }
+    out.push({
+      key: pieceKey(piece.sessionId, piece.pieceId),
+      row: piece.row,
+      col: piece.col,
+      remainingTurns: n,
+    });
   }
-  const n = game.knowledgePieces[piece.pieceId];
-  return typeof n === 'number' && n > 0 ? n : 0;
+  return out;
+});
+
+function boardGrilleBadgeStyle(badge: BoardGrilleBadge): Record<string, string> {
+  const piece = boardPieces.value.find((p) => pieceKey(p.sessionId, p.pieceId) === badge.key);
+  if (piece) {
+    return pieceStyle(piece);
+  }
+  return {
+    '--prow': String(badge.row),
+    '--pcol': String(badge.col),
+  };
 }
 
 function stripGrilleRemaining(pieceId: string): number {
@@ -1285,6 +1297,9 @@ function stripGrilleRemaining(pieceId: string): number {
 }
 
 function stripPieceKnowledge(pieceId: string): number {
+  if (isStripSlotFinished(pieceId)) {
+    return 0;
+  }
   const n = game.knowledgePieces[pieceId];
   return typeof n === 'number' && n > 0 ? n : 0;
 }
@@ -1735,12 +1750,6 @@ function onRescueClick(pieceId: string) {
   }, MOVE_ANIM_MS);
 }
 
-function onAllJailDialogUpdate(open: boolean) {
-  if (!open) {
-    game.clearAllJailWarning();
-  }
-}
-
 function onTileClick(tile: BoardTile) {
   if (!isInteractive.value) {
     return;
@@ -1837,25 +1846,34 @@ function showGraceRing(marker: PresenceMarker): boolean {
 }
 
 /**
- * Turn countdown ring retired (SC-PRESENCE-54). Outer progress keeps reserved chrome
- * (SC-PRESENCE-11) but never paints a determinate turn budget.
+ * Active turn countdown on current-turn seat while deadline is synced (SC-PRESENCE-54/10).
+ * Outer progress keeps reserved chrome when inactive (SC-PRESENCE-11).
  */
-function showTurnRing(_marker: PresenceMarker): boolean {
-  void _marker;
-  return false;
+function showTurnRing(marker: PresenceMarker): boolean {
+  return (
+    marker.isCurrentTurn &&
+    game.phase === 'playing' &&
+    game.turnUntil > 0 &&
+    game.turnBudgetSeconds > 0
+  );
 }
 
-/** Outer ring max kept for layout stability (no turn budget paint). */
-const turnRingMax = computed(() => 60);
+/** Outer ring max = synced budget (60); fallback keeps layout stable. */
+const turnRingMax = computed(() => (game.turnBudgetSeconds > 0 ? game.turnBudgetSeconds : 60));
 
-function turnRingValue(_marker: PresenceMarker): number {
-  void _marker;
-  return 0;
+function turnRingValue(marker: PresenceMarker): number {
+  if (!showTurnRing(marker)) {
+    return 0;
+  }
+  return turnRemainingSeconds(game.turnUntil, game.turnBudgetSeconds, nowMs.value);
 }
 
-function turnRingColor(_marker: PresenceMarker): string {
-  void _marker;
-  return 'transparent';
+/** Blue multi; red leftover single-eligible (SC-PRESENCE-08/09). */
+function turnRingColor(marker: PresenceMarker): string {
+  if (!showTurnRing(marker)) {
+    return 'transparent';
+  }
+  return game.isSoloBudget ? 'negative' : 'primary';
 }
 
 /** Affordance only on own online seated marker (SC-SAY-07/08). */
@@ -2872,14 +2890,22 @@ watch(
       next.add(key);
       disappearingKeys.value = next;
 
-      // Paint `from` when last-known ≠ center; hold until real paint (D11 B).
-      const from = lastKnownBoardCellByKey.value.get(key);
+      // Paint `from` when last-known ≠ center; hold until real paint (D10/D11 / SC-FINISH-35).
+      // Fallback: own click-to-center seeds boardActionPreCell before sync lands finished.
+      let from = lastKnownBoardCellByKey.value.get(key);
+      if ((!from || isCenterCell(from.row, from.col)) && boardActionPreCell.value) {
+        const pre = boardActionPreCell.value;
+        const selfId = mySeat.value?.sessionId;
+        if (selfId && key === pieceKey(selfId, pre.pieceId) && !isCenterCell(pre.row, pre.col)) {
+          from = { row: pre.row, col: pre.col };
+        }
+      }
       if (from && !isCenterCell(from.row, from.col)) {
         const nextFrom = new Map(finishAnimFromByKey.value);
         nextFrom.set(key, from);
         finishAnimFromByKey.value = nextFrom;
         void nextTick(() => {
-          // Force layout so the `from` frame is committed before we clear.
+          // Force layout so the `from` frame is committed before we clear (match catapult path).
           void document.body.offsetHeight;
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -3808,7 +3834,7 @@ body.body--dark .say-picker {
   pointer-events: none;
 }
 
-/* Red TR grille remainingTurns (SC-BOARD-85); yellow BR knowledge (D9). */
+/* Red TR grille remainingTurns (SC-BOARD-85); yellow strip TR knowledge (SC-PRESENCE-52 / D9). */
 .piece-badge {
   position: absolute;
   min-width: 18px;
@@ -3823,19 +3849,48 @@ body.body--dark .say-picker {
   pointer-events: none;
   z-index: 3;
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
 }
 
 .piece-badge--grille {
   top: 0;
   right: 0;
   background: #c10015;
+  /* Above grille overlay / strip chrome grille (SC-BOARD-85). */
+  z-index: 4;
+}
+
+/*
+ * Board grille badge is a tourist-board sibling after `.grille-overlay` (z-index 3)
+ * so the digit stays readable above grille art (SC-BOARD-85).
+ */
+.piece-badge--board-overlay {
+  z-index: 4;
+  left: calc(var(--pcol) * (var(--cell) + var(--gap)) + var(--cell) - 20px);
+  top: calc(var(--prow) * (var(--cell) + var(--gap)) + 2px);
+  right: auto;
 }
 
 .piece-badge--knowledge {
-  bottom: 0;
+  top: 0;
   right: 0;
+  bottom: auto;
   background: #f2c037;
   color: #212121;
+  z-index: 3;
+}
+
+/* When grille + knowledge share strip TR, knowledge shifts left of grille digit. */
+.my-tourist-slot .piece-badge--grille ~ .piece-badge--knowledge {
+  right: 20px;
+}
+
+.knowledge-counter__icon {
+  flex-shrink: 0;
+  opacity: 0.95;
 }
 
 .piece--no-transition {

@@ -130,15 +130,15 @@ describe('GamePage knowledge presence (SC-PRESENCE-50…56; retired solo leftove
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-54: no turn ring even with synced turnUntil', async () => {
+  it('SC-PRESENCE-54: current turn shows countdown ring from turnUntil', async () => {
     seedPlaying({ turnUntil: Date.now() + 60_000, maxSeats: 2 });
     const wrapper = mountPage();
     await flushPromises();
 
     const progress = wrapper.find('.presence-slot--own .progress-stub');
     expect(progress.exists()).toBe(true);
-    expect(progress.attributes('data-color')).toBe('transparent');
-    expect(Number(progress.attributes('data-value'))).toBe(0);
+    expect(progress.attributes('data-color')).toBe('primary');
+    expect(Number(progress.attributes('data-value'))).toBeGreaterThan(0);
 
     wrapper.unmount();
   });
@@ -167,14 +167,17 @@ describe('GamePage knowledge presence (SC-PRESENCE-50…56; retired solo leftove
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-56 / SC-FINISH-34: no place badge; knowledge modal i18n has no place', async () => {
+  it('SC-PRESENCE-56 / SC-FINISH-34: no place badge; distinct finish vs cut i18n', async () => {
     seedPlaying({ finishPlace: 1, knowledgeDelivered: 1 });
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
     expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/\{n\}/);
     expect(enUS.game.knowledgeDeliveredModal).not.toMatch(/-й/);
+    expect(enUS.game.knowledgeDeliveredModalCut).not.toMatch(/-й/);
+    expect(enUS.game.knowledgeDeliveredModal).not.toBe(enUS.game.knowledgeDeliveredModalCut);
     expect(enUS.game).not.toHaveProperty('finishPlaceModal');
 
     wrapper.unmount();

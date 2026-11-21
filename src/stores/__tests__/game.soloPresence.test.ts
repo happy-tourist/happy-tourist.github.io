@@ -37,7 +37,9 @@ describe('game store knowledge / retired end-turn (SC-PRESENCE-50/55)', () => {
   });
 
   it('knowledgeDelivered i18n keys exist; retired solo/place keys gone', () => {
-    expect(enUS.game.knowledgeDeliveredModal).toBe('Вы доставили {n} знаний');
+    expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModal).not.toBe(enUS.game.knowledgeDeliveredModalCut);
     expect(enUS.game.knowledgeDeliveredModalOk).toBe('ОК');
     expect(enUS.game.knowledgeCounterAria).toBe('Знания');
     expect(enUS.game).not.toHaveProperty('soloUnlimitedModal');

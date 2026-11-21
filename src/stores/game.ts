@@ -1,7 +1,9 @@
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import type { Room, RoomAvailable } from '@colyseus/sdk';
+import { Notify } from 'quasar';
 
 import { client } from '@/boot/colyseus';
+import enUS from '@/i18n/en-US';
 
 /** Room name registered on the Colyseus server. */
 export const TOURIST_ROOM = 'tourist';
@@ -50,7 +52,7 @@ export interface GameRoomMeta {
 }
 
 /** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2).
- * Trap seed is fixed server-side (12%/15%); no client density (SC-LOBBY-40/41). */
+ * Trap seed is fixed server-side (15%/15%); no client density (SC-LOBBY-40/41). */
 export interface CreateGameOptions {
   mapId: string;
   packId: string;
@@ -238,10 +240,15 @@ type PieceSync = {
   remainingTurns?: number;
 };
 
+/** Private knowledge finish/cut outcome (SC-FINISH-31/32/34 / D8). */
+export type KnowledgeOutcome = 'finish' | 'cut';
+
 /** Private knowledge payload from room `knowledge` message (owner-only — D2). */
 export type KnowledgePayload = {
   delivered: number;
   pieces: Record<string, number>;
+  /** Present on full finish / penultimate cut; omit on ordinary sync. */
+  outcome?: KnowledgeOutcome;
 };
 
 type SeatSync = {
@@ -476,11 +483,16 @@ export const useGameStore = defineStore('game', {
     answerCards: AnswerCardView[];
     /**
      * Own delivered knowledge from private `knowledge` (avatar HUD — block 6).
-     * Board yellow BR badges read `knowledgePieces` (D2 / D9).
+     * Strip yellow TR badges read `knowledgePieces` (D9 / SC-PRESENCE-52).
      */
     knowledgeDelivered: number;
-    /** Own carried knowledge per pieceId from private `knowledge.pieces` (D2 / SC-BOARD-85). */
+    /** Own carried knowledge per pieceId from private `knowledge.pieces` (D2 / SC-PRESENCE-52). */
     knowledgePieces: Record<string, number>;
+    /**
+     * Latest finish/cut outcome from private `knowledge` (SC-FINISH-31/32/34).
+     * `null` until a finish/cut payload arrives; modal defaults to finish copy.
+     */
+    knowledgeOutcome: KnowledgeOutcome | null;
     /**
      * True after the first private `knowledge` sync for this tourist attach.
      * GamePage arms +N falls only once synced so remount/rejoin baseline
@@ -495,12 +507,13 @@ export const useGameStore = defineStore('game', {
     openPeek: OpenPeek | null;
     /**
      * Ephemeral peek-outcome flash for App header `game-status` (SC-PRESENCE-36 / D4).
+     * Also drives top-center Notify toast (SC-BOARD-88 / D9).
      * Set from room-wide `peekClose`; cleared after PEEK_STATUS_FLASH_MS or leave.
      */
     peekStatusFlash: PeekStatusFlash | null;
     /**
-     * Private all-jail warning for this seat only (`allJailWarning`).
-     * Page shows informational modal; clear via `clearAllJailWarning` (SC-MOVE-63).
+     * Legacy all-jail teleport warning — inert (SC-MOVE-119): server no longer
+     * teleports; client ignores the message and never opens a modal.
      */
     allJailWarning: boolean;
     /** Ephemeral say broadcasts (D3) — pruned by SAY_TTL_MS. */
@@ -539,6 +552,7 @@ export const useGameStore = defineStore('game', {
     answerCards: [],
     knowledgeDelivered: 0,
     knowledgePieces: {},
+    knowledgeOutcome: null,
     knowledgeSynced: false,
     openPeek: null,
     peekStatusFlash: null,
@@ -989,6 +1003,7 @@ export const useGameStore = defineStore('game', {
       this.answerCards = [];
       this.knowledgeDelivered = 0;
       this.knowledgePieces = {};
+      this.knowledgeOutcome = null;
       this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();
@@ -1003,11 +1018,6 @@ export const useGameStore = defineStore('game', {
           // room may already be closed
         }
       }
-    },
-
-    /** Dismiss own all-jail warning modal (informational only). */
-    clearAllJailWarning() {
-      this.allJailWarning = false;
     },
 
     async _enterRoom(connect: () => Promise<Room>) {
@@ -1292,6 +1302,7 @@ export const useGameStore = defineStore('game', {
       this.answerCards = [];
       this.knowledgeDelivered = 0;
       this.knowledgePieces = {};
+      this.knowledgeOutcome = null;
       this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();
@@ -1334,8 +1345,9 @@ export const useGameStore = defineStore('game', {
         this._onPeekCloseMessage(message);
       });
 
+      // Inert: all-jail no longer teleports / warns (SC-MOVE-119 / block 8.8).
       room.onMessage('allJailWarning', () => {
-        this.allJailWarning = true;
+        this.allJailWarning = false;
       });
 
       room.onError((_code, message) => {
@@ -1352,7 +1364,7 @@ export const useGameStore = defineStore('game', {
       this.sayEvents = this.sayEvents.filter((e) => now - e.at < SAY_TTL_MS);
     },
 
-    /** Private knowledge for own yellow BR badges + avatar counter (D2 / D9). */
+    /** Private knowledge for strip TR badges + avatar counter (D2 / D9). */
     _onKnowledgeMessage(message: unknown) {
       if (!message || typeof message !== 'object') {
         return;
@@ -1372,6 +1384,10 @@ export const useGameStore = defineStore('game', {
         }
       }
       this.knowledgePieces = pieces;
+      // Finish/cut outcome for modal copy (SC-FINISH-31/32/34); keep prior when omitted.
+      if (raw.outcome === 'finish' || raw.outcome === 'cut') {
+        this.knowledgeOutcome = raw.outcome;
+      }
       // Mark synced after applying payload so remount baseline is not a grant (SC-PRESENCE-51).
       this.knowledgeSynced = true;
     },
@@ -1453,7 +1469,8 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Room-wide peek outcome → header flash 10s (SC-PRESENCE-36 / D4).
+     * Room-wide peek outcome → header flash 10s + top-center Notify toast
+     * (SC-PRESENCE-36 / SC-BOARD-88 / D9). Header alone is not enough.
      * Overwrites any in-flight flash and restarts the timer.
      */
     _setPeekStatusFlash(kind: PeekStatusFlashKind) {
@@ -1466,6 +1483,14 @@ export const useGameStore = defineStore('game', {
           this.peekStatusFlash = null;
         }
       }, PEEK_STATUS_FLASH_MS);
+      Notify.create({
+        message: enUS.game.peekStatusFlash[kind],
+        position: 'top',
+        timeout: 2500,
+        group: 'peek-outcome',
+        color: kind === 'correct' ? 'positive' : kind === 'wrong' ? 'negative' : 'warning',
+        textColor: 'white',
+      });
     },
 
     /**
@@ -1548,6 +1573,7 @@ export const useGameStore = defineStore('game', {
       this.answerCards = [];
       this.knowledgeDelivered = 0;
       this.knowledgePieces = {};
+      this.knowledgeOutcome = null;
       this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();

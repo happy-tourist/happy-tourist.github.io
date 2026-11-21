@@ -405,7 +405,7 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-54: no turn countdown ring (reconnect chrome may remain)', async () => {
+  it('SC-PRESENCE-54: current turn shows timer ring (60s budget)', async () => {
     seedPlaying({
       pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
       turnUntil: Date.now() + 60_000,
@@ -415,8 +415,8 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
 
     const progress = wrapper.find('.presence-slot--own .progress-stub');
     expect(progress.exists()).toBe(true);
-    expect(progress.attributes('data-color')).toBe('transparent');
-    expect(Number(progress.attributes('data-value'))).toBe(0);
+    expect(progress.attributes('data-color')).toBe('primary');
+    expect(Number(progress.attributes('data-value'))).toBeGreaterThan(50);
 
     wrapper.unmount();
   });
@@ -440,7 +440,7 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     wrapper.unmount();
   });
 
-  it('SC-FINISH-31 / SC-FINISH-34: finishPlace 0→1 opens knowledge modal with delivered', async () => {
+  it('SC-FINISH-31 / SC-FINISH-34: finishPlace 0→1 opens knowledge modal; finish vs cut copy', async () => {
     const game = seedPlaying({
       pieces: [
         { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
@@ -449,6 +449,7 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
       knowledgeDelivered: 6,
       finishPlace: 0,
     });
+    game.knowledgeOutcome = 'finish';
     const wrapper = mountPage();
     await flushPromises();
 
@@ -462,16 +463,25 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     const modal = wrapper.find('[data-testid="knowledge-delivered-modal"]');
     expect(modal.exists()).toBe(true);
     expect(modal.text()).toContain('game.knowledgeDeliveredModal');
-    expect(enUS.game.knowledgeDeliveredModal).toBe('Вы доставили {n} знаний');
+    expect(modal.text()).not.toContain('game.knowledgeDeliveredModalCut');
+    expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModal).not.toBe(enUS.game.knowledgeDeliveredModalCut);
     expect(wrapper.text()).not.toContain('game.finishPlaceModal');
     expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
+
+    game.knowledgeOutcome = 'cut';
+    await flushPromises();
+    expect(wrapper.find('[data-testid="knowledge-delivered-modal"]').text()).toContain(
+      'game.knowledgeDeliveredModalCut',
+    );
 
     wrapper.unmount();
   });
 
   it('SC-FINISH-31: modal body follows late knowledge after finishPlace (transfer race)', async () => {
     // Live bind (not open-time snapshot) so Colyseus knowledge-after-finishPlace is correct.
-    expect(pageSrc).toMatch(/knowledgeDeliveredModal',\s*\{\s*n:\s*game\.knowledgeDelivered\s*\}/);
+    expect(pageSrc).toMatch(/knowledgeModalI18nKey,\s*\{\s*n:\s*game\.knowledgeDelivered\s*\}/);
     expect(pageSrc).not.toMatch(/knowledgeModalDelivered/);
 
     const game = seedPlaying({
@@ -501,7 +511,7 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-10: offline reconnect ring only (no turn ring)', async () => {
+  it('SC-PRESENCE-10: offline current-turn seat shows dual turn + grace rings', async () => {
     const game = seedPlaying({
       pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
       turnUntil: Date.now() + 60_000,
@@ -514,11 +524,36 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
 
     const stubs = wrapper.findAll('.presence-slot--own .progress-stub');
     expect(stubs.length).toBeGreaterThanOrEqual(2);
-    // Outer turn ring stays transparent / zero.
-    expect(stubs[0]!.attributes('data-color')).toBe('transparent');
-    expect(Number(stubs[0]!.attributes('data-value'))).toBe(0);
+    // Outer turn ring paints while current + deadline active.
+    expect(stubs[0]!.attributes('data-color')).toBe('primary');
+    expect(Number(stubs[0]!.attributes('data-value'))).toBeGreaterThan(0);
     // Inner grace ring paints warning.
     expect(stubs[1]!.attributes('data-color')).toBe('warning');
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-52: strip knowledge TR + lightbulb; no board yellow badge', async () => {
+    seedPlaying({
+      pieces: [
+        { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
+        { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
+      ],
+      knowledgePieces: { '0': 2 },
+      knowledgeDelivered: 3,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="piece-knowledge-badge"]').exists()).toBe(false);
+    const strip = wrapper.find('[data-testid="strip-knowledge-badge"]');
+    expect(strip.exists()).toBe(true);
+    expect(strip.text()).toContain('2');
+    expect(strip.find('[data-name="mdi-lightbulb-on"]').exists()).toBe(true);
+    const avatarIcon = wrapper.find(
+      '[data-testid="knowledge-counter"] [data-name="mdi-lightbulb-on"]',
+    );
+    expect(avatarIcon.exists()).toBe(true);
 
     wrapper.unmount();
   });

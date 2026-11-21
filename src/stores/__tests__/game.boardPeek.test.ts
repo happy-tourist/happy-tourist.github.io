@@ -216,7 +216,17 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
     room._emit('knowledge', { delivered: 4, pieces: { '0': 2, '1': 0 } });
     expect(game.knowledgeDelivered).toBe(4);
     expect(game.knowledgePieces).toEqual({ '0': 2 });
+    expect(game.knowledgeOutcome).toBeNull();
     expect(game.knowledgeSynced).toBe(true);
+
+    room._emit('knowledge', {
+      delivered: 6,
+      pieces: {},
+      outcome: 'finish',
+    });
+    expect(game.knowledgeOutcome).toBe('finish');
+    room._emit('knowledge', { delivered: 1, pieces: {}, outcome: 'cut' });
+    expect(game.knowledgeOutcome).toBe('cut');
   });
 
   it('sendMove addresses piece by pieceId (no side)', () => {
