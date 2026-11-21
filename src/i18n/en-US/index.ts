@@ -652,7 +652,7 @@ export default {
      */
     knowledgeDeliveredModal: 'Все ваши туристы дошли до финиша и доставили {n} знаний',
     knowledgeDeliveredModalCut:
-      'Соперники финишировали. Ваши туристы, что успели, доставили {n} знаний',
+      'Соперники финишировали. Ваши туристы, которые успели, доставили {n} знаний',
     knowledgeDeliveredModalOk: 'ОК',
     /** a11y for strip finish icon. */
     finishStripAria: 'Финиш',
@@ -688,5 +688,7 @@ export default {
     /** Retired all-jail teleport warning (SC-MOVE-119) — keys kept inert for mid-rollout. */
     allJailWarningModal: 'Все туристы попали в решётки. Они отправлены на стартовые клетки.',
     allJailWarningModalOk: 'ОК',
+    /** Room-wide all-jail turn skip toast (SC-PRESENCE-57 / D7). */
+    allJailSkipToast: 'Все туристы в решётке — ход пропущен',
   },
 };

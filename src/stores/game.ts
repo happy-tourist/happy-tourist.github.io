@@ -52,7 +52,7 @@ export interface GameRoomMeta {
 }
 
 /** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2).
- * Trap seed is fixed server-side (15%/15%); no client density (SC-LOBBY-40/41). */
+ * Trap seed is fixed server-side (15% grille / 20% catapult); no client density (SC-LOBBY-40/41). */
 export interface CreateGameOptions {
   mapId: string;
   packId: string;
@@ -1350,6 +1350,11 @@ export const useGameStore = defineStore('game', {
         this.allJailWarning = false;
       });
 
+      // Room-wide all-jail skip toast for every client (D7 / SC-PRESENCE-57).
+      room.onMessage('allJailSkip', () => {
+        this._onAllJailSkipMessage();
+      });
+
       room.onError((_code, message) => {
         this.error = message || 'Room error';
       });
@@ -1466,6 +1471,22 @@ export const useGameStore = defineStore('game', {
     _clearPeekStatusFlash() {
       this._clearPeekStatusFlashTimer();
       this.peekStatusFlash = null;
+    },
+
+    /**
+     * Room-wide all-jail turn skip → top-center Notify for every client
+     * (SC-PRESENCE-57 / D7). Never opens the retired start-reset modal.
+     */
+    _onAllJailSkipMessage() {
+      this.allJailWarning = false;
+      Notify.create({
+        message: enUS.game.allJailSkipToast,
+        position: 'top',
+        timeout: 2500,
+        group: 'all-jail-skip',
+        color: 'warning',
+        textColor: 'white',
+      });
     },
 
     /**

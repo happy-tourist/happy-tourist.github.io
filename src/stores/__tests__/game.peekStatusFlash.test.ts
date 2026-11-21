@@ -164,4 +164,20 @@ describe('game store peek status flash (SC-PRESENCE-36)', () => {
     game._resetRoomState();
     expect(game.peekStatusFlash).toBeNull();
   });
+
+  it('SC-PRESENCE-57: allJailSkip Notify top-center; no start-reset modal', () => {
+    expect(enUS.game.allJailSkipToast).toBe('Все туристы в решётке — ход пропущен');
+    const game = useGameStore();
+    const room = makeRoom();
+    game._attachRoom(room as never);
+    notifyCreate.mockClear();
+    room._emit('allJailSkip', {});
+    expect(notifyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: enUS.game.allJailSkipToast,
+        position: 'top',
+      }),
+    );
+    expect(game.allJailWarning).toBe(false);
+  });
 });

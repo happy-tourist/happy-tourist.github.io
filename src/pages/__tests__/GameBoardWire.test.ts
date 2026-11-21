@@ -550,7 +550,8 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
     expect(pageSrc).toMatch(/\.piece-badge--grille\s*\{[^}]*z-index:\s*4/s);
     expect(pageSrc).toMatch(/\.piece-badge--board-overlay\s*\{[^}]*z-index:\s*4/s);
-    expect(pageSrc).toMatch(/mdi-lightbulb-on/);
+    expect(pageSrc).toMatch(/name="lightbulb"/);
+    expect(pageSrc).not.toMatch(/mdi-lightbulb/);
 
     wrapper.unmount();
   });
@@ -826,15 +827,18 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     );
     // Catapult→center always paints finishAnimFrom then clears after paint (SC-FINISH-19/20).
     expect(pageSrc).toMatch(/async function releaseDeferredFinishAfterVanish/);
+    expect(pageSrc).toMatch(/function clearFinishAnimFromKey/);
     expect(pageSrc).toMatch(
-      /finishAnimFromByKey\.value\s*=\s*nextFrom;[\s\S]*?requestAnimationFrame[\s\S]*?finishAnimFromByKey\.value\s*=\s*cleared/,
+      /finishAnimFromByKey\.value\s*=\s*nextFrom;[\s\S]*?requestAnimationFrame[\s\S]*?clearFinishAnimFromKey\(pieceKeyStr\)/,
     );
     expect(pageSrc).toMatch(/function shouldFinishTravelAfterVanish/);
     expect(pageSrc).toMatch(
       /catapultDeferFinishKeys\.value\.has\(key\)\s*\|\|\s*catapultOwnsPiece\(key\)/,
     );
-    // SC-FINISH-35: click→center seeds lastKnown + boardActionPreCell fallback; always slide+fade.
+    // SC-FINISH-35: click→center seeds lastKnown + finishAnimFrom; resolveFinishTravelFrom helper.
     expect(pageSrc).toMatch(/boardActionPreCell\.value/);
+    expect(pageSrc).toMatch(/resolveFinishTravelFrom/);
+    expect(pageSrc).toMatch(/finishAnimFromByKey\.value\s*=\s*nextFrom/);
     expect(pageSrc).toMatch(/isCenterCell\(row, col\).*lastKnownBoardCellByKey/s);
     expect(pageSrc).toMatch(/FINISH_TRAVEL_MS\s*\+\s*FINISH_FADE_MS/);
   });

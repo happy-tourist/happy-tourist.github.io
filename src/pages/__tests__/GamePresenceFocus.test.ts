@@ -466,6 +466,8 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     expect(modal.text()).not.toContain('game.knowledgeDeliveredModalCut');
     expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
     expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/которые успели/);
+    expect(enUS.game.knowledgeDeliveredModalCut).not.toMatch(/что успели/);
     expect(enUS.game.knowledgeDeliveredModal).not.toBe(enUS.game.knowledgeDeliveredModalCut);
     expect(wrapper.text()).not.toContain('game.finishPlaceModal');
     expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
@@ -549,12 +551,18 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
     const strip = wrapper.find('[data-testid="strip-knowledge-badge"]');
     expect(strip.exists()).toBe(true);
     expect(strip.text()).toContain('2');
-    expect(strip.find('[data-name="mdi-lightbulb-on"]').exists()).toBe(true);
-    const avatarIcon = wrapper.find(
-      '[data-testid="knowledge-counter"] [data-name="mdi-lightbulb-on"]',
-    );
+    expect(strip.find('[data-name="lightbulb"]').exists()).toBe(true);
+    expect(strip.find('[data-name="mdi-lightbulb-on"]').exists()).toBe(false);
+    const avatarIcon = wrapper.find('[data-testid="knowledge-counter"] [data-name="lightbulb"]');
     expect(avatarIcon.exists()).toBe(true);
+    expect(pageSrc).not.toMatch(/mdi-lightbulb/);
+    expect(pageSrc).toMatch(/name="lightbulb"/);
 
     wrapper.unmount();
+  });
+
+  it('SC-FINISH-34: cut copy uses «которые успели» not «что успели»', () => {
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/которые успели/);
+    expect(enUS.game.knowledgeDeliveredModalCut).not.toMatch(/что успели/);
   });
 });

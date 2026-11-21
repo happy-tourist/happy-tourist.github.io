@@ -175,6 +175,8 @@ describe('GamePage knowledge presence (SC-PRESENCE-50…56; retired solo leftove
     expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
     expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
     expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModalCut).toMatch(/которые успели/);
+    expect(enUS.game.knowledgeDeliveredModalCut).not.toMatch(/что успели/);
     expect(enUS.game.knowledgeDeliveredModal).not.toMatch(/-й/);
     expect(enUS.game.knowledgeDeliveredModalCut).not.toMatch(/-й/);
     expect(enUS.game.knowledgeDeliveredModal).not.toBe(enUS.game.knowledgeDeliveredModalCut);

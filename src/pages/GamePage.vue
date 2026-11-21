@@ -332,7 +332,7 @@
                     class="piece-badge piece-badge--knowledge"
                     data-testid="strip-knowledge-badge"
                   >
-                    <q-icon name="mdi-lightbulb-on" size="12px" aria-hidden="true" />
+                    <q-icon name="lightbulb" size="12px" aria-hidden="true" />
                     {{ stripPieceKnowledge(pieceId) }}
                   </span>
                   <!-- Return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
@@ -458,7 +458,7 @@
                   :aria-label="$t('game.knowledgeCounterAria')"
                 >
                   <q-icon
-                    name="mdi-lightbulb-on"
+                    name="lightbulb"
                     size="16px"
                     class="knowledge-counter__icon"
                     aria-hidden="true"
@@ -522,6 +522,7 @@ import {
   type ActionableCandidate,
 } from '@/lib/focusActionable';
 import { tileSkinCssVars } from '@/lib/tileSkins';
+import { resolveFinishTravelFrom } from '@/lib/finishTravelFrom';
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -786,10 +787,19 @@ const pieceTransitionsReady = ref(false);
  */
 const returnAnimFromByKey = ref(new Map<string, Cell>());
 /**
- * Finish travel from last board cell → center (move or push; SC-FINISH-01/17/18 / D10–D11).
+ * Finish travel from last board cell → center (SC-FINISH-01/17/18/35 / D10).
  * Hold `from` until painted, then clear so CSS slides onto center + disappear.
  */
 const finishAnimFromByKey = ref(new Map<string, Cell>());
+/** Drop one finish-travel pin (silent reject / send fail / travel done / return). */
+function clearFinishAnimFromKey(key: string) {
+  if (!finishAnimFromByKey.value.has(key)) {
+    return;
+  }
+  const cleared = new Map(finishAnimFromByKey.value);
+  cleared.delete(key);
+  finishAnimFromByKey.value = cleared;
+}
 /** Last non-center board cell per piece — used when finish sync jumps to center. */
 const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
@@ -1070,6 +1080,8 @@ function maybeRecoverSilentBoardActionReject() {
   }
   const piece = mySeat.value.pieces.find((p) => p.pieceId === pre.pieceId);
   if (piece && piece.row === pre.row && piece.col === pre.col && !piece.finished) {
+    const key = pieceKey(mySeat.value.sessionId, pre.pieceId);
+    clearFinishAnimFromKey(key);
     boardActionSpent.value = false;
     boardActionPreCell.value = null;
   }
@@ -1635,8 +1647,8 @@ function submitMove(pieceId: string, row: number, col: number) {
     return;
   }
   beginBoardPipelineLock();
-  // D11 A / SC-FINISH-18: seed lastKnown before send so own center finish keeps travel `from`.
-  // Do not seed finishAnimFrom here — silent server reject would pin the piece via pieceStyle.
+  // D10 / SC-FINISH-35: seed lastKnown + finishAnimFrom before send so first/click→center
+  // paints one frame at origin (cleared on silent reject recover).
   if (isCenterCell(row, col) && mySeat.value) {
     const piece = mySeat.value.pieces.find((p) => p.pieceId === pieceId && !isFinishedPiece(p));
     if (piece && !isCenterCell(piece.row, piece.col)) {
@@ -1645,10 +1657,16 @@ function submitMove(pieceId: string, row: number, col: number) {
       const nextKnown = new Map(lastKnownBoardCellByKey.value);
       nextKnown.set(key, from);
       lastKnownBoardCellByKey.value = nextKnown;
+      const nextFrom = new Map(finishAnimFromByKey.value);
+      nextFrom.set(key, from);
+      finishAnimFromByKey.value = nextFrom;
     }
   }
   // Animate / lock input only when the store actually sent (room + isMyTurn).
   if (!game.sendMove(pieceId, row, col)) {
+    if (mySeat.value) {
+      clearFinishAnimFromKey(pieceKey(mySeat.value.sessionId, pieceId));
+    }
     releaseBoardPipelineLock();
     return;
   }
@@ -2696,10 +2714,7 @@ async function releaseDeferredFinishAfterVanish(pieceKeyStr: string, from: Cell)
     });
   });
 
-  const cleared = new Map(finishAnimFromByKey.value);
-  if (cleared.delete(pieceKeyStr)) {
-    finishAnimFromByKey.value = cleared;
-  }
+  clearFinishAnimFromKey(pieceKeyStr);
 
   const existing = finishFadeTimers.get(pieceKeyStr);
   if (existing !== undefined) {
@@ -2828,31 +2843,18 @@ watch(
     })),
   (pieces) => {
     const next = new Map(lastKnownBoardCellByKey.value);
-    const unfinishedKeys = new Set<string>();
     for (const p of pieces) {
-      unfinishedKeys.add(p.key);
       if (isCenterCell(p.row, p.col)) {
         continue;
       }
       next.set(p.key, { row: p.row, col: p.col });
     }
     lastKnownBoardCellByKey.value = next;
-
-    // finishAnimFrom is only for disappearing finished pieces — drop stale overrides.
-    if (finishAnimFromByKey.value.size > 0) {
-      let changed = false;
-      const nextFrom = new Map(finishAnimFromByKey.value);
-      for (const key of unfinishedKeys) {
-        if (nextFrom.delete(key)) {
-          changed = true;
-        }
-      }
-      if (changed) {
-        finishAnimFromByKey.value = nextFrom;
-      }
-    }
+    // Keep finishAnimFrom for unfinished keys: submitMove seeds it before the server
+    // marks finished (SC-FINISH-35 / D10). turnUntil / seats remirrors must not wipe that
+    // optimistic pin; silent-reject recover + return path + finish rAF clear it instead.
   },
-  { flush: 'sync' },
+  { flush: 'sync', immediate: true },
 );
 
 /**
@@ -2890,17 +2892,17 @@ watch(
       next.add(key);
       disappearingKeys.value = next;
 
-      // Paint `from` when last-known ≠ center; hold until real paint (D10/D11 / SC-FINISH-35).
-      // Fallback: own click-to-center seeds boardActionPreCell before sync lands finished.
-      let from = lastKnownBoardCellByKey.value.get(key);
-      if ((!from || isCenterCell(from.row, from.col)) && boardActionPreCell.value) {
-        const pre = boardActionPreCell.value;
-        const selfId = mySeat.value?.sessionId;
-        if (selfId && key === pieceKey(selfId, pre.pieceId) && !isCenterCell(pre.row, pre.col)) {
-          from = { row: pre.row, col: pre.col };
-        }
-      }
-      if (from && !isCenterCell(from.row, from.col)) {
+      // Paint `from` when last-known ≠ center; hold until real paint (D10 / SC-FINISH-35).
+      // Fallback: own click-to-center seeds boardActionPreCell / submitMove finishAnimFrom.
+      const from = resolveFinishTravelFrom({
+        lastKnown: lastKnownBoardCellByKey.value.get(key),
+        boardActionPre: boardActionPreCell.value,
+        pieceKey: key,
+        selfSessionId: mySeat.value?.sessionId,
+        isCenterCell,
+        pieceKeyOf: pieceKey,
+      });
+      if (from) {
         const nextFrom = new Map(finishAnimFromByKey.value);
         nextFrom.set(key, from);
         finishAnimFromByKey.value = nextFrom;
@@ -2909,10 +2911,7 @@ watch(
           void document.body.offsetHeight;
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              const cleared = new Map(finishAnimFromByKey.value);
-              if (cleared.delete(key)) {
-                finishAnimFromByKey.value = cleared;
-              }
+              clearFinishAnimFromKey(key);
             });
           });
         });
@@ -2949,11 +2948,7 @@ watch(
         cleared.delete(key);
         disappearingKeys.value = cleared;
       }
-      if (finishAnimFromByKey.value.has(key)) {
-        const clearedFrom = new Map(finishAnimFromByKey.value);
-        clearedFrom.delete(key);
-        finishAnimFromByKey.value = clearedFrom;
-      }
+      clearFinishAnimFromKey(key);
 
       const colon = key.indexOf(':');
       if (colon <= 0) {
