@@ -13,30 +13,16 @@
       </div>
     </div>
 
-    <!-- Own finish place 0→N (SC-FINISH-03/04); close keeps player in room. -->
-    <q-dialog v-model="placeModalOpen" persistent>
-      <q-card style="min-width: 280px">
+    <!-- Full finish / penultimate cut: delivered knowledge only (SC-FINISH-31/34; D8). -->
+    <q-dialog v-model="knowledgeModalOpen" persistent>
+      <q-card style="min-width: 280px" data-testid="knowledge-delivered-modal">
         <q-card-section>
           <div class="text-h6 text-center">
-            {{ $t('game.finishPlaceModal', { n: celebratedPlace }) }}
+            {{ $t('game.knowledgeDeliveredModal', { n: game.knowledgeDelivered }) }}
           </div>
         </q-card-section>
         <q-card-actions align="right">
-          <q-btn color="primary" :label="$t('game.finishPlaceModalOk')" v-close-popup />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-
-    <!-- Solo end: timer-only (SC-PRESENCE-21/35 / SC-MOVE-45). -->
-    <q-dialog v-model="timeoutModalOpen" persistent>
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-h6 text-center">
-            {{ $t('game.timeExpiredModal') }}
-          </div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn color="primary" :label="$t('game.timeExpiredModalOk')" v-close-popup />
+          <q-btn color="primary" :label="$t('game.knowledgeDeliveredModalOk')" v-close-popup />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -128,20 +114,6 @@
       </q-card>
     </q-dialog>
 
-    <!-- Solo ∞ steps+peeks / 1 minute (SC-PRESENCE-19); close keeps player in room. -->
-    <q-dialog v-model="soloUnlimitedModalOpen" persistent>
-      <q-card style="min-width: 280px">
-        <q-card-section>
-          <div class="text-body1 text-center">
-            {{ $t('game.soloUnlimitedModal') }}
-          </div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn color="primary" :label="$t('game.soloUnlimitedModalOk')" v-close-popup />
-        </q-card-actions>
-      </q-card>
-    </q-dialog>
-
     <!-- All-jail warning — own seat only (SC-MOVE-63); informational. -->
     <q-dialog
       :model-value="game.allJailWarning"
@@ -210,14 +182,6 @@
             />
             <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
 
-            <span
-              v-if="marker.finishPlace > 0"
-              class="presence-place-badge"
-              :aria-label="$t('game.finishPlaceBadgeAria', { n: marker.finishPlace })"
-            >
-              {{ marker.finishPlace }}
-            </span>
-
             <!-- Top markers: bubbles stack down toward board (SC-SAY-11). -->
             <div class="say-bubbles say-bubbles--top" aria-live="polite">
               <div
@@ -255,7 +219,7 @@
         >
           <span v-if="tile.difficulty" class="tile-difficulty">{{ tile.difficulty }}</span>
         </div>
-        <img
+        <div
           v-for="piece in boardPieces"
           :key="`piece-${piece.sessionId}-${piece.pieceId}`"
           class="piece"
@@ -265,12 +229,28 @@
             'piece--no-transition': !pieceTransitionsReady || suppressPieceTransition(piece),
             'piece--disappearing': piece.disappearing,
           }"
-          :src="touristSrc(piece.touristId)"
-          alt=""
           :style="pieceStyle(piece)"
           @click.stop="onPieceClick(piece)"
           @transitionend="onPieceTransitionEnd($event)"
-        />
+        >
+          <img class="piece__img" :src="touristSrc(piece.touristId)" alt="" />
+          <!-- Public grille remaining-turns TR (SC-BOARD-85). -->
+          <span
+            v-if="pieceGrilleRemaining(piece) > 0"
+            class="piece-badge piece-badge--grille"
+            data-testid="piece-grille-badge"
+          >
+            {{ pieceGrilleRemaining(piece) }}
+          </span>
+          <!-- Own carried knowledge BR from private knowledge.pieces (D9). -->
+          <span
+            v-if="ownPieceKnowledge(piece) > 0"
+            class="piece-badge piece-badge--knowledge"
+            data-testid="piece-knowledge-badge"
+          >
+            {{ ownPieceKnowledge(piece) }}
+          </span>
+        </div>
         <!-- Revealed holding grilles — drop/rise for all clients (SC-BOARD-17…19). -->
         <img
           v-for="grille in grilleOverlays"
@@ -299,18 +279,7 @@
           alt=""
           :style="catapultStyle(catapult)"
         />
-        <!-- Eye to open peek on selected own free piece on present * (SC-BOARD-13/20). -->
-        <button
-          v-if="canShowPeekAffordance"
-          type="button"
-          class="peek-affordance"
-          :aria-label="$t('game.peekAffordance')"
-          :style="peekAffordanceStyle"
-          @click.stop="onPeekClick"
-        >
-          <img class="board-action-icon" :src="boardPeekIcon" alt="" />
-        </button>
-        <!-- Rescue over trapped when adj free + steps (SC-MOVE-54 UX). -->
+        <!-- Rescue over trapped when adj free before board action (SC-MOVE-113 UX). -->
         <button
           v-for="rescue in rescueAffordances"
           :key="`rescue-${rescue.pieceId}`"
@@ -321,18 +290,6 @@
           @click.stop="onRescueClick(rescue.pieceId)"
         >
           <img class="board-action-icon" :src="boardRescueIcon" alt="" />
-        </button>
-        <!-- Push over pushable free neighbors of selected pusher (SC-MOVE-74/75). -->
-        <button
-          v-for="push in pushAffordances"
-          :key="`push-${push.targetSessionId}-${push.targetPieceId}`"
-          type="button"
-          class="push-affordance"
-          :aria-label="$t('game.pushAffordance')"
-          :style="pushAffordanceStyle(push)"
-          @click.stop="onPushClick(push)"
-        >
-          <img class="board-action-icon" :src="boardPushIcon" alt="" />
         </button>
       </div>
     </div>
@@ -387,6 +344,20 @@
                     alt=""
                     :aria-label="$t('game.finishStripAria')"
                   />
+                  <span
+                    v-if="stripGrilleRemaining(pieceId) > 0"
+                    class="piece-badge piece-badge--grille"
+                    data-testid="strip-grille-badge"
+                  >
+                    {{ stripGrilleRemaining(pieceId) }}
+                  </span>
+                  <span
+                    v-if="stripPieceKnowledge(pieceId) > 0"
+                    class="piece-badge piece-badge--knowledge"
+                    data-testid="strip-knowledge-badge"
+                  >
+                    {{ stripPieceKnowledge(pieceId) }}
+                  </span>
                   <!-- Return over finished strip tourist — no confirm modal (SC-FINISH-13/16). -->
                   <button
                     v-if="canReturn(pieceId)"
@@ -408,8 +379,8 @@
                   'presence-marker--sayable':
                     canSendSay(item.marker) ||
                     canShowReady(item.marker) ||
-                    canSendEndTurn ||
-                    showOwnBudgets(item.marker),
+                    canShowFocusControl ||
+                    showOwnKnowledge(item.marker),
                 }"
               >
                 <!-- Sibling rings + avatar (SC-PRESENCE-04/10/11/12/13).
@@ -449,16 +420,7 @@
                   </div>
                 </div>
 
-                <!-- Finish badge top-left (SC-PRESENCE-14) -->
-                <span
-                  v-if="item.marker.finishPlace > 0"
-                  class="presence-place-badge"
-                  :aria-label="$t('game.finishPlaceBadgeAria', { n: item.marker.finishPlace })"
-                >
-                  {{ item.marker.finishPlace }}
-                </span>
-
-                <!-- Ready top-left own only (SC-PRESENCE-14); phases do not overlap finish -->
+                <!-- Ready top-left own only (SC-PRESENCE-14); no finish-place badge (SC-PRESENCE-56). -->
                 <button
                   v-if="canShowReady(item.marker)"
                   type="button"
@@ -480,18 +442,7 @@
                   <img class="board-action-icon" :src="boardSayIcon" alt="" />
                 </button>
 
-                <!-- End-turn right-center / 3 o’clock — icon only, no dock/dialog (SC-PRESENCE-17/25). -->
-                <button
-                  v-if="canSendEndTurn && !isBoardBusy"
-                  type="button"
-                  class="end-turn-affordance"
-                  :aria-label="$t('game.endTurn')"
-                  @click.stop="onEndTurnClick"
-                >
-                  <img class="board-action-icon" :src="boardEndTurnIcon" alt="" />
-                </button>
-
-                <!-- Focus under end-turn at bottom-right corner of avatar’s bounding square (SC-PRESENCE-30). -->
+                <!-- Focus at former end-turn slot / 3 o’clock (SC-PRESENCE-53/30/55). -->
                 <button
                   v-if="canShowFocusControl"
                   type="button"
@@ -522,33 +473,22 @@
                 </div>
               </div>
 
-              <!-- Budgets to the right of own avatar (SC-PRESENCE-15); end-turn/focus on avatar edge. -->
-              <div v-if="showOwnBudgets(item.marker)" class="presence-budgets">
-                <div class="budget-counters">
-                  <div class="budget-counter" :aria-label="$t('game.stepsCounterAria')">
-                    <q-icon name="directions_walk" size="16px" />
-                    <span class="budget-value">{{ stepsBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in stepFalls"
-                      :key="`step-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
-                  <div class="budget-counter" :aria-label="$t('game.peeksCounterAria')">
-                    <q-icon name="visibility" size="16px" />
-                    <span class="budget-value">{{ peeksBudgetDisplay }}</span>
-                    <span
-                      v-for="fall in peekFalls"
-                      :key="`peek-fall-${fall.id}`"
-                      class="budget-fall"
-                      aria-hidden="true"
-                    >
-                      +{{ fall.n }}
-                    </span>
-                  </div>
+              <!-- Delivered knowledge to the right of own avatar (SC-PRESENCE-50/51). -->
+              <div v-if="showOwnKnowledge(item.marker)" class="presence-knowledge">
+                <div
+                  class="knowledge-counter"
+                  data-testid="knowledge-counter"
+                  :aria-label="$t('game.knowledgeCounterAria')"
+                >
+                  <span class="knowledge-value">{{ game.knowledgeDelivered }}</span>
+                  <span
+                    v-for="fall in knowledgeFalls"
+                    :key="`knowledge-fall-${fall.id}`"
+                    class="budget-fall"
+                    aria-hidden="true"
+                  >
+                    +{{ fall.n }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -572,14 +512,12 @@ import tourist4 from '@/assets/tourists/tourist4.png';
 import grilleSrc from '@/assets/grilles/grille.png';
 import catapultSrc from '@/assets/catapults/catapult.png';
 import catapultBrokenSrc from '@/assets/catapults/catapult-broken.png';
-import boardPeekIcon from '@/assets/board/peek.png';
-import boardPushIcon from '@/assets/board/push.png';
 import boardReturnIcon from '@/assets/board/return.png';
 import boardFlagIcon from '@/assets/board/flag.png';
 import boardFocusIcon from '@/assets/board/focus.png';
-import boardEndTurnIcon from '@/assets/board/end-turn.png';
 import boardRescueIcon from '@/assets/board/rescue.png';
 import boardSayIcon from '@/assets/board/say.png';
+// peek.png / push.png / end-turn.png retired (SC-BOARD-84 / SC-MOVE-114 / SC-PRESENCE-55).
 import {
   useGameStore,
   type GamePiece,
@@ -588,7 +526,6 @@ import {
   type SayPresetId,
   SAY_TTL_MS,
   isFinishedPiece,
-  turnRemainingSeconds,
 } from '@/stores/game';
 import {
   buildBoardTiles as buildTilesFromGrid,
@@ -647,7 +584,8 @@ const SAY_PRESET_IDS: readonly SayPresetId[] = ['hello', 'luck'];
 
 type BoardTile = GeoBoardTile;
 
-interface BudgetFall {
+/** +N fall into avatar knowledge counter (SC-PRESENCE-51). */
+interface KnowledgeFall {
   id: number;
   n: number;
 }
@@ -660,6 +598,8 @@ interface BoardPiece {
   col: number;
   /** Synced trap flag — visible under grille (SC-PIECE-27). */
   trapped?: boolean;
+  /** Public grille countdown (SC-BOARD-85). */
+  remainingTurns?: number;
   /** True while slide+fade after finish — still in DOM, not selectable. */
   disappearing?: boolean;
 }
@@ -713,19 +653,6 @@ interface RescueAffordance {
   col: number;
 }
 
-/** Push affordance over a legal target of the selected pusher (SC-MOVE-74). */
-interface PushAffordance {
-  pusherPieceId: string;
-  targetSessionId: string;
-  targetPieceId: string;
-  /** Far-side destination for the target. */
-  row: number;
-  col: number;
-  /** Icon position = target’s current cell. */
-  targetRow: number;
-  targetCol: number;
-}
-
 /** Occupied-seat presence marker (top row and/or bottom HUD). */
 interface PresenceMarker {
   sessionId: string;
@@ -763,14 +690,6 @@ function chebyshevDistance(a: Cell, b: Cell): number {
   return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col));
 }
 
-/** Far-side cell through target: `target + (target − pusher)` (SC-MOVE-67). */
-function farSideCell(pusher: Cell, target: Cell): Cell {
-  return {
-    row: target.row + (target.row - pusher.row),
-    col: target.col + (target.col - pusher.col),
-  };
-}
-
 function parseCellKey(key: string): Cell | null {
   const parts = key.split(',');
   if (parts.length !== 2) {
@@ -794,13 +713,11 @@ const {
   mySeat,
   isMyTurn,
   canSendReady,
-  canSendEndTurn,
   isPlaying,
   isSeated,
   isMySeatFinished,
   isMySeatTimeExpired,
   myFinishedStripPieceIds,
-  budgetsInfinite,
   isPeekOwner,
 } = storeToRefs(game);
 
@@ -862,6 +779,13 @@ const router = useRouter();
 const selectedPieceId = ref<string | null>(null);
 /** Finished strip return mode — pick a center-ring cell (SC-FINISH-13). */
 const returningPieceId = ref<string | null>(null);
+/**
+ * Optimistic local mirror of server boardActionUsed (D3 / SC-MOVE-110).
+ * Set when sendMove / sendReturnFromFinish returns true; clear when turn leaves us.
+ */
+const boardActionSpent = ref(false);
+/** Pre-send cell for optional silent-reject recover after pipeline settle. */
+const boardActionPreCell = ref<{ pieceId: string; row: number; col: number } | null>(null);
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /**
@@ -886,13 +810,8 @@ const finishAnimFromByKey = ref(new Map<string, Cell>());
 const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
-/** Own place congratulation modal (SC-FINISH-03/04). */
-const placeModalOpen = ref(false);
-const celebratedPlace = ref(0);
-/** Own solo end modal — timer-only (SC-MOVE-45 / SC-PRESENCE-21); other clients never open this. */
-const timeoutModalOpen = ref(false);
-/** Solo unlimited budgets modal (SC-PRESENCE-19). */
-const soloUnlimitedModalOpen = ref(false);
+/** Delivered-knowledge outcome modal on finishPlace 0→1 (SC-FINISH-31/34; D8). */
+const knowledgeModalOpen = ref(false);
 
 /** Revealed grille overlays with drop/rise phases (SC-BOARD-18/19). */
 const grilleOverlays = ref<GrilleOverlay[]>([]);
@@ -936,13 +855,12 @@ const rescueAnimOverride = ref<{
   col: number;
 } | null>(null);
 
-/** +N fall-into-counter animations (SC-PRESENCE-15 / SC-PRESENCE-20). */
-const stepFalls = ref<BudgetFall[]>([]);
-const peekFalls = ref<BudgetFall[]>([]);
-let budgetFallSeq = 0;
-const budgetFallTimers = new Map<number, ReturnType<typeof setTimeout>>();
-/** Local +N fall duration ≈ 2s (SC-PRESENCE-20); keep in sync with `.budget-fall` CSS. */
-const BUDGET_FALL_MS = 2000;
+/** +N fall into knowledge counter when delivered grows (SC-PRESENCE-51). */
+const knowledgeFalls = ref<KnowledgeFall[]>([]);
+let knowledgeFallSeq = 0;
+const knowledgeFallTimers = new Map<number, ReturnType<typeof setTimeout>>();
+/** Local +N fall duration ≈ 2s (SC-PRESENCE-51); keep in sync with `.budget-fall` CSS. */
+const KNOWLEDGE_FALL_MS = 2000;
 
 let moveAnimTimer: ReturnType<typeof setTimeout> | undefined;
 /** Clock tick so offline grace rings animate from reconnectUntil. */
@@ -983,10 +901,6 @@ function pieceKey(sessionId: string, pieceId: string): string {
   return `${sessionId}:${pieceId}`;
 }
 
-function isPresentTaskCell(row: number, col: number): boolean {
-  return boardGeometry.value.isTask(row, col) && !removedTaskKeySet.value.has(cellKey(row, col));
-}
-
 /**
  * Landing targets: playable grid cell (SC-BOARD-15 / SC-MOVE-49).
  * Removed task holes stay landable; layout never-playable stays out.
@@ -1003,17 +917,8 @@ const stripPieceIds = computed((): string[] => {
   return mySeat.value.pieces.map((p) => p.pieceId);
 });
 
-/** Steps and peeks both ∞ in solo (SC-PRESENCE-16). */
-const stepsBudgetDisplay = computed(() =>
-  budgetsInfinite.value ? t('game.budgetInfinity') : String(game.steps),
-);
-const peeksBudgetDisplay = computed(() =>
-  budgetsInfinite.value ? t('game.budgetInfinity') : String(game.peeks),
-);
-/** Finite steps > 0, or solo ∞ (same gate as store send* / server canSpendStep). */
-const hasStepsBudget = computed(() => budgetsInfinite.value || game.steps > 0);
-
-function showOwnBudgets(marker: PresenceMarker): boolean {
+/** Own delivered knowledge beside avatar (SC-PRESENCE-50) — private payload only. */
+function showOwnKnowledge(marker: PresenceMarker): boolean {
   return (
     isPlaying.value &&
     isSeated.value &&
@@ -1022,28 +927,19 @@ function showOwnBudgets(marker: PresenceMarker): boolean {
   );
 }
 
-function pushBudgetFall(target: 'steps' | 'peeks', delta: number) {
-  // Solo ∞: no +N fall on steps or peeks (SC-PRESENCE-16/20).
-  if (delta <= 0 || budgetsInfinite.value) {
+function pushKnowledgeFall(delta: number) {
+  if (delta <= 0) {
     return;
   }
-  const id = ++budgetFallSeq;
-  const entry: BudgetFall = { id, n: delta };
-  if (target === 'steps') {
-    stepFalls.value = [...stepFalls.value, entry];
-  } else {
-    peekFalls.value = [...peekFalls.value, entry];
-  }
-  budgetFallTimers.set(
+  const id = ++knowledgeFallSeq;
+  const entry: KnowledgeFall = { id, n: delta };
+  knowledgeFalls.value = [...knowledgeFalls.value, entry];
+  knowledgeFallTimers.set(
     id,
     setTimeout(() => {
-      budgetFallTimers.delete(id);
-      if (target === 'steps') {
-        stepFalls.value = stepFalls.value.filter((f) => f.id !== id);
-      } else {
-        peekFalls.value = peekFalls.value.filter((f) => f.id !== id);
-      }
-    }, BUDGET_FALL_MS),
+      knowledgeFallTimers.delete(id);
+      knowledgeFalls.value = knowledgeFalls.value.filter((f) => f.id !== id);
+    }, KNOWLEDGE_FALL_MS),
   );
 }
 
@@ -1072,7 +968,15 @@ const boardPieces = computed((): BoardPiece[] => {
   const visual = catapultVisualByKey.value;
 
   for (const piece of game.unfinishedBoardPieces) {
-    out.push({ ...piece });
+    out.push({
+      sessionId: piece.sessionId,
+      touristId: piece.touristId,
+      pieceId: piece.pieceId,
+      row: piece.row,
+      col: piece.col,
+      trapped: piece.trapped,
+      remainingTurns: piece.remainingTurns ?? 0,
+    });
   }
 
   for (const seat of game.seats) {
@@ -1091,6 +995,7 @@ const boardPieces = computed((): BoardPiece[] => {
         pieceId: piece.pieceId,
         row: piece.row,
         col: piece.col,
+        remainingTurns: 0,
         // Fade only after deferred catapult vanish releases finish travel.
         disappearing: fading.has(key) && !deferredFinish.has(key),
       });
@@ -1158,14 +1063,35 @@ function scheduleBoardPipelineSettle() {
     pipelineSettleTimer = undefined;
     if (!hasVisualBoardPresentation()) {
       boardPipelineLock.value = false;
+      maybeRecoverSilentBoardActionReject();
     }
   }, PIPELINE_SETTLE_MS);
 }
 
 /**
- * Move chrome / submit only in playing; lock when finished, time-expired, or any
- * board presentation anim (intent lock, land-before-catapult / move / grille hold /
- * catapult / finish / fling / deferred grille — SC-BOARD-27/29/30/32).
+ * Optional silent-reject recover (D3): if piece never left pre-send cell after settle,
+ * clear local board-action spent so the player can retry.
+ */
+function maybeRecoverSilentBoardActionReject() {
+  const pre = boardActionPreCell.value;
+  if (!boardActionSpent.value || !pre || !mySeat.value) {
+    return;
+  }
+  const piece = mySeat.value.pieces.find((p) => p.pieceId === pre.pieceId);
+  if (piece && piece.row === pre.row && piece.col === pre.col && !piece.finished) {
+    boardActionSpent.value = false;
+    boardActionPreCell.value = null;
+  }
+}
+
+function clearBoardActionSpent() {
+  boardActionSpent.value = false;
+  boardActionPreCell.value = null;
+}
+
+/**
+ * Move chrome / submit only in playing; lock when finished, time-expired, board-action
+ * spent, or any board presentation anim (SC-BOARD-27/29/30/32 / SC-MOVE-110).
  */
 const isBoardBusy = computed(() => boardPipelineLock.value || hasVisualBoardPresentation());
 
@@ -1175,6 +1101,7 @@ const isInteractive = computed(
     isMyTurn.value &&
     !isMySeatFinished.value &&
     !isMySeatTimeExpired.value &&
+    !boardActionSpent.value &&
     !isBoardBusy.value,
 );
 
@@ -1198,10 +1125,6 @@ function buildOccupancy(exclude?: Cell): Set<string> {
 /** Legal one-step destinations for the selected own unfinished free piece (D5 / SC-MOVE-12/46). */
 const legalTargets = computed((): Cell[] => {
   if (!isInteractive.value || !selectedPieceId.value || !mySeat.value || returningPieceId.value) {
-    return [];
-  }
-  // Finite 0 steps → keep selection for peek eye, no move hints; ∞ treats steps available.
-  if (!hasStepsBudget.value) {
     return [];
   }
   const piece = mySeat.value.pieces.find(
@@ -1242,7 +1165,7 @@ const legalReturnTargets = computed((): Cell[] => {
   if (!isInteractive.value || !returningPieceId.value || !mySeat.value) {
     return [];
   }
-  if (!hasStepsBudget.value || mySeat.value.finishPlace !== 0) {
+  if (mySeat.value.finishPlace !== 0) {
     return [];
   }
   const occupied = buildOccupancy();
@@ -1263,30 +1186,6 @@ const selectedCell = computed((): Cell | null => {
     (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
   );
   return piece ? { row: piece.row, col: piece.col } : null;
-});
-
-/**
- * Eye when selected own free unfinished piece sits on a still-present task cell
- * (SC-BOARD-13/14/20). Trapped pieces cannot peek (SC-MOVE-53 UX).
- */
-const canShowPeekAffordance = computed(() => {
-  if (
-    !isInteractive.value ||
-    !selectedPieceId.value ||
-    !mySeat.value ||
-    game.openPeek ||
-    returningPieceId.value
-  ) {
-    return false;
-  }
-  const piece = mySeat.value.pieces.find(
-    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
-  );
-  if (!piece || !isPresentTaskCell(piece.row, piece.col)) {
-    return false;
-  }
-  // Finite peeks: any open (fresh or flipped) needs peeks ≥ 1; solo ∞ always OK.
-  return budgetsInfinite.value || game.peeks > 0;
 });
 
 const peekSlotPlacements = computed((): string[] => game.openPeek?.placements ?? []);
@@ -1358,16 +1257,37 @@ function submitPeek() {
   game.sendPeekSubmit();
 }
 
-const peekAffordanceStyle = computed((): Record<string, string> => {
-  const cell = selectedCell.value;
-  if (!cell) {
-    return {};
+/** Public grille counter for board piece (SC-BOARD-85). */
+function pieceGrilleRemaining(piece: BoardPiece): number {
+  if (piece.disappearing) {
+    return 0;
   }
-  return {
-    '--prow': String(cell.row),
-    '--pcol': String(cell.col),
-  };
-});
+  const n = piece.remainingTurns ?? 0;
+  return piece.trapped && n > 0 ? n : 0;
+}
+
+/** Own carried knowledge for board piece (private knowledge.pieces — D9). */
+function ownPieceKnowledge(piece: BoardPiece): number {
+  if (!isOwnPiece(piece) || piece.disappearing) {
+    return 0;
+  }
+  const n = game.knowledgePieces[piece.pieceId];
+  return typeof n === 'number' && n > 0 ? n : 0;
+}
+
+function stripGrilleRemaining(pieceId: string): number {
+  const piece = mySeat.value?.pieces.find((p) => p.pieceId === pieceId);
+  if (!piece || !piece.trapped) {
+    return 0;
+  }
+  const n = piece.remainingTurns ?? 0;
+  return n > 0 ? n : 0;
+}
+
+function stripPieceKnowledge(pieceId: string): number {
+  const n = game.knowledgePieces[pieceId];
+  return typeof n === 'number' && n > 0 ? n : 0;
+}
 
 function hasAdjacentFreeRescuer(trapped: GamePiece): boolean {
   if (!mySeat.value || !trapped.trapped || trapped.finished) {
@@ -1401,9 +1321,9 @@ function findAdjacentFreeRescuer(trapped: GamePiece): GamePiece | null {
   return null;
 }
 
-/** Rescue affordances over own trapped pieces with adj free + steps (SC-MOVE-54 UX). */
+/** Rescue affordances over own trapped pieces with adj free (SC-MOVE-113 UX). */
 const rescueAffordances = computed((): RescueAffordance[] => {
-  if (!isInteractive.value || !mySeat.value || !hasStepsBudget.value || returningPieceId.value) {
+  if (!isInteractive.value || !mySeat.value || returningPieceId.value) {
     return [];
   }
   const out: RescueAffordance[] = [];
@@ -1426,70 +1346,8 @@ function rescueAffordanceStyle(rescue: RescueAffordance): Record<string, string>
   };
 }
 
-/**
- * Push affordances over free neighbors the selected own free pusher can push
- * (own turn + steps≥1; SC-MOVE-74).
- */
-const pushAffordances = computed((): PushAffordance[] => {
-  if (
-    !isInteractive.value ||
-    !mySeat.value ||
-    !selectedPieceId.value ||
-    !hasStepsBudget.value ||
-    returningPieceId.value
-  ) {
-    return [];
-  }
-  const pusher = mySeat.value.pieces.find(
-    (p) => p.pieceId === selectedPieceId.value && !isFinishedPiece(p) && !p.trapped,
-  );
-  if (!pusher) {
-    return [];
-  }
-  const pusherCell: Cell = { row: pusher.row, col: pusher.col };
-  const out: PushAffordance[] = [];
-  for (const target of game.unfinishedBoardPieces) {
-    if (target.trapped) {
-      continue;
-    }
-    if (target.row === pusher.row && target.col === pusher.col) {
-      continue;
-    }
-    const targetCell: Cell = { row: target.row, col: target.col };
-    if (chebyshevDistance(pusherCell, targetCell) !== 1) {
-      continue;
-    }
-    const dest = farSideCell(pusherCell, targetCell);
-    if (!isLandableCell(dest.row, dest.col)) {
-      continue;
-    }
-    // Target leaves its cell; exclude it from occupancy (mirrors server).
-    const occupied = buildOccupancy(targetCell);
-    if (occupied.has(cellKey(dest.row, dest.col))) {
-      continue;
-    }
-    out.push({
-      pusherPieceId: pusher.pieceId,
-      targetSessionId: target.sessionId,
-      targetPieceId: target.pieceId,
-      row: dest.row,
-      col: dest.col,
-      targetRow: target.row,
-      targetCol: target.col,
-    });
-  }
-  return out;
-});
-
-function pushAffordanceStyle(push: PushAffordance): Record<string, string> {
-  return {
-    '--prow': String(push.targetRow),
-    '--pcol': String(push.targetCol),
-  };
-}
-
 function listLegalReturnCellsHint(): Cell[] {
-  if (!mySeat.value || !hasStepsBudget.value || mySeat.value.finishPlace !== 0) {
+  if (!mySeat.value || mySeat.value.finishPlace !== 0) {
     return [];
   }
   const occupied = buildOccupancy();
@@ -1499,7 +1357,7 @@ function listLegalReturnCellsHint(): Cell[] {
 }
 
 function canReturn(pieceId: string): boolean {
-  if (!isInteractive.value || !mySeat.value || !hasStepsBudget.value) {
+  if (!isInteractive.value || !mySeat.value) {
     return false;
   }
   if (mySeat.value.finishPlace !== 0 || !isStripSlotFinished(pieceId)) {
@@ -1510,7 +1368,7 @@ function canReturn(pieceId: string): boolean {
 
 /** Legal one-step destinations for a specific free unfinished piece (hint only). */
 function legalMoveCellsForPiece(piece: GamePiece): Cell[] {
-  if (!hasStepsBudget.value || piece.finished || piece.trapped) {
+  if (piece.finished || piece.trapped) {
     return [];
   }
   const from: Cell = { row: piece.row, col: piece.col };
@@ -1535,19 +1393,8 @@ function legalMoveCellsForPiece(piece: GamePiece): Cell[] {
   return targets;
 }
 
-function pieceCanPeek(piece: GamePiece): boolean {
-  if (piece.finished || piece.trapped || game.openPeek) {
-    return false;
-  }
-  if (!isPresentTaskCell(piece.row, piece.col)) {
-    return false;
-  }
-  // Mirror server: peeks=0 (finite) blocks flipped as well as fresh (SC-BOARD-10/45).
-  return budgetsInfinite.value || game.peeks > 0;
-}
-
 function pieceCanRescue(piece: GamePiece): boolean {
-  if (!hasStepsBudget.value || piece.finished || piece.trapped || !mySeat.value) {
+  if (piece.finished || piece.trapped || !mySeat.value) {
     return false;
   }
   for (const other of mySeat.value.pieces) {
@@ -1564,38 +1411,9 @@ function pieceCanRescue(piece: GamePiece): boolean {
   return false;
 }
 
-function pieceCanPush(piece: GamePiece): boolean {
-  if (!hasStepsBudget.value || piece.finished || piece.trapped) {
-    return false;
-  }
-  const pusherCell: Cell = { row: piece.row, col: piece.col };
-  for (const target of game.unfinishedBoardPieces) {
-    if (target.trapped) {
-      continue;
-    }
-    if (target.row === piece.row && target.col === piece.col) {
-      continue;
-    }
-    const targetCell: Cell = { row: target.row, col: target.col };
-    if (chebyshevDistance(pusherCell, targetCell) !== 1) {
-      continue;
-    }
-    const dest = farSideCell(pusherCell, targetCell);
-    if (!isLandableCell(dest.row, dest.col)) {
-      continue;
-    }
-    const occupied = buildOccupancy(targetCell);
-    if (occupied.has(cellKey(dest.row, dest.col))) {
-      continue;
-    }
-    return true;
-  }
-  return false;
-}
-
 /**
- * Own unfinished free piece that can move / peek / rescue / push, or finished
- * that can return (SC-PRESENCE-30/31/32).
+ * Own unfinished free piece that can move / rescue, or finished that can return
+ * (SC-PRESENCE-30/31/32; peek/push retired — SC-BOARD-84 / SC-MOVE-114).
  */
 function isActionableOwnPiece(piece: GamePiece, index: number): ActionableCandidate | null {
   if (piece.finished) {
@@ -1607,12 +1425,7 @@ function isActionableOwnPiece(piece: GamePiece, index: number): ActionableCandid
   if (piece.trapped) {
     return null;
   }
-  if (
-    legalMoveCellsForPiece(piece).length > 0 ||
-    pieceCanPeek(piece) ||
-    pieceCanRescue(piece) ||
-    pieceCanPush(piece)
-  ) {
+  if (legalMoveCellsForPiece(piece).length > 0 || pieceCanRescue(piece)) {
     return { pieceId: piece.pieceId, row: piece.row, col: piece.col, index };
   }
   return null;
@@ -1632,7 +1445,7 @@ const actionableCandidates = computed((): ActionableCandidate[] => {
   return out;
 });
 
-/** Focus under peeks in own budgets when ≥1 actionable (SC-PRESENCE-30/32/37). */
+/** Focus at 3 o’clock when ≥1 actionable (SC-PRESENCE-53/30/32/37). */
 const canShowFocusControl = computed(
   () => isInteractive.value && actionableCandidates.value.length > 0,
 );
@@ -1824,6 +1637,10 @@ function submitMove(pieceId: string, row: number, col: number) {
     releaseBoardPipelineLock();
     return;
   }
+  // Optimistic board-action spent (D3 / SC-MOVE-110).
+  const pre = mySeat.value?.pieces.find((p) => p.pieceId === pieceId);
+  boardActionSpent.value = true;
+  boardActionPreCell.value = pre ? { pieceId, row: pre.row, col: pre.col } : { pieceId, row, col };
   // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
   // Center finish: lock busy for FINISH_TRAVEL_MS so slide stays covered before disappearingKeys (D13).
   if (isCenterCell(row, col)) {
@@ -1870,12 +1687,14 @@ function submitReturn(pieceId: string, row: number, col: number) {
     releaseBoardPipelineLock();
     return;
   }
+  boardActionSpent.value = true;
+  boardActionPreCell.value = { pieceId, row, col };
   returningPieceId.value = null;
   beginMoveAnimation();
 }
 
 function onRescueClick(pieceId: string) {
-  if (!isInteractive.value || !mySeat.value || !hasStepsBudget.value) {
+  if (!isInteractive.value || !mySeat.value) {
     return;
   }
   const trapped = mySeat.value.pieces.find(
@@ -1909,60 +1728,6 @@ function onRescueClick(pieceId: string) {
       pieceId: rescuer.pieceId,
       row: rescuer.row,
       col: rescuer.col,
-    };
-    window.setTimeout(() => {
-      rescueAnimOverride.value = null;
-    }, MOVE_ANIM_MS);
-  }, MOVE_ANIM_MS);
-}
-
-function onPushClick(push: PushAffordance) {
-  if (!isInteractive.value || !mySeat.value || !hasStepsBudget.value) {
-    return;
-  }
-  const pusher = mySeat.value.pieces.find(
-    (p) => p.pieceId === push.pusherPieceId && !isFinishedPiece(p) && !p.trapped,
-  );
-  if (!pusher) {
-    return;
-  }
-  beginBoardPipelineLock();
-  if (
-    !game.sendPush(push.pusherPieceId, push.targetSessionId, push.targetPieceId, push.row, push.col)
-  ) {
-    releaseBoardPipelineLock();
-    return;
-  }
-  // D10 / SC-MOVE-76: seed target lastKnown before sync so push→center keeps travel `from`.
-  if (isCenterCell(push.row, push.col) && !isCenterCell(push.targetRow, push.targetCol)) {
-    const key = pieceKey(push.targetSessionId, push.targetPieceId);
-    const from: Cell = { row: push.targetRow, col: push.targetCol };
-    const nextKnown = new Map(lastKnownBoardCellByKey.value);
-    nextKnown.set(key, from);
-    lastKnownBoardCellByKey.value = nextKnown;
-  }
-  returningPieceId.value = null;
-  // Keep selection on the pusher (SC-MOVE-75); approach/back via rescueAnimOverride.
-  // Push→center: cover finish slide (≥ FINISH_TRAVEL_MS) as well as approach+back (D13).
-  selectedPieceId.value = push.pusherPieceId;
-  beginMoveAnimation(
-    isCenterCell(push.row, push.col)
-      ? Math.max(MOVE_ANIM_MS * 2, FINISH_TRAVEL_MS)
-      : MOVE_ANIM_MS * 2,
-  );
-  const seatId = mySeat.value.sessionId;
-  rescueAnimOverride.value = {
-    sessionId: seatId,
-    pieceId: pusher.pieceId,
-    row: push.targetRow,
-    col: push.targetCol,
-  };
-  window.setTimeout(() => {
-    rescueAnimOverride.value = {
-      sessionId: seatId,
-      pieceId: pusher.pieceId,
-      row: pusher.row,
-      col: pusher.col,
     };
     window.setTimeout(() => {
       rescueAnimOverride.value = null;
@@ -2072,36 +1837,25 @@ function showGraceRing(marker: PresenceMarker): boolean {
 }
 
 /**
- * Active turn countdown on current-turn seat while deadline is synced (SC-PRESENCE-08/09).
- * Single-player (maxSeats===1) never shows the ring — even if a stale turnUntil synced
- * (SC-PRESENCE-39). Track chrome stays reserved when inactive (SC-PRESENCE-11).
+ * Turn countdown ring retired (SC-PRESENCE-54). Outer progress keeps reserved chrome
+ * (SC-PRESENCE-11) but never paints a determinate turn budget.
  */
-function showTurnRing(marker: PresenceMarker): boolean {
-  return (
-    game.maxSeats >= 2 &&
-    marker.isCurrentTurn &&
-    game.phase === 'playing' &&
-    game.turnUntil > 0 &&
-    game.turnBudgetSeconds > 0
-  );
+function showTurnRing(_marker: PresenceMarker): boolean {
+  void _marker;
+  return false;
 }
 
-/** Outer ring max = synced budget (60); fallback keeps layout stable. */
-const turnRingMax = computed(() => (game.turnBudgetSeconds > 0 ? game.turnBudgetSeconds : 60));
+/** Outer ring max kept for layout stability (no turn budget paint). */
+const turnRingMax = computed(() => 60);
 
-function turnRingValue(marker: PresenceMarker): number {
-  if (!showTurnRing(marker)) {
-    return 0;
-  }
-  return turnRemainingSeconds(game.turnUntil, game.turnBudgetSeconds, nowMs.value);
+function turnRingValue(_marker: PresenceMarker): number {
+  void _marker;
+  return 0;
 }
 
-/** Blue for ≥2 eligible; red for leftover (maxSeats≥2 ∧ 1 eligible) (SC-PRESENCE-08/09). */
-function turnRingColor(marker: PresenceMarker): string {
-  if (!showTurnRing(marker)) {
-    return 'transparent';
-  }
-  return game.isSoloBudget ? 'negative' : 'primary';
+function turnRingColor(_marker: PresenceMarker): string {
+  void _marker;
+  return 'transparent';
 }
 
 /** Affordance only on own online seated marker (SC-SAY-07/08). */
@@ -2135,21 +1889,6 @@ function chooseSayPreset(presetId: SayPresetId) {
 function onReadyClick() {
   sayPickerOpen.value = false;
   game.sendReady();
-}
-
-function onEndTurnClick() {
-  if (isBoardBusy.value || !canSendEndTurn.value) {
-    return;
-  }
-  sayPickerOpen.value = false;
-  game.sendEndTurn();
-}
-
-function onPeekClick() {
-  if (!canShowPeekAffordance.value || !selectedPieceId.value) {
-    return;
-  }
-  game.sendPeek(selectedPieceId.value);
 }
 
 function closeSayPicker() {
@@ -2227,9 +1966,10 @@ watch(
   },
 );
 
-// Return mode needs steps ≥ 1 when finite (SC-MOVE-59 UX); ∞ keeps return.
-watch(hasStepsBudget, (ok) => {
-  if (!ok) {
+// Clear local board-action spent when turn leaves this seat (D3 / SC-MOVE-110).
+watch(isMyTurn, (mine) => {
+  if (!mine) {
+    clearBoardActionSpent();
     returningPieceId.value = null;
   }
 });
@@ -3034,54 +2774,27 @@ watch(
   { immediate: true },
 );
 
-/** +N falls into own counters on finite budget increases (SC-PRESENCE-15/20). */
+/**
+ * +N fall when private delivered knowledge grows (SC-PRESENCE-51; piece-finish transfer).
+ * Skip the transition that arms `knowledgeSynced` after attach/rejoin so baseline
+ * restore (0 → N) does not look like a grant.
+ */
 watch(
-  () => game.steps,
-  (next, prev) => {
-    if (typeof prev !== 'number' || budgetsInfinite.value) {
+  () => [game.knowledgeSynced, game.knowledgeDelivered] as const,
+  ([synced, next], prevTuple) => {
+    if (!synced) {
       return;
     }
-    if (next > prev) {
-      pushBudgetFall('steps', next - prev);
+    const prevSynced = prevTuple?.[0];
+    const prev = prevTuple?.[1];
+    if (!prevSynced) {
+      return;
+    }
+    if (typeof prev === 'number' && next > prev) {
+      pushKnowledgeFall(next - prev);
     }
   },
 );
-
-watch(
-  () => game.peeks,
-  (next, prev) => {
-    if (typeof prev !== 'number' || budgetsInfinite.value) {
-      return;
-    }
-    if (next > prev) {
-      pushBudgetFall('peeks', next - prev);
-    }
-  },
-);
-
-/**
- * Solo leftover ∞ budgets → unlimited modal (SC-PRESENCE-19).
- * Single-player (maxSeats===1) must not open even if budgetsInfinite flips (SC-PRESENCE-40).
- * Skip initial sync (already infinite on remount).
- */
-watch(budgetsInfinite, (infinite, prev) => {
-  if (prev === false && infinite && game.maxSeats >= 2) {
-    soloUnlimitedModalOpen.value = true;
-  }
-});
-
-/**
- * Own seat time-expired → timer end copy + clear move chrome (SC-PRESENCE-21/35 / SC-MOVE-45).
- * No steps-exhausted branch (solo steps ∞). Only this client; skip initial sync.
- */
-watch(isMySeatTimeExpired, (expired, prev) => {
-  if (expired) {
-    selectedPieceId.value = null;
-  }
-  if (prev === false && expired) {
-    timeoutModalOpen.value = true;
-  }
-});
 
 /**
  * Track last unfinished board cell before finish sync (push/move → center; D10/D11).
@@ -3254,15 +2967,17 @@ watch(
 );
 
 /**
- * Own finish place 0→N → local place modal; stay in room after close (SC-FINISH-03/04).
+ * Own finishPlace 0→1 → knowledge modal with private delivered (SC-FINISH-31/34; D8).
+ * Same chrome for full finish and penultimate cut; no place number.
+ * Body binds live `game.knowledgeDelivered` (not a snapshot) so a late private
+ * `knowledge` message after finishPlace still updates the modal (transfer race).
  * Skip initial sync (already finished mid-join / remount).
  */
 watch(
   () => mySeat.value?.finishPlace ?? 0,
   (place, prev) => {
     if (typeof prev === 'number' && prev === 0 && place > 0) {
-      celebratedPlace.value = place;
-      placeModalOpen.value = true;
+      knowledgeModalOpen.value = true;
     }
   },
 );
@@ -3322,10 +3037,10 @@ onUnmounted(() => {
     clearTimeout(timer);
   }
   finishFadeTimers.clear();
-  for (const timer of budgetFallTimers.values()) {
+  for (const timer of knowledgeFallTimers.values()) {
     clearTimeout(timer);
   }
-  budgetFallTimers.clear();
+  knowledgeFallTimers.clear();
   for (const timer of grilleTimers.values()) {
     clearTimeout(timer);
   }
@@ -3458,8 +3173,8 @@ body.body--dark .game-hud {
   pointer-events: auto;
 }
 
-/* Own cluster: avatar | budgets to the right (SC-PRESENCE-15).
-   Gap ≥ end-turn/focus half-hit past marker edge (~18px at left:100% + 36px hit) so icons do not cover budgets (SC-PRESENCE-25). */
+/* Own cluster: avatar | knowledge to the right (SC-PRESENCE-50).
+   Gap ≥ focus half-hit past marker edge (~18px at left:100% + 36px hit). */
 .presence-slot--own {
   flex-direction: row;
   align-items: center;
@@ -3467,8 +3182,8 @@ body.body--dark .game-hud {
   gap: 24px;
 }
 
-/* Own private budgets beside avatar (SC-PRESENCE-15 / D3). */
-.presence-budgets {
+/* Own private delivered knowledge beside avatar (SC-PRESENCE-50 / D9). */
+.presence-knowledge {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -3479,15 +3194,7 @@ body.body--dark .game-hud {
   flex-shrink: 0;
 }
 
-.budget-counters {
-  display: flex;
-  flex-direction: column;
-  flex-wrap: nowrap;
-  align-items: stretch;
-  gap: 4px;
-}
-
-.budget-counter {
+.knowledge-counter {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -3503,11 +3210,11 @@ body.body--dark .game-hud {
   line-height: 1.3;
 }
 
-body.body--dark .budget-counter {
+body.body--dark .knowledge-counter {
   background: rgba(255, 255, 255, 0.14);
 }
 
-.budget-value {
+.knowledge-value {
   min-width: 1ch;
 }
 
@@ -3520,7 +3227,7 @@ body.body--dark .budget-counter {
   font-size: 12px;
   font-weight: 700;
   pointer-events: none;
-  /* ≈ BUDGET_FALL_MS / SC-PRESENCE-20 */
+  /* ≈ KNOWLEDGE_FALL_MS / SC-PRESENCE-51 */
   animation: budget-fall-in 2s ease-in forwards;
 }
 
@@ -3645,25 +3352,6 @@ body.body--dark .countdown-overlay__card {
   pointer-events: none;
 }
 
-/* Finish place top-left (SC-PRESENCE-14). */
-.presence-place-badge {
-  position: absolute;
-  top: -4px;
-  left: -4px;
-  z-index: 3;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #2e7d32;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
-  pointer-events: none;
-}
-
 /* Comic say bubbles toward board (SC-SAY-11/12) — not Notify toasts. */
 .say-bubbles {
   position: absolute;
@@ -3749,38 +3437,10 @@ body.body--dark .say-bubble {
 }
 
 /*
- * Focus under end-turn at bottom-right corner of the 72px avatar’s bounding square
- * (avatar centered in 96px marker → ±36px from center).
+ * Focus right-center / 3 o’clock — former end-turn slot (SC-PRESENCE-53/30/37).
+ * Hit-center on marker circumference; glyph fills 36×36 transparent hit.
  */
 .focus-affordance {
-  position: absolute;
-  left: calc(50% + 36px);
-  top: calc(50% + 36px);
-  transform: translate(-50%, -50%);
-  z-index: 5;
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  background: transparent;
-  pointer-events: auto;
-  flex-shrink: 0;
-}
-
-.focus-affordance:hover,
-.focus-affordance:active {
-  opacity: 0.85;
-}
-
-/* End-turn right-center / 3 o’clock — hit-center on circumference; no dock label (SC-PRESENCE-17/25). */
-.end-turn-affordance {
   position: absolute;
   top: 50%;
   left: 100%;
@@ -3802,8 +3462,8 @@ body.body--dark .say-bubble {
   flex-shrink: 0;
 }
 
-.end-turn-affordance:hover,
-.end-turn-affordance:active {
+.focus-affordance:hover,
+.focus-affordance:active {
   opacity: 0.85;
 }
 
@@ -4003,12 +3663,10 @@ body.body--dark .say-picker {
   background: transparent;
 }
 
-/* Peek / rescue / push — above sprite, then 20px down (SC-BOARD-13/71 / SC-MOVE-74/77). */
-.peek-affordance,
-.rescue-affordance,
-.push-affordance {
+/* Rescue — above sprite, then 20px down (SC-BOARD-71 / SC-MOVE-113). Peek/push retired. */
+.rescue-affordance {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   width: 36px;
   height: 36px;
   min-width: 36px;
@@ -4027,18 +3685,9 @@ body.body--dark .say-picker {
   transform: translate(-50%, calc(-100% + 20px));
 }
 
-.peek-affordance:hover,
-.peek-affordance:active,
 .rescue-affordance:hover,
-.rescue-affordance:active,
-.push-affordance:hover,
-.push-affordance:active {
+.rescue-affordance:active {
   opacity: 0.85;
-}
-
-.rescue-affordance,
-.push-affordance {
-  z-index: 5;
 }
 
 /* Revealed grille overlay — above piece, drop/rise (SC-BOARD-18/19 / SC-PIECE-27 / SC-BOARD-58). */
@@ -4142,7 +3791,6 @@ body.body--dark .say-picker {
   height: var(--cell);
   left: calc(var(--pcol) * (var(--cell) + var(--gap)));
   top: calc(var(--prow) * (var(--cell) + var(--gap)));
-  object-fit: contain;
   pointer-events: none;
   z-index: 2;
   padding: 2px;
@@ -4150,6 +3798,44 @@ body.body--dark .say-picker {
   transition:
     left 250ms ease-out,
     top 250ms ease-out;
+}
+
+.piece__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/* Red TR grille remainingTurns (SC-BOARD-85); yellow BR knowledge (D9). */
+.piece-badge {
+  position: absolute;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  color: #fff;
+  pointer-events: none;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.piece-badge--grille {
+  top: 0;
+  right: 0;
+  background: #c10015;
+}
+
+.piece-badge--knowledge {
+  bottom: 0;
+  right: 0;
+  background: #f2c037;
+  color: #212121;
 }
 
 .piece--no-transition {

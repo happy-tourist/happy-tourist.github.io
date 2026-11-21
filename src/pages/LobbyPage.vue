@@ -245,30 +245,6 @@
           />
         </q-card-section>
 
-        <q-card-section class="q-pt-none">
-          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.grilleDensity') }}</div>
-          <q-option-group
-            v-model="createGrilleDensity"
-            type="radio"
-            color="primary"
-            :options="grilleDensityOptions"
-            inline
-            :disable="creating"
-          />
-        </q-card-section>
-
-        <q-card-section class="q-pt-none">
-          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.catapultDensity') }}</div>
-          <q-option-group
-            v-model="createCatapultDensity"
-            type="radio"
-            color="primary"
-            :options="catapultDensityOptions"
-            inline
-            :disable="creating"
-          />
-        </q-card-section>
-
         <q-card-actions align="right">
           <q-btn
             flat
@@ -300,12 +276,7 @@ import LobbyRoomCardTile from '@/components/LobbyRoomCardTile.vue';
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useContentStore, contentErrorI18nKey, type TaskSet } from '@/stores/content';
-import {
-  useGameStore,
-  type CreateGameCatapultDensity,
-  type CreateGameGrilleDensity,
-  type GameRoomMeta,
-} from '@/stores/game';
+import { useGameStore, type GameRoomMeta } from '@/stores/game';
 import { mapsErrorI18nKey, useMapsStore } from '@/stores/maps';
 
 const auth = useAuthStore();
@@ -336,10 +307,6 @@ const createPackId = ref<string | null>(null);
 const createTaskSetIds = ref<string[]>([]);
 /** Chosen seats 1…map.players; default min(2, map.players) after map select (SC-LOBBY-28). */
 const createMaxSeats = ref(2);
-/** Default medium (22%) — SC-LOBBY-15. */
-const createGrilleDensity = ref<CreateGameGrilleDensity>('medium');
-/** Default medium (22%) — SC-LOBBY-18. */
-const createCatapultDensity = ref<CreateGameCatapultDensity>('medium');
 
 const inCatalogMaps = computed(() =>
   (maps.list ?? []).filter((m) => m.hasLive && m.inCatalog === true),
@@ -426,18 +393,6 @@ const canConfirmCreate = computed(
     createMaxSeats.value <= (selectedMap.value?.players ?? 0),
 );
 
-const grilleDensityOptions = computed(() => [
-  { label: t('lobby.grilleDensityFew'), value: 'few' as const },
-  { label: t('lobby.grilleDensityMedium'), value: 'medium' as const },
-  { label: t('lobby.grilleDensityMany'), value: 'many' as const },
-]);
-
-const catapultDensityOptions = computed(() => [
-  { label: t('lobby.catapultDensityFew'), value: 'few' as const },
-  { label: t('lobby.catapultDensityMedium'), value: 'medium' as const },
-  { label: t('lobby.catapultDensityMany'), value: 'many' as const },
-]);
-
 onMounted(() => {
   void game.subscribeLobby();
 });
@@ -451,8 +406,6 @@ function resetCreateForm() {
   createPackId.value = null;
   createTaskSetIds.value = [];
   createMaxSeats.value = 2;
-  createGrilleDensity.value = 'medium';
-  createCatapultDensity.value = 'medium';
 }
 
 async function openCreateModal() {
@@ -540,8 +493,6 @@ async function onConfirmCreate() {
       packId: createPackId.value,
       taskSetIds: [...createTaskSetIds.value],
       maxSeats: createMaxSeats.value,
-      grilleDensity: createGrilleDensity.value,
-      catapultDensity: createCatapultDensity.value,
     });
     createModalOpen.value = false;
     await router.push({ name: 'game', params: { roomId: room.roomId } });

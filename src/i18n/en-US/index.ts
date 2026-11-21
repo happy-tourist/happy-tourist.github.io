@@ -100,14 +100,6 @@ export default {
     emptyMaps: 'Нет опубликованных карт',
     emptyPacks: 'Нет опубликованных наборов',
     emptyTaskSets: 'Нет опубликованных наборов заданий',
-    grilleDensity: 'Плотность решёток',
-    grilleDensityFew: 'мало',
-    grilleDensityMedium: 'средне',
-    grilleDensityMany: 'много',
-    catapultDensity: 'Плотность катапульт',
-    catapultDensityFew: 'мало',
-    catapultDensityMedium: 'средне',
-    catapultDensityMany: 'много',
     capacity: '{seats} / {maxSeats}',
     mapCapacityCaption: '{players}×{tourists}',
     /** Listing caption: pack theme + ordinal set labels (SC-LOBBY-26; no set author). */
@@ -654,22 +646,14 @@ export default {
     leaveConfirm: 'Вы уверены? Если выйдете, прогресс будет сброшен.',
     leaveCancel: 'Отмена',
     leaveExit: 'Выйти',
-    /** Place modal after all four pieces finish (SC-FINISH-03/04). */
-    finishPlaceModal: 'Вы {n}-й!',
-    finishPlaceModalOk: 'ОК',
-    /** Solo budget expiry — one-minute timer (SC-MOVE-45 / SC-PRESENCE-21). */
-    timeExpiredModal: 'Вы не успели довести туристов до финиша вовремя.',
-    timeExpiredModalOk: 'ОК',
-    /** a11y for strip finish icon and presence place badge. */
+    /** Delivered-knowledge modal on full finish / cut (SC-FINISH-31/34) — no place number. */
+    knowledgeDeliveredModal: 'Вы доставили {n} знаний',
+    knowledgeDeliveredModalOk: 'ОК',
+    /** a11y for strip finish icon. */
     finishStripAria: 'Финиш',
-    finishPlaceBadgeAria: 'Место {n}',
-    /** Own private step/peek counters (SC-PRESENCE-15/16). */
-    stepsCounterAria: 'Шаги',
-    peeksCounterAria: 'Просмотры',
-    budgetInfinity: '∞',
-    /** Multiplayer end-turn icon on own avatar (SC-PRESENCE-17/18/25) — aria only. */
-    endTurn: 'Завершить ход',
-    /** Focus nearest actionable tourist on own avatar (SC-PRESENCE-30/31) — aria only. */
+    /** Own delivered knowledge counter beside avatar (SC-PRESENCE-50). */
+    knowledgeCounterAria: 'Знания',
+    /** Focus nearest actionable tourist at 3 o’clock (SC-PRESENCE-53/30) — aria only. */
     focusActionable: 'Выбрать ближайшего туриста',
     /** Peek modal — shared Q&A with slots + pack answers (SC-BOARD-43/44/46). */
     peekModal: 'Под плиткой награда: {n}. Ответьте правильно, чтобы получить шаги.',
@@ -687,9 +671,6 @@ export default {
       wrong: 'Ошибка!',
       timeout: 'Не успел!',
     },
-    /** Solo ∞ steps+peeks / 1 minute modal (SC-PRESENCE-19). */
-    soloUnlimitedModal: 'Вы один. Ходы и просмотры безлимитны. У вас 1 минута.',
-    soloUnlimitedModalOk: 'ОК',
     /** Rescue adjacent trapped tourist (SC-MOVE-54 UX). */
     rescueAffordance: 'Освободить туриста',
     /** Push adjacent free tourist through far-side cell (SC-MOVE-74 UX). */

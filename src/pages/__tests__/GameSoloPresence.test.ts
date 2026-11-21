@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { touristLayoutGrid } from '@/lib/boardGeometry';
 import GamePage from '@/pages/GamePage.vue';
 import { useGameStore, type GameSeat } from '@/stores/game';
+import enUS from '@/i18n/en-US';
 
 const routerPush = vi.fn().mockResolvedValue(undefined);
 
@@ -36,15 +37,18 @@ function baseSeat(pieces: GameSeat['pieces'], sessionId = 's1', touristId = 1): 
   };
 }
 
-/** Solo leftover seeds: maxSeats ≥ 2 (SC-PRESENCE-09/16/19). */
-function seedLeftoverPlaying(opts?: {
-  budgetsInfinite?: boolean;
-  steps?: number;
-  peeks?: number;
+/** Playing seed for knowledge presence (SC-PRESENCE-50…56; retired leftover/solo UX). */
+function seedPlaying(opts?: {
   maxSeats?: number;
+  knowledgeDelivered?: number;
+  turnUntil?: number;
+  finishPlace?: number;
 }) {
   const game = useGameStore();
-  const seat = baseSeat([{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }]);
+  const seat = {
+    ...baseSeat([{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }]),
+    finishPlace: opts?.finishPlace ?? 0,
+  };
   game.$patch({
     room: { roomId: 'r1' } as never,
     roomId: 'r1',
@@ -54,53 +58,15 @@ function seedLeftoverPlaying(opts?: {
     started: true,
     maxSeats: opts?.maxSeats ?? 2,
     currentTurnSessionId: 's1',
-    turnUntil: Date.now() + 60_000,
+    turnUntil: opts?.turnUntil ?? Date.now() + 60_000,
     turnBudgetSeconds: 60,
-    budgetsInfinite: opts?.budgetsInfinite ?? true,
     grid: touristLayoutGrid(),
     touristsPerPlayer: 1,
     packTitle: 'Пак',
-    seats: [seat],
-    steps: opts?.steps ?? 0,
-    peeks: opts?.peeks ?? 0,
-    flippedCells: [],
-    answerCards: [],
-    openPeek: null,
-    removedTaskKeys: [],
-    holdingGrilleKeys: [],
-    revealingCatapultKeys: [],
-    brokenCatapultKeys: [],
-  });
-  return game;
-}
-
-/** Intentional single-player: maxSeats === 1, finite budgets (SC-PRESENCE-38…42). */
-function seedSinglePlayerPlaying(opts?: {
-  steps?: number;
-  peeks?: number;
-  turnUntil?: number;
-  budgetsInfinite?: boolean;
-}) {
-  const game = useGameStore();
-  const seat = baseSeat([{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }]);
-  game.$patch({
-    room: { roomId: 'r1' } as never,
-    roomId: 'r1',
-    sessionId: 's1',
-    phase: 'playing',
-    status: 'playing',
-    started: true,
-    maxSeats: 1,
-    currentTurnSessionId: 's1',
-    turnUntil: opts?.turnUntil ?? 0,
-    turnBudgetSeconds: opts?.turnUntil && opts.turnUntil > 0 ? 60 : 0,
-    budgetsInfinite: opts?.budgetsInfinite ?? false,
-    grid: touristLayoutGrid(),
-    touristsPerPlayer: 1,
-    packTitle: 'Пак',
-    seats: [seat],
-    steps: opts?.steps ?? 2,
-    peeks: opts?.peeks ?? 1,
+    seats: [seat, baseSeat([], 's2', 2)],
+    knowledgeDelivered: opts?.knowledgeDelivered ?? 3,
+    knowledgePieces: {},
+    knowledgeSynced: true,
     flippedCells: [],
     answerCards: [],
     openPeek: null,
@@ -117,7 +83,6 @@ function mountPage() {
     global: {
       stubs: {
         QDialog: {
-          // Only render body when open — otherwise persistent dialogs leak copy into text().
           template: '<div v-if="modelValue" class="q-dialog-stub"><slot /></div>',
           props: ['modelValue'],
         },
@@ -140,7 +105,7 @@ function mountPage() {
   });
 }
 
-describe('GamePage solo leftover presence (SC-PRESENCE-09/16/19)', () => {
+describe('GamePage knowledge presence (SC-PRESENCE-50…56; retired solo leftover)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.stubGlobal('localStorage', {
@@ -150,156 +115,67 @@ describe('GamePage solo leftover presence (SC-PRESENCE-09/16/19)', () => {
     });
   });
 
-  it('SC-PRESENCE-16: leftover shows ∞ on both steps and peeks', async () => {
-    seedLeftoverPlaying({ budgetsInfinite: true, steps: 0, peeks: 0 });
+  it('SC-PRESENCE-50: shows knowledge counter; no steps/peeks/∞', async () => {
+    seedPlaying({ knowledgeDelivered: 4 });
     const wrapper = mountPage();
     await flushPromises();
 
-    const values = wrapper.findAll('.presence-budgets .budget-value');
-    expect(values).toHaveLength(2);
-    expect(values[0]!.text()).toBe('game.budgetInfinity');
-    expect(values[1]!.text()).toBe('game.budgetInfinity');
-
-    wrapper.unmount();
-  });
-
-  it('SC-PRESENCE-09: leftover 1 eligible + maxSeats≥2 → red ring (not via turnBudgetSeconds)', async () => {
-    seedLeftoverPlaying({ budgetsInfinite: true, maxSeats: 2 });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    const progress = wrapper.find('.presence-slot--own .progress-stub');
-    expect(progress.exists()).toBe(true);
-    expect(progress.attributes('data-color')).toBe('negative');
-    expect(useGameStore().turnBudgetSeconds).toBe(60);
-    expect(useGameStore().maxSeats).toBe(2);
-
-    wrapper.unmount();
-  });
-
-  it('SC-PRESENCE-09: ≥2 eligible seats → blue ring at same 60s budget', async () => {
-    const game = seedLeftoverPlaying({ budgetsInfinite: false });
-    game.$patch({
-      maxSeats: 2,
-      budgetsInfinite: false,
-      seats: [
-        baseSeat([{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }]),
-        baseSeat([{ pieceId: '0', row: 3, col: 4, finished: false, trapped: false }], 's2', 2),
-      ],
-      turnBudgetSeconds: 60,
-      turnUntil: Date.now() + 60_000,
-    });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    const progress = wrapper.find('.presence-slot--own .progress-stub');
-    expect(progress.exists()).toBe(true);
-    expect(progress.attributes('data-color')).toBe('primary');
-
-    wrapper.unmount();
-  });
-
-  it('SC-PRESENCE-19: leftover becoming infinite opens soloUnlimitedModal', async () => {
-    seedLeftoverPlaying({ budgetsInfinite: false, maxSeats: 2 });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    expect(wrapper.text()).not.toContain('game.soloUnlimitedModal');
-
-    useGameStore().budgetsInfinite = true;
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('game.soloUnlimitedModal');
-
-    wrapper.unmount();
-  });
-});
-
-describe('GamePage single-player presence (SC-PRESENCE-38…42)', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia());
-    vi.stubGlobal('localStorage', {
-      getItem: () => null,
-      setItem: vi.fn(),
-      removeItem: vi.fn(),
-    });
-  });
-
-  it('SC-PRESENCE-38: single-player shows numeric budgets (not infinity)', async () => {
-    seedSinglePlayerPlaying({ steps: 3, peeks: 2 });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    const values = wrapper.findAll('.presence-budgets .budget-value');
-    expect(values).toHaveLength(2);
-    expect(values[0]!.text()).toBe('3');
-    expect(values[1]!.text()).toBe('2');
+    const value = wrapper.find('[data-testid="knowledge-counter"] .knowledge-value');
+    expect(value.exists()).toBe(true);
+    expect(value.text()).toBe('4');
+    expect(wrapper.find('.presence-budgets').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('∞');
     expect(wrapper.text()).not.toContain('game.budgetInfinity');
 
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-39: maxSeats=1 hides turn ring even with stale turnUntil', async () => {
-    seedSinglePlayerPlaying({ turnUntil: Date.now() + 60_000 });
+  it('SC-PRESENCE-54: no turn ring even with synced turnUntil', async () => {
+    seedPlaying({ turnUntil: Date.now() + 60_000, maxSeats: 2 });
     const wrapper = mountPage();
     await flushPromises();
-
-    const game = useGameStore();
-    expect(game.maxSeats).toBe(1);
-    expect(game.turnUntil).toBeGreaterThan(0);
 
     const progress = wrapper.find('.presence-slot--own .progress-stub');
     expect(progress.exists()).toBe(true);
     expect(progress.attributes('data-color')).toBe('transparent');
-    expect(progress.attributes('data-track')).toBe('transparent');
     expect(Number(progress.attributes('data-value'))).toBe(0);
 
     wrapper.unmount();
   });
 
-  it('SC-PRESENCE-40: maxSeats=1 does not open unlimited modal on budgetsInfinite flip', async () => {
-    seedSinglePlayerPlaying({ budgetsInfinite: false });
+  it('SC-PRESENCE-55: end-turn never shown on own turn', async () => {
+    seedPlaying({ maxSeats: 2 });
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('game.soloUnlimitedModal');
-
-    useGameStore().budgetsInfinite = true;
-    await flushPromises();
-
-    expect(wrapper.text()).not.toContain('game.soloUnlimitedModal');
-
-    wrapper.unmount();
-  });
-
-  it('SC-PRESENCE-41: finite budget increase plays +N fall animation', async () => {
-    const game = seedSinglePlayerPlaying({ steps: 1, peeks: 1 });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    expect(wrapper.findAll('.budget-fall')).toHaveLength(0);
-
-    game.steps = 2;
-    game.peeks = 2;
-    await flushPromises();
-
-    const falls = wrapper.findAll('.budget-fall');
-    expect(falls.length).toBeGreaterThanOrEqual(2);
-    expect(falls.some((f) => f.text() === '+1')).toBe(true);
-
-    wrapper.unmount();
-  });
-
-  it('SC-PRESENCE-42: single-player hides end-turn despite finite own turn', async () => {
-    seedSinglePlayerPlaying({ steps: 2, peeks: 1 });
-    const wrapper = mountPage();
-    await flushPromises();
-
-    const game = useGameStore();
-    expect(game.maxSeats).toBe(1);
-    expect(game.budgetsInfinite).toBe(false);
-    expect(game.canSendEndTurn).toBe(false);
+    expect(useGameStore().canSendEndTurn).toBe(false);
     expect(wrapper.find('.end-turn-affordance').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('retired solo unlimited / timer end modals never open', async () => {
+    seedPlaying({ maxSeats: 2 });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('game.soloUnlimitedModal');
+    expect(wrapper.text()).not.toContain('game.timeExpiredModal');
+    expect(enUS.game).not.toHaveProperty('soloUnlimitedModal');
+    expect(enUS.game).not.toHaveProperty('timeExpiredModal');
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-56 / SC-FINISH-34: no place badge; knowledge modal i18n has no place', async () => {
+    seedPlaying({ finishPlace: 1, knowledgeDelivered: 1 });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
+    expect(enUS.game.knowledgeDeliveredModal).toMatch(/\{n\}/);
+    expect(enUS.game.knowledgeDeliveredModal).not.toMatch(/-й/);
+    expect(enUS.game).not.toHaveProperty('finishPlaceModal');
 
     wrapper.unmount();
   });

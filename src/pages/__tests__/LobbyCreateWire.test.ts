@@ -471,7 +471,27 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
     expect(confirm.attributes('disabled')).toBeFalsy();
   });
 
-  it('SC-LOBBY-22: confirm create sends mapId/packId/taskSetIds/maxSeats', async () => {
+  it('SC-LOBBY-40: create modal has no grille/catapult density controls', async () => {
+    await openCreate();
+    expect(wrapper!.text()).not.toContain('Плотность решёток');
+    expect(wrapper!.text()).not.toContain('Плотность катапульт');
+    expect(lobbyPageSrc).not.toMatch(
+      /grilleDensity|catapultDensity|createGrilleDensity|createCatapultDensity/,
+    );
+    // Map / pack remain; maxSeats after map; task sets after pack (SC-LOBBY-40).
+    expect(wrapper!.find('[data-test-id="lobby-create-map"]').exists()).toBe(true);
+    expect(wrapper!.find('[data-test-id="lobby-create-pack"]').exists()).toBe(true);
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+    expect(wrapper!.find('[data-test-id="lobby-create-max-seats"]').exists()).toBe(true);
+    await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
+    await flushPromises();
+    expect(wrapper!.find('[data-test-id="lobby-create-task-sets"]').exists()).toBe(true);
+    expect(wrapper!.text()).not.toContain('Плотность решёток');
+    expect(wrapper!.text()).not.toContain('Плотность катапульт');
+  });
+
+  it('SC-LOBBY-22/41: confirm create sends mapId/packId/taskSetIds/maxSeats without density', async () => {
     await openCreate();
     await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
     await flushPromises();
@@ -489,9 +509,10 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
       packId: 'pack-p',
       taskSetIds: ['s1'],
       maxSeats: 3,
-      grilleDensity: 'medium',
-      catapultDensity: 'medium',
     });
+    const createArg = gameState.createGame.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(createArg).not.toHaveProperty('grilleDensity');
+    expect(createArg).not.toHaveProperty('catapultDensity');
     expect(routerPush).toHaveBeenCalledWith({ name: 'game', params: { roomId: 'room-new' } });
   });
 

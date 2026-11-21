@@ -123,7 +123,7 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
     expect(game.openPeek).toBeNull();
   });
 
-  it('sendPeek / sendPeekPlace / sendPeekSubmit use pieceId contract', () => {
+  it('SC-BOARD-84: sendPeek is no-op; peekPlace / peekSubmit keep pieceId contract', () => {
     const game = useGameStore();
     const room = makeRoom();
     game._attachRoom(room as never);
@@ -154,8 +154,9 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
       placements: [''],
     };
 
-    expect(game.sendPeek('0')).toBe(true);
-    expect(room.send).toHaveBeenCalledWith('peek', { pieceId: '0' });
+    // Client peek retired — open-on-land only (D4).
+    expect(game.sendPeek('0')).toBe(false);
+    expect(room.send).not.toHaveBeenCalledWith('peek', expect.anything());
 
     expect(game.sendPeekPlace(0, 'a1')).toBe(true);
     expect(room.send).toHaveBeenCalledWith('peekPlace', {
@@ -167,6 +168,57 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
     expect(room.send).toHaveBeenCalledWith('peekSubmit', {});
   });
 
+  it('SC-BOARD-85: mirrors public remainingTurns; knowledge message fills pieces', () => {
+    const game = useGameStore();
+    const room = makeRoom();
+    game._attachRoom(room as never);
+
+    const pieces = new Map([
+      ['0', { row: 1, col: 1, finished: false, trapped: true, remainingTurns: 3 }],
+      ['1', { row: 2, col: 2, finished: false, trapped: false, remainingTurns: 0 }],
+    ]);
+    const seats = new Map([
+      [
+        's1',
+        {
+          touristId: 1,
+          connected: true,
+          reconnectUntil: 0,
+          ready: false,
+          finishPlace: 0,
+          timeExpired: false,
+          pieces,
+        },
+      ],
+    ]);
+
+    game._mirrorRoomState(room as never, {
+      phase: 'playing',
+      maxSeats: 2,
+      grid: '1'.repeat(100),
+      touristsPerPlayer: 2,
+      packTitle: 'Пак',
+      flippedCells: new Map(),
+      answerCards: [],
+      seats,
+      removedTaskKeys: [],
+      holdingGrilleKeys: ['1,1'],
+      revealingCatapultKeys: [],
+      brokenCatapultKeys: [],
+      peekActive: false,
+    });
+
+    expect(game.mySeat?.pieces[0]?.remainingTurns).toBe(3);
+    expect(game.mySeat?.pieces[0]?.trapped).toBe(true);
+    expect(game.unfinishedBoardPieces[0]?.remainingTurns).toBe(3);
+
+    expect(game.knowledgeSynced).toBe(false);
+    room._emit('knowledge', { delivered: 4, pieces: { '0': 2, '1': 0 } });
+    expect(game.knowledgeDelivered).toBe(4);
+    expect(game.knowledgePieces).toEqual({ '0': 2 });
+    expect(game.knowledgeSynced).toBe(true);
+  });
+
   it('sendMove addresses piece by pieceId (no side)', () => {
     const game = useGameStore();
     const room = makeRoom();
@@ -174,7 +226,6 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
     game.phase = 'playing';
     game.sessionId = 's1';
     game.currentTurnSessionId = 's1';
-    game.steps = 3;
     game.seats = [
       {
         sessionId: 's1',

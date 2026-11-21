@@ -49,23 +49,14 @@ export interface GameRoomMeta {
   [key: string]: unknown;
 }
 
-/** Create option grille density presets (D1 / SC-LOBBY-13…15). */
-export type CreateGameGrilleDensity = 'few' | 'medium' | 'many';
-
-/** Create option catapult density presets (D6 / SC-LOBBY-16…18). */
-export type CreateGameCatapultDensity = 'few' | 'medium' | 'many';
-
-/** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2). */
+/** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2).
+ * Trap seed is fixed server-side (12%/15%); no client density (SC-LOBBY-40/41). */
 export interface CreateGameOptions {
   mapId: string;
   packId: string;
   taskSetIds: string[];
   /** Chosen seats 1…map.players; server defaults to min(2, map.players) if omitted. */
   maxSeats: number;
-  /** few/medium/many → 12/22/35% of task cells; default medium on server. */
-  grilleDensity?: CreateGameGrilleDensity;
-  /** few/medium/many → 12/22/35% of task cells; default medium on server. Independent of grilleDensity. */
-  catapultDensity?: CreateGameCatapultDensity;
 }
 
 /** Mirrored piece from synced Seat.pieces (keyed by seat-local piece id `"0"`…). */
@@ -78,6 +69,8 @@ export interface GamePiece {
   finished: boolean;
   /** Synced trap flag — piece held by a revealed grille (game/move). */
   trapped: boolean;
+  /** Public grille auto-free countdown; 0 when not trapped (SC-BOARD-85 / D5). */
+  remainingTurns?: number;
 }
 
 /** Synced start phase from MyRoomState.phase. */
@@ -109,6 +102,8 @@ export interface UnfinishedBoardPiece {
   col: number;
   /** Synced trap flag — piece held by a revealed grille (SC-PIECE-24/27). */
   trapped: boolean;
+  /** Public grille auto-free countdown; 0 when not trapped (SC-BOARD-85). */
+  remainingTurns: number;
 }
 
 /** Pack answer chip mirrored from synced answerCards (shared peek modal). */
@@ -192,15 +187,6 @@ export interface SayEvent {
   at: number;
 }
 
-/** Private step/peek budgets from room `budgets` message (owner-only). */
-export interface SeatBudgets {
-  steps: number;
-  peeks: number;
-  infinite: boolean;
-  /** Multi one-peek-per-turn; restored on reconnect. */
-  peekedThisTurn?: boolean;
-}
-
 /**
  * Shared peek session (schema + peekOpen broadcast) — every client sees the modal.
  * Peeker alone may place/submit; others are read-only (SC-BOARD-43/44/46).
@@ -249,6 +235,13 @@ type PieceSync = {
   col: number;
   finished?: boolean;
   trapped?: boolean;
+  remainingTurns?: number;
+};
+
+/** Private knowledge payload from room `knowledge` message (owner-only — D2). */
+export type KnowledgePayload = {
+  delivered: number;
+  pieces: Record<string, number>;
 };
 
 type SeatSync = {
@@ -481,22 +474,23 @@ export const useGameStore = defineStore('game', {
     flippedCells: FlippedCellView[];
     /** Pack answer cards for shared peek modal chips. */
     answerCards: AnswerCardView[];
-    /** Own private steps budget from `budgets` (always finite; 0 for spectators / unset). */
-    steps: number;
-    /** Own private peeks budget from `budgets` (0 for spectators / unset). */
-    peeks: number;
     /**
-     * Solo ∞ flag from `budgets.infinite` — both peeks and steps (SC-PRESENCE-16 / SC-MOVE-40).
+     * Own delivered knowledge from private `knowledge` (avatar HUD — block 6).
+     * Board yellow BR badges read `knowledgePieces` (D2 / D9).
      */
-    budgetsInfinite: boolean;
+    knowledgeDelivered: number;
+    /** Own carried knowledge per pieceId from private `knowledge.pieces` (D2 / SC-BOARD-85). */
+    knowledgePieces: Record<string, number>;
     /**
-     * Legacy mirror of `budgets.peekedThisTurn` (server no longer gates peeks).
-     * Kept for payload/reconnect parity; GamePage does not gate the eye on it.
+     * True after the first private `knowledge` sync for this tourist attach.
+     * GamePage arms +N falls only once synced so remount/rejoin baseline
+     * (0 → delivered) does not play a spurious grant animation (SC-PRESENCE-51).
      */
-    peekedThisTurn: boolean;
+    knowledgeSynced: boolean;
     /**
      * Shared peek session for every client (`peekActive` / `peekOpen`).
      * Cleared on peekClose / room reset (SC-BOARD-43/44/46).
+     * Opened by server open-on-land — client must not send `peek` (D4 / SC-BOARD-84).
      */
     openPeek: OpenPeek | null;
     /**
@@ -543,10 +537,9 @@ export const useGameStore = defineStore('game', {
     packTitle: '',
     flippedCells: [],
     answerCards: [],
-    steps: 0,
-    peeks: 0,
-    budgetsInfinite: false,
-    peekedThisTurn: false,
+    knowledgeDelivered: 0,
+    knowledgePieces: {},
+    knowledgeSynced: false,
     openPeek: null,
     peekStatusFlash: null,
     allJailWarning: false,
@@ -606,6 +599,7 @@ export const useGameStore = defineStore('game', {
             row: piece.row,
             col: piece.col,
             trapped: piece.trapped,
+            remainingTurns: piece.remainingTurns ?? 0,
           });
         }
       }
@@ -650,24 +644,9 @@ export const useGameStore = defineStore('game', {
     isPeekOwner: (state): boolean =>
       Boolean(state.openPeek && state.sessionId && state.openPeek.sessionId === state.sessionId),
     /**
-     * Multiplayer end-turn: own turn, ≥2 seats capacity, not leftover ∞, not finished/expired.
-     * Solo leftover hides via budgetsInfinite (SC-PRESENCE-18); single-player maxSeats===1
-     * also rejects (SC-PRESENCE-42) — finite budgets alone would otherwise show end-turn.
+     * End-turn retired (SC-PRESENCE-55 / D3) — always false; server rejects `endTurn`.
      */
-    canSendEndTurn: (state): boolean => {
-      if (
-        state.phase !== 'playing' ||
-        state.maxSeats < 2 ||
-        !state.sessionId ||
-        !state.currentTurnSessionId ||
-        state.sessionId !== state.currentTurnSessionId ||
-        state.budgetsInfinite
-      ) {
-        return false;
-      }
-      const seat = state.seats.find((s) => s.sessionId === state.sessionId);
-      return Boolean(seat && seat.finishPlace === 0 && !seat.timeExpired);
-    },
+    canSendEndTurn: (): boolean => false,
   },
 
   actions: {
@@ -810,8 +789,8 @@ export const useGameStore = defineStore('game', {
 
     /**
      * Submit a one-step tourist move. Only via store — pages must not room.send.
-     * Spends one step on the server; does **not** advance the turn (endTurn / auto / timeout).
-     * Server rejects if not seated / not current turn / not playing / no steps / illegal.
+     * One board action per turn (D3 / SC-MOVE-110); no steps budget.
+     * Server rejects if not seated / not current turn / not playing / already spent / illegal.
      * @returns true if the message was sent (room present, playing, and isMyTurn).
      */
     sendMove(pieceId: string, row: number, col: number): boolean {
@@ -821,7 +800,6 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -832,8 +810,8 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Rescue own trapped piece with an adjacent free own piece (−1 step).
-     * Server rejects if not own turn / no adj rescuer / no steps / not trapped.
+     * Rescue own trapped piece with an adjacent free own piece (free before board action — D3).
+     * Server rejects if not own turn / no adj rescuer / boardActionUsed / not trapped.
      * @returns true if the message was sent.
      */
     sendRescue(pieceId: string): boolean {
@@ -843,7 +821,6 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -854,9 +831,8 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Push an adjacent free piece through its far-side cell (−1 step).
-     * Relocates the target only; pusher stays. Server validates geometry / landable.
-     * @returns true if the message was sent.
+     * Push retired (D3 / SC-MOVE-114) — always no-op; do not send.
+     * @returns false always.
      */
     sendPush(
       pusherPieceId: string,
@@ -865,39 +841,17 @@ export const useGameStore = defineStore('game', {
       row: number,
       col: number,
     ): boolean {
-      if (
-        !this.room ||
-        this.phase !== 'playing' ||
-        !this.isMyTurn ||
-        this.isMySeatFinished ||
-        this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.steps <= 0) ||
-        typeof pusherPieceId !== 'string' ||
-        pusherPieceId.length === 0 ||
-        typeof targetSessionId !== 'string' ||
-        targetSessionId.length === 0 ||
-        typeof targetPieceId !== 'string' ||
-        targetPieceId.length === 0 ||
-        typeof row !== 'number' ||
-        typeof col !== 'number' ||
-        !Number.isInteger(row) ||
-        !Number.isInteger(col)
-      ) {
-        return false;
-      }
-      this.room.send('push', {
-        pusherPieceId,
-        targetSessionId,
-        targetPieceId,
-        row,
-        col,
-      });
-      return true;
+      void pusherPieceId;
+      void targetSessionId;
+      void targetPieceId;
+      void row;
+      void col;
+      return false;
     },
 
     /**
-     * Return a finished own piece onto a legal center-ring cell (−1 step).
-     * Server rejects illegal ring / occupancy / hole / finishPlace ≠ 0.
+     * Return a finished own piece onto a legal center-ring cell (one board action — D3).
+     * Server rejects illegal ring / occupancy / hole / finishPlace ≠ 0 / already spent.
      * @returns true if the message was sent.
      */
     sendReturnFromFinish(pieceId: string, row: number, col: number): boolean {
@@ -907,7 +861,6 @@ export const useGameStore = defineStore('game', {
         !this.isMyTurn ||
         this.isMySeatFinished ||
         this.isMySeatTimeExpired ||
-        (!this.budgetsInfinite && this.steps <= 0) ||
         typeof pieceId !== 'string' ||
         pieceId.length === 0
       ) {
@@ -918,26 +871,13 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * Open a peek on own unfinished piece standing on a present task cell.
-     * Finite mode: every successful open (fresh or flipped) spends 1 peek;
-     * peeks=0 is rejected for both. Solo infinite: no decrement.
-     * Affordance gating lives on GamePage; server still enforces budget.
-     * @returns true if the message was sent.
+     * Client `peek` retired — open-on-land opens the shared modal (D4 / SC-BOARD-84).
+     * Do not send; use peekPlace / peekSubmit after land-opened session.
+     * @returns false always.
      */
     sendPeek(pieceId: string): boolean {
-      if (
-        !this.room ||
-        this.phase !== 'playing' ||
-        !this.isMyTurn ||
-        this.isMySeatFinished ||
-        this.isMySeatTimeExpired ||
-        typeof pieceId !== 'string' ||
-        pieceId.length === 0
-      ) {
-        return false;
-      }
-      this.room.send('peek', { pieceId });
-      return true;
+      void pieceId;
+      return false;
     },
 
     /**
@@ -976,15 +916,11 @@ export const useGameStore = defineStore('game', {
     },
 
     /**
-     * End own multiplayer turn (does not move pieces). Solo peeks∞ → no-op.
-     * @returns true if the message was sent.
+     * End-turn retired (SC-PRESENCE-55) — always no-op; do not send.
+     * @returns false always.
      */
     sendEndTurn(): boolean {
-      if (!this.room || !this.canSendEndTurn) {
-        return false;
-      }
-      this.room.send('endTurn');
-      return true;
+      return false;
     },
 
     /**
@@ -1051,10 +987,9 @@ export const useGameStore = defineStore('game', {
       this.packTitle = '';
       this.flippedCells = [];
       this.answerCards = [];
-      this.steps = 0;
-      this.peeks = 0;
-      this.budgetsInfinite = false;
-      this.peekedThisTurn = false;
+      this.knowledgeDelivered = 0;
+      this.knowledgePieces = {};
+      this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();
       this.allJailWarning = false;
@@ -1211,12 +1146,15 @@ export const useGameStore = defineStore('game', {
       s.seats?.forEach((seat, sessionId) => {
         const pieces: GamePiece[] = [];
         seat.pieces?.forEach((piece, pieceIdKey) => {
+          const remainingRaw = Number(piece.remainingTurns ?? 0);
           pieces.push({
             pieceId: String(pieceIdKey),
             row: Number(piece.row),
             col: Number(piece.col),
             finished: Boolean(piece.finished),
             trapped: Boolean(piece.trapped),
+            remainingTurns:
+              Number.isFinite(remainingRaw) && remainingRaw > 0 ? Math.floor(remainingRaw) : 0,
           });
         });
         pieces.sort((a, b) => Number(a.pieceId) - Number(b.pieceId));
@@ -1352,10 +1290,9 @@ export const useGameStore = defineStore('game', {
       this.packTitle = '';
       this.flippedCells = [];
       this.answerCards = [];
-      this.steps = 0;
-      this.peeks = 0;
-      this.budgetsInfinite = false;
-      this.peekedThisTurn = false;
+      this.knowledgeDelivered = 0;
+      this.knowledgePieces = {};
+      this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();
       this.allJailWarning = false;
@@ -1376,8 +1313,13 @@ export const useGameStore = defineStore('game', {
         this._onSayMessage(message);
       });
 
-      room.onMessage('budgets', (message: unknown) => {
-        this._onBudgetsMessage(message);
+      room.onMessage('knowledge', (message: unknown) => {
+        this._onKnowledgeMessage(message);
+      });
+
+      // Hard-cut: ignore legacy `budgets` from mid-rollout peers (D2).
+      room.onMessage('budgets', (_message: unknown) => {
+        void _message;
       });
 
       room.onMessage('peekOpen', (message: unknown) => {
@@ -1410,18 +1352,28 @@ export const useGameStore = defineStore('game', {
       this.sayEvents = this.sayEvents.filter((e) => now - e.at < SAY_TTL_MS);
     },
 
-    _onBudgetsMessage(message: unknown) {
+    /** Private knowledge for own yellow BR badges + avatar counter (D2 / D9). */
+    _onKnowledgeMessage(message: unknown) {
       if (!message || typeof message !== 'object') {
         return;
       }
       const raw = message as Record<string, unknown>;
-      const steps = Number(raw.steps);
-      const peeks = Number(raw.peeks);
-      // Accept 0 (spent budget); reject NaN / negative.
-      this.steps = Number.isFinite(steps) && steps >= 0 ? Math.floor(steps) : 0;
-      this.peeks = Number.isFinite(peeks) && peeks >= 0 ? Math.floor(peeks) : 0;
-      this.budgetsInfinite = Boolean(raw.infinite);
-      this.peekedThisTurn = Boolean(raw.peekedThisTurn);
+      const delivered = Number(raw.delivered);
+      this.knowledgeDelivered =
+        Number.isFinite(delivered) && delivered >= 0 ? Math.floor(delivered) : 0;
+      const piecesRaw = raw.pieces;
+      const pieces: Record<string, number> = {};
+      if (piecesRaw && typeof piecesRaw === 'object' && !Array.isArray(piecesRaw)) {
+        for (const [pieceId, value] of Object.entries(piecesRaw as Record<string, unknown>)) {
+          const n = Number(value);
+          if (Number.isFinite(n) && n > 0) {
+            pieces[pieceId] = Math.floor(n);
+          }
+        }
+      }
+      this.knowledgePieces = pieces;
+      // Mark synced after applying payload so remount baseline is not a grant (SC-PRESENCE-51).
+      this.knowledgeSynced = true;
     },
 
     _onPeekOpenMessage(message: unknown) {
@@ -1594,10 +1546,9 @@ export const useGameStore = defineStore('game', {
       this.packTitle = '';
       this.flippedCells = [];
       this.answerCards = [];
-      this.steps = 0;
-      this.peeks = 0;
-      this.budgetsInfinite = false;
-      this.peekedThisTurn = false;
+      this.knowledgeDelivered = 0;
+      this.knowledgePieces = {};
+      this.knowledgeSynced = false;
       this.openPeek = null;
       this._clearPeekStatusFlash();
       this.allJailWarning = false;

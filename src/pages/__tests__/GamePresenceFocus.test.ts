@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import GamePage from '@/pages/GamePage.vue';
 import { touristLayoutGrid } from '@/lib/boardGeometry';
 import { useGameStore, type GameSeat } from '@/stores/game';
+import enUS from '@/i18n/en-US';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
@@ -30,10 +31,10 @@ vi.mock('vue-router', async (importOriginal) => {
   };
 });
 
-function baseSeat(pieces: GameSeat['pieces']): GameSeat {
+function baseSeat(pieces: GameSeat['pieces'], sessionId = 's1', touristId = 1): GameSeat {
   return {
-    sessionId: 's1',
-    touristId: 1,
+    sessionId,
+    touristId,
     pieces,
     connected: true,
     reconnectUntil: 0,
@@ -45,14 +46,21 @@ function baseSeat(pieces: GameSeat['pieces']): GameSeat {
 
 function seedPlaying(opts: {
   pieces: GameSeat['pieces'];
-  steps?: number;
-  peeks?: number;
   currentTurnSessionId?: string;
   sessionId?: string;
   seats?: GameSeat[];
+  holdingGrilleKeys?: string[];
+  knowledgeDelivered?: number;
+  knowledgePieces?: Record<string, number>;
+  finishPlace?: number;
+  turnUntil?: number;
+  maxSeats?: number;
 }) {
   const game = useGameStore();
-  const seat = baseSeat(opts.pieces);
+  const seat = {
+    ...baseSeat(opts.pieces),
+    finishPlace: opts.finishPlace ?? 0,
+  };
   const seats = opts.seats ?? [
     seat,
     {
@@ -73,21 +81,23 @@ function seedPlaying(opts: {
     phase: 'playing',
     status: 'playing',
     started: true,
-    maxSeats: 2,
+    maxSeats: opts.maxSeats ?? 2,
     currentTurnSessionId: opts.currentTurnSessionId ?? 's1',
     turnBudgetSeconds: 60,
-    budgetsInfinite: false,
+    turnUntil: opts.turnUntil ?? Date.now() + 60_000,
     grid: touristLayoutGrid(),
-    touristsPerPlayer: opts.pieces.length,
+    touristsPerPlayer: opts.pieces.length || 4,
     packTitle: 'Пак',
     seats,
-    steps: opts.steps ?? 5,
-    peeks: opts.peeks ?? 2,
+    knowledgeDelivered: opts.knowledgeDelivered ?? 0,
+    knowledgePieces: opts.knowledgePieces ?? {},
+    // Tests patch knowledge directly — mark synced so +N fall watch is armed.
+    knowledgeSynced: true,
     flippedCells: [],
     answerCards: [],
     openPeek: null,
     removedTaskKeys: [],
-    holdingGrilleKeys: [],
+    holdingGrilleKeys: opts.holdingGrilleKeys ?? [],
     revealingCatapultKeys: [],
     brokenCatapultKeys: [],
   });
@@ -99,7 +109,7 @@ function mountPage() {
     global: {
       stubs: {
         QDialog: {
-          template: '<div class="q-dialog-stub"><slot /></div>',
+          template: '<div v-if="modelValue !== false" class="q-dialog-stub"><slot /></div>',
           props: ['modelValue'],
         },
         QCard: { template: '<div><slot /></div>' },
@@ -112,7 +122,8 @@ function mountPage() {
         QIcon: { template: '<i :data-name="name" />', props: ['name', 'size'] },
         QBanner: { template: '<div><slot /></div>' },
         QCircularProgress: {
-          template: '<div class="progress-stub" />',
+          template:
+            '<div class="progress-stub" :data-color="color" :data-max="max" :data-value="value" :data-track="trackColor" />',
           props: ['min', 'max', 'value', 'size', 'thickness', 'color', 'trackColor'],
         },
       },
@@ -136,7 +147,7 @@ function assertTransparentAffordanceChrome(css: string) {
   expect(css).not.toMatch(/box-shadow:/);
 }
 
-describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
+describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.stubGlobal('localStorage', {
@@ -146,7 +157,7 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     });
   });
 
-  it('SC-PRESENCE-30 / SC-SAY-07 / SC-PRESENCE-17: say@12 + end-turn@3; focus under end-turn at avatar square corner', async () => {
+  it('SC-PRESENCE-30 / SC-PRESENCE-53 / SC-PRESENCE-55: say@12 + focus@3; no end-turn', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
@@ -160,26 +171,20 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const marker = own.find('.presence-marker');
     expect(marker.exists()).toBe(true);
     const say = marker.find('.say-affordance');
-    const endTurn = marker.find('.end-turn-affordance');
     const focus = marker.find('[data-test-id="focus-actionable"]');
     expect(say.exists()).toBe(true);
-    expect(endTurn.exists()).toBe(true);
     expect(focus.exists()).toBe(true);
     expect(focus.classes()).toContain('focus-affordance');
-    // Focus not in budgets stack.
-    expect(own.find('.presence-budgets .focus-affordance').exists()).toBe(false);
+    expect(wrapper.find('.end-turn-affordance').exists()).toBe(false);
+    expect(own.find('.presence-knowledge .focus-affordance').exists()).toBe(false);
 
-    // Illustrated PNG glyphs — not Material q-icon.
     expect(say.find('img.board-action-icon').exists()).toBe(true);
     expect(focus.find('img.board-action-icon').exists()).toBe(true);
-    expect(endTurn.find('img.board-action-icon').exists()).toBe(true);
     expect(say.find('i').exists()).toBe(false);
     expect(focus.find('i').exists()).toBe(false);
-    expect(endTurn.find('i').exists()).toBe(false);
 
     const sayCss = cssRuleBody('say-affordance');
     const focusCss = cssRuleBody('focus-affordance');
-    const endCss = cssRuleBody('end-turn-affordance');
     const glyphCss = cssRuleBody('board-action-icon');
 
     expect(glyphCss).toMatch(/width:\s*36px/);
@@ -191,51 +196,37 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(sayCss).toMatch(/width:\s*36px/);
     assertTransparentAffordanceChrome(sayCss);
 
-    // Focus at bottom-right corner of 72px avatar square (±36px from marker center).
-    expect(focusCss).toMatch(/left:\s*calc\(50%\s*\+\s*36px\)/);
-    expect(focusCss).toMatch(/top:\s*calc\(50%\s*\+\s*36px\)/);
+    // Focus at former end-turn slot: right-center / 3 o’clock.
+    expect(focusCss).toMatch(/top:\s*50%/);
+    expect(focusCss).toMatch(/left:\s*100%/);
     expect(focusCss).toMatch(/translate\(-50%,\s*-50%\)/);
     expect(focusCss).toMatch(/width:\s*36px/);
-    expect(focusCss).not.toMatch(/left:\s*0/);
     assertTransparentAffordanceChrome(focusCss);
 
-    expect(endCss).toMatch(/top:\s*50%/);
-    expect(endCss).toMatch(/left:\s*100%/);
-    expect(endCss).toMatch(/translate\(-50%,\s*-50%\)/);
-    expect(endCss).toMatch(/width:\s*36px/);
-    assertTransparentAffordanceChrome(endCss);
+    expect(pageSrc).not.toMatch(/class="end-turn-affordance"/);
+    expect(pageSrc).not.toMatch(/\.end-turn-affordance\s*\{/);
 
     const markerW = 96;
     const markerH = 96;
     const btn = 36;
     const sayCenterX = markerW * 0.5;
     const sayCenterY = 0;
-    const endCenterX = markerW;
-    const endCenterY = markerH * 0.5;
-    const focusCenterX = markerW * 0.5 + 36;
-    const focusCenterY = markerH * 0.5 + 36;
-
-    expect(sayCenterX / markerW).toBeCloseTo(0.5, 5);
-    expect(endCenterX).toBe(markerW);
-    expect(focusCenterY).toBeGreaterThan(endCenterY);
+    const focusCenterX = markerW;
+    const focusCenterY = markerH * 0.5;
 
     const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
-    expect(dist(sayCenterX, sayCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
-    expect(dist(endCenterX, endCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
+    expect(dist(sayCenterX, sayCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
 
     wrapper.unmount();
   });
 
   it('SC-PRESENCE-31: focus selects nearest actionable tourist', async () => {
-    // steps=0 → no moves; peeks>0 → only piece on present * can peek.
-    // Piece A on start `1` (3,0); piece B on task `*` (3,3) — only B actionable.
     seedPlaying({
-      steps: 0,
-      peeks: 2,
       pieces: [
-        { pieceId: '0', row: 3, col: 0, finished: false, trapped: false },
+        { pieceId: '0', row: 3, col: 0, finished: false, trapped: true, remainingTurns: 2 },
         { pieceId: '1', row: 3, col: 3, finished: false, trapped: false },
       ],
+      holdingGrilleKeys: ['3,0'],
     });
     const wrapper = mountPage();
     await flushPromises();
@@ -255,18 +246,17 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
 
   it('SC-PRESENCE-32: focus hidden when nothing actionable', async () => {
     seedPlaying({
-      steps: 0,
-      peeks: 0,
       pieces: [
-        { pieceId: '0', row: 3, col: 0, finished: false, trapped: false },
-        { pieceId: '1', row: 6, col: 0, finished: false, trapped: false },
+        { pieceId: '0', row: 3, col: 0, finished: false, trapped: true, remainingTurns: 2 },
+        { pieceId: '1', row: 6, col: 0, finished: false, trapped: true, remainingTurns: 2 },
       ],
+      holdingGrilleKeys: ['3,0', '6,0'],
     });
     const wrapper = mountPage();
     await flushPromises();
 
     expect(wrapper.find('[data-test-id="focus-actionable"]').exists()).toBe(false);
-    expect(wrapper.find('.end-turn-affordance').exists()).toBe(true);
+    expect(wrapper.find('.end-turn-affordance').exists()).toBe(false);
 
     wrapper.unmount();
   });
@@ -309,11 +299,21 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     wrapper2.unmount();
   });
 
-  it('SC-PRESENCE-33 / SC-PRESENCE-14 / SC-SAY-15: say@12 end-turn@3; focus under end-turn; picker right', async () => {
+  it('SC-PRESENCE-33 / SC-PRESENCE-14 / SC-SAY-15: say@12 focus@3; picker right; no place badge', async () => {
     seedPlaying({
       pieces: [
         { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
         { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
+      ],
+      seats: [
+        baseSeat([
+          { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
+          { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
+        ]),
+        {
+          ...baseSeat([], 's2', 2),
+          finishPlace: 1,
+        },
       ],
     });
     const wrapper = mountPage();
@@ -322,28 +322,22 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     const own = wrapper.find('.presence-slot--own');
     const marker = own.find('.presence-marker');
     const say = marker.find('.say-affordance');
-    const endTurn = marker.find('.end-turn-affordance');
     const focus = marker.find('.focus-affordance');
     expect(say.exists()).toBe(true);
     expect(focus.exists()).toBe(true);
-    expect(endTurn.exists()).toBe(true);
-    expect(own.find('.presence-budgets .focus-affordance').exists()).toBe(false);
+    expect(wrapper.find('.end-turn-affordance').exists()).toBe(false);
+    expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
 
     const markerW = 96;
     const markerH = 96;
     const btn = 36;
     const sayCenterX = markerW * 0.5;
     const sayCenterY = 0;
-    const endCenterX = markerW;
-    const endCenterY = markerH * 0.5;
-    const focusCenterX = markerW * 0.5 + 36;
-    const focusCenterY = markerH * 0.5 + 36;
+    const focusCenterX = markerW;
+    const focusCenterY = markerH * 0.5;
 
-    expect(sayCenterX).toBeCloseTo(markerW * 0.5, 5);
-    expect(endCenterX).toBe(markerW);
     const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
-    expect(dist(sayCenterX, sayCenterY, endCenterX, endCenterY)).toBeGreaterThanOrEqual(btn);
-    expect(dist(endCenterX, endCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
+    expect(dist(sayCenterX, sayCenterY, focusCenterX, focusCenterY)).toBeGreaterThanOrEqual(btn);
 
     const readyCss = cssRuleBody('ready-affordance');
     expect(readyCss).toMatch(/top:\s*-4px/);
@@ -353,15 +347,178 @@ describe('GamePage focus control (SC-PRESENCE-30/31/32/33)', () => {
     expect(pickerCss).toMatch(/left:\s*50%/);
     expect(pickerCss).toMatch(/bottom:\s*calc\(100%\s*\+\s*24px\)/);
     expect(pickerCss).toMatch(/transform:\s*none/);
-    expect(pickerCss).not.toMatch(/translateX\(-50%\)/);
 
     assertTransparentAffordanceChrome(cssRuleBody('say-affordance'));
     assertTransparentAffordanceChrome(cssRuleBody('focus-affordance'));
-    assertTransparentAffordanceChrome(cssRuleBody('end-turn-affordance'));
     expect(say.find('img.board-action-icon').exists()).toBe(true);
 
     expect(pageSrc).toMatch(/class="ready-affordance"/);
-    expect(pageSrc).toMatch(/directions_walk|visibility/);
+    expect(pageSrc).not.toMatch(/directions_walk|name=["']visibility["']/);
+    expect(pageSrc).not.toMatch(/presence-place-badge/);
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-37: focus @3 CSS keeps 36×36 hit fully on circumference', () => {
+    const focusCss = cssRuleBody('focus-affordance');
+    expect(focusCss).toMatch(/top:\s*50%/);
+    expect(focusCss).toMatch(/left:\s*100%/);
+    expect(focusCss).toMatch(/width:\s*36px/);
+    expect(focusCss).toMatch(/height:\s*36px/);
+  });
+
+  it('SC-PRESENCE-50: own knowledge counter; no steps/peeks', async () => {
+    seedPlaying({
+      pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
+      knowledgeDelivered: 7,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const counter = wrapper.find('[data-testid="knowledge-counter"]');
+    expect(counter.exists()).toBe(true);
+    expect(counter.find('.knowledge-value').text()).toBe('7');
+    expect(wrapper.find('.presence-budgets').exists()).toBe(false);
+    expect(wrapper.findAll('.budget-counter')).toHaveLength(0);
+    expect(enUS.game.knowledgeCounterAria).toBe('Знания');
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-51: +N fall only when delivered grows', async () => {
+    const game = seedPlaying({
+      pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
+      knowledgeDelivered: 2,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.findAll('.budget-fall')).toHaveLength(0);
+
+    game.knowledgeDelivered = 5;
+    await flushPromises();
+
+    const falls = wrapper.findAll('.budget-fall');
+    expect(falls).toHaveLength(1);
+    expect(falls[0]!.text()).toBe('+3');
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-54: no turn countdown ring (reconnect chrome may remain)', async () => {
+    seedPlaying({
+      pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
+      turnUntil: Date.now() + 60_000,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const progress = wrapper.find('.presence-slot--own .progress-stub');
+    expect(progress.exists()).toBe(true);
+    expect(progress.attributes('data-color')).toBe('transparent');
+    expect(Number(progress.attributes('data-value'))).toBe(0);
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-06 / SC-PRESENCE-56: finished seat shows no place badge', async () => {
+    seedPlaying({
+      pieces: [
+        { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
+        { pieceId: '1', row: 4, col: 4, finished: true, trapped: false },
+      ],
+      finishPlace: 1,
+      knowledgeDelivered: 6,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
+    expect(wrapper.text()).not.toMatch(/Вы \d+-й/);
+    expect(wrapper.text()).not.toContain('game.finishPlaceModal');
+
+    wrapper.unmount();
+  });
+
+  it('SC-FINISH-31 / SC-FINISH-34: finishPlace 0→1 opens knowledge modal with delivered', async () => {
+    const game = seedPlaying({
+      pieces: [
+        { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
+        { pieceId: '1', row: 3, col: 3, finished: false, trapped: false },
+      ],
+      knowledgeDelivered: 6,
+      finishPlace: 0,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="knowledge-delivered-modal"]').exists()).toBe(false);
+
+    const seat = game.seats.find((s) => s.sessionId === 's1');
+    expect(seat).toBeTruthy();
+    seat!.finishPlace = 1;
+    await flushPromises();
+
+    const modal = wrapper.find('[data-testid="knowledge-delivered-modal"]');
+    expect(modal.exists()).toBe(true);
+    expect(modal.text()).toContain('game.knowledgeDeliveredModal');
+    expect(enUS.game.knowledgeDeliveredModal).toBe('Вы доставили {n} знаний');
+    expect(wrapper.text()).not.toContain('game.finishPlaceModal');
+    expect(wrapper.find('.presence-place-badge').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('SC-FINISH-31: modal body follows late knowledge after finishPlace (transfer race)', async () => {
+    // Live bind (not open-time snapshot) so Colyseus knowledge-after-finishPlace is correct.
+    expect(pageSrc).toMatch(/knowledgeDeliveredModal',\s*\{\s*n:\s*game\.knowledgeDelivered\s*\}/);
+    expect(pageSrc).not.toMatch(/knowledgeModalDelivered/);
+
+    const game = seedPlaying({
+      pieces: [
+        { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
+        { pieceId: '1', row: 3, col: 3, finished: false, trapped: false },
+      ],
+      knowledgeDelivered: 4,
+      finishPlace: 0,
+    });
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const seat = game.seats.find((s) => s.sessionId === 's1')!;
+    seat.finishPlace = 1;
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="knowledge-delivered-modal"]').exists()).toBe(true);
+
+    // Private knowledge arrives after finishPlace patch (Colyseus interleave).
+    game.knowledgeDelivered = 6;
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="knowledge-delivered-modal"]').exists()).toBe(true);
+    expect(game.knowledgeDelivered).toBe(6);
+
+    wrapper.unmount();
+  });
+
+  it('SC-PRESENCE-10: offline reconnect ring only (no turn ring)', async () => {
+    const game = seedPlaying({
+      pieces: [{ pieceId: '0', row: 3, col: 3, finished: false, trapped: false }],
+      turnUntil: Date.now() + 60_000,
+    });
+    const seat = game.seats.find((s) => s.sessionId === 's1')!;
+    seat.connected = false;
+    seat.reconnectUntil = Date.now() + 20_000;
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const stubs = wrapper.findAll('.presence-slot--own .progress-stub');
+    expect(stubs.length).toBeGreaterThanOrEqual(2);
+    // Outer turn ring stays transparent / zero.
+    expect(stubs[0]!.attributes('data-color')).toBe('transparent');
+    expect(Number(stubs[0]!.attributes('data-value'))).toBe(0);
+    // Inner grace ring paints warning.
+    expect(stubs[1]!.attributes('data-color')).toBe('warning');
 
     wrapper.unmount();
   });

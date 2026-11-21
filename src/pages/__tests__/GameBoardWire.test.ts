@@ -59,8 +59,6 @@ function seedPlayingSeat(count: number) {
     touristsPerPlayer: count,
     packTitle: 'Пак',
     seats: [seat],
-    steps: 5,
-    peeks: 2,
     flippedCells: [],
     answerCards: [
       { id: 'a1', content: 'Четыре', description: '' },
@@ -481,10 +479,8 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     wrapper.unmount();
   });
 
-  it('SC-BOARD-10/45/13: peeks=0 finite hides eye; peeks>0 shows illustrated peek icon', async () => {
+  it('SC-BOARD-84: no peek affordance on board (open-on-land only)', async () => {
     const game = seedPlayingSeat(1);
-    game.peeks = 0;
-    game.budgetsInfinite = false;
     // Piece 0 sits on task * at (3,3); mark that cell flipped.
     game.flippedCells = [{ key: '3,3', taskId: 't1', difficulty: 2 }];
 
@@ -497,14 +493,120 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     await flushPromises();
 
     expect(wrapper.find('.peek-affordance').exists()).toBe(false);
+    expect(wrapper.find('.push-affordance').exists()).toBe(false);
 
-    // With peeks remaining, illustrated peek icon appears on the same flipped cell.
-    game.peeks = 1;
+    // Land-opened modal still works without peek icon (SC-BOARD-82 UX).
+    openPeekFixture(game);
     await flushPromises();
-    const peek = wrapper.find('.peek-affordance');
-    expect(peek.exists()).toBe(true);
-    expect(peek.find('img.board-action-icon').exists()).toBe(true);
-    expect(peek.find('i').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="peek-question"]').exists()).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('SC-BOARD-85: trapped piece shows red TR grille counter on board + strip', async () => {
+    const game = seedPlayingSeat(2);
+    game.$patch({
+      seats: [
+        {
+          sessionId: 's1',
+          touristId: 1,
+          pieces: [
+            { pieceId: '0', row: 3, col: 3, finished: false, trapped: true, remainingTurns: 3 },
+            { pieceId: '1', row: 3, col: 4, finished: false, trapped: false, remainingTurns: 0 },
+          ],
+          connected: true,
+          reconnectUntil: 0,
+          ready: false,
+          finishPlace: 0,
+          timeExpired: false,
+        },
+      ],
+      holdingGrilleKeys: ['3,3'],
+      knowledgePieces: { '1': 2 },
+    });
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    const boardBadge = wrapper.find('[data-testid="piece-grille-badge"]');
+    expect(boardBadge.exists()).toBe(true);
+    expect(boardBadge.text()).toBe('3');
+    expect(boardBadge.classes()).toContain('piece-badge--grille');
+
+    const stripBadge = wrapper.find('[data-testid="strip-grille-badge"]');
+    expect(stripBadge.exists()).toBe(true);
+    expect(stripBadge.text()).toBe('3');
+
+    const knowledge = wrapper.find('[data-testid="piece-knowledge-badge"]');
+    expect(knowledge.exists()).toBe(true);
+    expect(knowledge.text()).toBe('2');
+    expect(knowledge.classes()).toContain('piece-badge--knowledge');
+
+    wrapper.unmount();
+  });
+
+  it('SC-BOARD-86/87: removedTaskKeys leave empty playable cells (trap clear / correct)', async () => {
+    const game = seedPlayingSeat(1);
+    game.removedTaskKeys = ['3,3'];
+    game.flippedCells = [{ key: '3,3', taskId: 't1', difficulty: 2 }];
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    // Removed key → hole chrome (tile--removed); flipped digit must not show on that cell.
+    const removed = wrapper.findAll('.tile-task.tile--removed');
+    expect(removed.length).toBeGreaterThanOrEqual(1);
+    expect(wrapper.find('.tile-task.tile--flipped .tile-difficulty').exists()).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  it('SC-MOVE-110 UX: after sendMove true, move/return/rescue affordances stay disabled', async () => {
+    const game = seedPlayingSeat(2);
+    game.$patch({
+      seats: [
+        {
+          sessionId: 's1',
+          touristId: 1,
+          pieces: [
+            { pieceId: '0', row: 3, col: 3, finished: false, trapped: true, remainingTurns: 2 },
+            { pieceId: '1', row: 3, col: 4, finished: false, trapped: false, remainingTurns: 0 },
+          ],
+          connected: true,
+          reconnectUntil: 0,
+          ready: false,
+          finishPlace: 0,
+          timeExpired: false,
+        },
+      ],
+      holdingGrilleKeys: ['3,3'],
+    });
+    const sendMove = vi.spyOn(game, 'sendMove').mockReturnValue(true);
+
+    const wrapper = mountPage();
+    await flushPromises();
+
+    expect(wrapper.find('.rescue-affordance').exists()).toBe(true);
+
+    // Select free piece and submit a move → local boardActionSpent.
+    const slots = wrapper.findAll('.my-tourist-slot');
+    await slots[1]!.trigger('click');
+    await flushPromises();
+    const target = wrapper.find('.tile--target');
+    expect(target.exists()).toBe(true);
+    await target.trigger('click');
+    await flushPromises();
+    expect(sendMove).toHaveBeenCalled();
+
+    // After spent: no rescue / no move targets / no return.
+    expect(wrapper.find('.rescue-affordance').exists()).toBe(false);
+    expect(wrapper.find('.tile--target').exists()).toBe(false);
+    expect(wrapper.find('.return-affordance').exists()).toBe(false);
+
+    // Open-on-land modal place/submit still allowed while spent.
+    openPeekFixture(game, { placements: ['a1', 'a2'] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="peek-submit"]').exists()).toBe(true);
 
     wrapper.unmount();
   });
@@ -701,9 +803,9 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     expect(pageSrc).toMatch(/\.piece\s*\{[^}]*left\s+250ms\s+ease-out[^}]*top\s+250ms\s+ease-out/s);
     expect(pageSrc).toMatch(/FINISH_TRAVEL_MS\s*\+\s*FINISH_FADE_MS/);
     expect(pageSrc).not.toMatch(/MOVE_ANIM_MS\s*\+\s*FINISH_FADE_MS/);
-    // Own center move / push→center busy lock covers finish slide (D13).
+    // Own center move busy lock covers finish slide (D13); push retired (SC-MOVE-114).
     expect(pageSrc).toMatch(/beginMoveAnimation\(FINISH_TRAVEL_MS\)/);
-    expect(pageSrc).toMatch(/Math\.max\(MOVE_ANIM_MS\s*\*\s*2,\s*FINISH_TRAVEL_MS\)/);
+    expect(pageSrc).not.toMatch(/Math\.max\(MOVE_ANIM_MS\s*\*\s*2,\s*FINISH_TRAVEL_MS\)/);
 
     // Race: fading before clearing deferred; keep finished while deferred/pinned/visual.
     expect(pageSrc).toMatch(
@@ -723,31 +825,23 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     );
   });
 
-  it('SC-BOARD-13 / SC-MOVE-74/77 / SC-FINISH-09/13: illustrated board-action icons + transparent chrome', async () => {
+  it('SC-BOARD-84 / SC-MOVE-77 / SC-FINISH-09/13: illustrated rescue/return + no peek/push', async () => {
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
 
-    // Assets + img glyphs (D2 / D4) — not Material names on affordance slots.
-    for (const asset of [
-      'peek.png',
-      'push.png',
-      'return.png',
-      'flag.png',
-      'focus.png',
-      'end-turn.png',
-      'rescue.png',
-      'say.png',
-    ]) {
+    // Remaining board-action assets (peek/push/end-turn affordances removed).
+    for (const asset of ['return.png', 'flag.png', 'focus.png', 'rescue.png', 'say.png']) {
       expect(pageSrc).toContain(`@/assets/board/${asset}`);
     }
-    expect(pageSrc).toMatch(/class="peek-affordance"[\s\S]*?boardPeekIcon/);
+    expect(pageSrc).not.toContain(`@/assets/board/end-turn.png`);
+    expect(pageSrc).not.toMatch(/class="peek-affordance"/);
+    expect(pageSrc).not.toMatch(/class="push-affordance"/);
+    expect(pageSrc).not.toMatch(/class="end-turn-affordance"/);
     expect(pageSrc).toMatch(/class="rescue-affordance"[\s\S]*?boardRescueIcon/);
-    expect(pageSrc).toMatch(/class="push-affordance"[\s\S]*?boardPushIcon/);
     expect(pageSrc).toMatch(/class="return-affordance"[\s\S]*?boardReturnIcon/);
     expect(pageSrc).toMatch(/:src="boardFlagIcon"/);
     expect(pageSrc).toMatch(/class="my-tourist-finish-icon"/);
-    // Affordance Material glyphs removed (budgets keep visibility / directions_walk).
     for (const name of [
       'lock_open',
       'swipe',
@@ -756,23 +850,23 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
       'center_focus_strong',
       'skip_next',
       'chat_bubble_outline',
+      'directions_walk',
+      'visibility',
     ]) {
       expect(pageSrc).not.toMatch(new RegExp(`name=["']${name}["']`));
     }
-    expect(pageSrc).not.toMatch(/peek-affordance[\s\S]{0,200}name=["']visibility["']/);
 
-    // Budgets still Material (out of scope).
-    expect(pageSrc).toMatch(/name=["']directions_walk["']/);
-    expect(pageSrc).toMatch(/name=["']visibility["']/);
+    // Knowledge HUD (SC-PRESENCE-50); no Material budget icons.
+    expect(pageSrc).toMatch(/class="presence-knowledge"/);
+    expect(pageSrc).toMatch(/data-testid="knowledge-counter"/);
     expect(pageSrc).toMatch(/class="ready-affordance"/);
 
-    // Transparent hit — no solid fill / medallion box-shadow on affordances (D1).
+    // Transparent hit — no solid fill / medallion box-shadow on affordances.
     const affordanceBlocks = [
-      /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
+      /\.rescue-affordance\s*\{([^}]+)\}/m,
       /\.return-affordance\s*\{([^}]+)\}/m,
       /\.say-affordance\s*\{([^}]+)\}/m,
       /\.focus-affordance\s*\{([^}]+)\}/m,
-      /\.end-turn-affordance\s*\{([^}]+)\}/m,
     ];
     for (const re of affordanceBlocks) {
       const m = pageSrc.match(re);
@@ -783,33 +877,27 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
       expect(body).not.toMatch(/background:\s*#[0-9a-fA-F]{3,8}/);
       expect(body).not.toMatch(/box-shadow:/);
     }
-    // ×2 glyph + enlarged hits (flag size unchanged).
+    // Focus @3 o’clock (former end-turn slot — SC-PRESENCE-53).
+    const focusCss = pageSrc.match(/\.focus-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
+    expect(focusCss).toMatch(/top:\s*50%/);
+    expect(focusCss).toMatch(/left:\s*100%/);
     const glyphCss = pageSrc.match(/\.board-action-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(glyphCss).toMatch(/width:\s*36px/);
     expect(glyphCss).toMatch(/height:\s*36px/);
-    const boardHitCss =
-      pageSrc.match(
-        /\.peek-affordance,\s*\n\.rescue-affordance,\s*\n\.push-affordance\s*\{([^}]+)\}/m,
-      )?.[1] ?? '';
+    const boardHitCss = pageSrc.match(/\.rescue-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(boardHitCss).toMatch(/width:\s*36px/);
-    // Above sprite, then +20px down: translate(-50%, calc(-100% + 20px)) (SC-BOARD-71).
     expect(boardHitCss).toMatch(/translate\(-50%,\s*calc\(-100%\s*\+\s*20px\)\)/);
     expect(boardHitCss).toMatch(/-\s*8px/);
-    expect(boardHitCss).not.toMatch(/translateX\(-50%\)/);
     const returnCss = pageSrc.match(/\.return-affordance\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(returnCss).toMatch(/width:\s*36px/);
     expect(returnCss).toMatch(/translate\(-50%,\s*calc\(-100%\s*\+\s*20px\)\)/);
     expect(returnCss).toMatch(/top:\s*-8px/);
-    expect(returnCss).not.toMatch(/translateX\(-50%\)/);
-    // Flag: glyph swap only — size stays ~18px; no Material color tint.
     const flagCss = pageSrc.match(/\.my-tourist-finish-icon\s*\{([^}]+)\}/m)?.[1] ?? '';
     expect(flagCss).toMatch(/width:\s*18px/);
     expect(flagCss).toMatch(/height:\s*18px/);
     expect(flagCss).toMatch(/object-fit:\s*contain/);
-    expect(flagCss).not.toMatch(/color:\s*#2e7d32/);
-    expect(flagCss).not.toMatch(/translate\(-50%,\s*-100%\)/);
 
-    // DOM: rescue (SC-MOVE-77).
+    // DOM: rescue (SC-MOVE-113).
     {
       const game = seedPlayingSeat(2);
       game.$patch({
@@ -818,7 +906,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
             sessionId: 's1',
             touristId: 1,
             pieces: [
-              { pieceId: '0', row: 3, col: 3, finished: false, trapped: true },
+              { pieceId: '0', row: 3, col: 3, finished: false, trapped: true, remainingTurns: 3 },
               { pieceId: '1', row: 3, col: 4, finished: false, trapped: false },
             ],
             connected: true,
@@ -833,6 +921,8 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
       const wrapper = mountPage();
       await flushPromises();
       expect(wrapper.find('.rescue-affordance img.board-action-icon').exists()).toBe(true);
+      expect(wrapper.find('.peek-affordance').exists()).toBe(false);
+      expect(wrapper.find('.push-affordance').exists()).toBe(false);
       wrapper.unmount();
     }
 
@@ -864,19 +954,6 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
       expect(finishIcon.exists()).toBe(true);
       expect(finishIcon.element.tagName.toLowerCase()).toBe('img');
       expect(wrapper.find('.return-affordance img.board-action-icon').exists()).toBe(true);
-      wrapper.unmount();
-    }
-
-    // Push: select free piece adjacent to another free piece (SC-MOVE-74).
-    {
-      setActivePinia(createPinia());
-      seedPlayingSeat(2);
-      const wrapper = mountPage();
-      await flushPromises();
-      const slots = wrapper.findAll('.my-tourist-slot');
-      await slots[0]!.trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.push-affordance img.board-action-icon').exists()).toBe(true);
       wrapper.unmount();
     }
   });
