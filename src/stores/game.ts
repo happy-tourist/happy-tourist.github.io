@@ -141,25 +141,29 @@ export function isTimeExpiredSeat(seat: GameSeat): boolean {
 }
 
 /**
- * Eligible seat for solo/multi turn accent: non-finished and not time-expired
- * (SC-PRESENCE-09 / game/move solo). Spectators see synced seats.
+ * Eligible seat for leftover/multi turn accent: non-finished and not time-expired
+ * (SC-PRESENCE-09). Spectators see synced seats.
  */
 export function isEligibleSeat(seat: Pick<GameSeat, 'finishPlace' | 'timeExpired'>): boolean {
   return seat.finishPlace === 0 && !seat.timeExpired;
 }
 
-/** Count eligible seats — exactly one ⇒ solo red ring (SC-PRESENCE-09). */
+/** Count eligible seats — leftover red ring needs exactly one (SC-PRESENCE-09). */
 export function countEligibleSeats(
   seats: readonly Pick<GameSeat, 'finishPlace' | 'timeExpired'>[],
 ): number {
   return seats.filter(isEligibleSeat).length;
 }
 
-/** Solo one-minute red ring when exactly one eligible seat (not via turnBudgetSeconds). */
+/**
+ * Solo leftover red ring: maxSeats ≥ 2 and exactly one eligible seat
+ * (SC-PRESENCE-09). Intentional single-player (maxSeats === 1) is not leftover.
+ */
 export function isSoloBudgetFromSeats(
   seats: readonly Pick<GameSeat, 'finishPlace' | 'timeExpired'>[],
+  maxSeats: number,
 ): boolean {
-  return countEligibleSeats(seats) === 1;
+  return maxSeats >= 2 && countEligibleSeats(seats) === 1;
 }
 
 /**
@@ -613,10 +617,11 @@ export const useGameStore = defineStore('game', {
       return Boolean(seat && seat.finishPlace > 0);
     },
     /**
-     * Solo red-ring: exactly one eligible seat (finishPlace===0 ∧ !timeExpired).
-     * Not via turnBudgetSeconds — solo and multi both use 60s (SC-PRESENCE-09).
+     * Solo leftover red-ring: maxSeats ≥ 2 and exactly one eligible seat.
+     * Not via turnBudgetSeconds — leftover and multi both use 60s (SC-PRESENCE-09).
+     * Single-player (maxSeats === 1) is never red-ring leftover.
      */
-    isSoloBudget: (state): boolean => isSoloBudgetFromSeats(state.seats),
+    isSoloBudget: (state): boolean => isSoloBudgetFromSeats(state.seats, state.maxSeats),
     /** Own seat is locked after solo timer expiry (SC-MOVE-45). */
     isMySeatTimeExpired: (state): boolean => {
       const seat = state.seats.find((s) => s.sessionId === state.sessionId);
@@ -645,12 +650,14 @@ export const useGameStore = defineStore('game', {
     isPeekOwner: (state): boolean =>
       Boolean(state.openPeek && state.sessionId && state.openPeek.sessionId === state.sessionId),
     /**
-     * Multiplayer end-turn is available: own turn, not solo peeks∞, not finished/expired.
-     * Solo peeks∞ hides end-turn (SC-MOVE-41 / SC-PRESENCE-18).
+     * Multiplayer end-turn: own turn, ≥2 seats capacity, not leftover ∞, not finished/expired.
+     * Solo leftover hides via budgetsInfinite (SC-PRESENCE-18); single-player maxSeats===1
+     * also rejects (SC-PRESENCE-42) — finite budgets alone would otherwise show end-turn.
      */
     canSendEndTurn: (state): boolean => {
       if (
         state.phase !== 'playing' ||
+        state.maxSeats < 2 ||
         !state.sessionId ||
         !state.currentTurnSessionId ||
         state.sessionId !== state.currentTurnSessionId ||

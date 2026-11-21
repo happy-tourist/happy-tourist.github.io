@@ -2073,10 +2073,12 @@ function showGraceRing(marker: PresenceMarker): boolean {
 
 /**
  * Active turn countdown on current-turn seat while deadline is synced (SC-PRESENCE-08/09).
- * Track chrome stays reserved even when inactive (SC-PRESENCE-11).
+ * Single-player (maxSeats===1) never shows the ring — even if a stale turnUntil synced
+ * (SC-PRESENCE-39). Track chrome stays reserved when inactive (SC-PRESENCE-11).
  */
 function showTurnRing(marker: PresenceMarker): boolean {
   return (
+    game.maxSeats >= 2 &&
     marker.isCurrentTurn &&
     game.phase === 'playing' &&
     game.turnUntil > 0 &&
@@ -2094,7 +2096,7 @@ function turnRingValue(marker: PresenceMarker): number {
   return turnRemainingSeconds(game.turnUntil, game.turnBudgetSeconds, nowMs.value);
 }
 
-/** Blue for ≥2 eligible; red for exactly 1 eligible seat (SC-PRESENCE-08/09). */
+/** Blue for ≥2 eligible; red for leftover (maxSeats≥2 ∧ 1 eligible) (SC-PRESENCE-08/09). */
 function turnRingColor(marker: PresenceMarker): string {
   if (!showTurnRing(marker)) {
     return 'transparent';
@@ -3058,11 +3060,12 @@ watch(
 );
 
 /**
- * Solo ∞ budgets → unlimited modal (SC-PRESENCE-19).
+ * Solo leftover ∞ budgets → unlimited modal (SC-PRESENCE-19).
+ * Single-player (maxSeats===1) must not open even if budgetsInfinite flips (SC-PRESENCE-40).
  * Skip initial sync (already infinite on remount).
  */
 watch(budgetsInfinite, (infinite, prev) => {
-  if (prev === false && infinite) {
+  if (prev === false && infinite && game.maxSeats >= 2) {
     soloUnlimitedModalOpen.value = true;
   }
 });
