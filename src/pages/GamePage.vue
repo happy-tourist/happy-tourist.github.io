@@ -944,38 +944,22 @@ function isStripSlotTrapped(pieceId: string): boolean {
 const hasOwnPieces = computed(() => Boolean(mySeat.value && mySeat.value.pieces.length > 0));
 
 /**
- * Flat board overlay: unfinished + finished while (a) finish/return travel clip
- * or (b) catapult-owned pre-clip (D3 / SC-FINISH-36/37).
+ * Flat board overlay in stable seat/piece order (D6 / SC-FINISH-38):
+ * unfinished always; finished while (a) finish/return travel clip or
+ * (b) catapult-owned pre-clip (D3 / SC-FINISH-36/37). Mid-join finished
+ * without clip/ownership omitted. Single pass so own unfinished→finished
+ * mid-clip does not migrate shelves and abort CSS slide+fade.
  */
 const boardPieces = computed((): BoardPiece[] => {
   const out: BoardPiece[] = [];
   const clips = travelClipByKey.value;
 
-  for (const piece of game.unfinishedBoardPieces) {
-    const key = pieceKey(piece.sessionId, piece.pieceId);
-    const clip = clips.get(key);
-    out.push({
-      sessionId: piece.sessionId,
-      touristId: piece.touristId,
-      pieceId: piece.pieceId,
-      row: piece.row,
-      col: piece.col,
-      trapped: piece.trapped,
-      remainingTurns: piece.remainingTurns ?? 0,
-      // Own click may start finish clip before sync marks finished.
-      disappearing: Boolean(clip && travelClipIsDisappearing(clip)),
-    });
-  }
-
   for (const seat of game.seats) {
     for (const piece of seat.pieces) {
-      if (!piece.finished) {
-        continue;
-      }
       const key = pieceKey(seat.sessionId, piece.pieceId);
       const clip = clips.get(key);
-      // (a) active travel clip or (b) catapult pin/visual/queue before finish clip.
-      if (!clip && !catapultOwnsPiece(key)) {
+      // Finished: keep only while (a) travel clip or (b) catapult-owned pre-clip.
+      if (piece.finished && !clip && !catapultOwnsPiece(key)) {
         continue;
       }
       out.push({
@@ -984,7 +968,9 @@ const boardPieces = computed((): BoardPiece[] => {
         pieceId: piece.pieceId,
         row: piece.row,
         col: piece.col,
-        remainingTurns: 0,
+        // Finished rows never show trap chrome; own click may clip before sync finished.
+        trapped: piece.finished ? false : piece.trapped,
+        remainingTurns: piece.finished ? 0 : (piece.remainingTurns ?? 0),
         disappearing: Boolean(clip && travelClipIsDisappearing(clip)),
       });
     }

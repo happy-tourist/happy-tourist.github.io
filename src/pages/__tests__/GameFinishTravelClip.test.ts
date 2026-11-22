@@ -71,7 +71,7 @@ function pieceStyleVars(el: { attributes: (name: string) => string | undefined }
   return { prow, pcol, style };
 }
 
-describe('GamePage finish/return travel clip (SC-FINISH-15/35/36/37)', () => {
+describe('GamePage finish/return travel clip (SC-FINISH-15/35/36/37/38)', () => {
   let wrapper: ReturnType<typeof mount> | null = null;
 
   beforeEach(() => {
@@ -172,6 +172,81 @@ describe('GamePage finish/return travel clip (SC-FINISH-15/35/36/37)', () => {
       return (prow === '3' && pcol === '3') || (prow === '4' && pcol === '4');
     });
     expect(finisher).toBeTruthy();
+  });
+
+  it('SC-FINISH-38: own click→center keeps overlay slot when sync finished mid-travel', async () => {
+    const game = seedPlaying([
+      { pieceId: '0', row: 3, col: 3, finished: false, trapped: false },
+      { pieceId: '1', row: 3, col: 5, finished: false, trapped: false },
+    ]);
+    vi.spyOn(game, 'sendMove').mockReturnValue(true);
+
+    wrapper = mountPage();
+    await flushPromises();
+
+    await wrapper.find('.piece').trigger('click');
+    await flushPromises();
+
+    const legalFinish = wrapper.findAll('.tile-center').find((t) => {
+      const s = t.attributes('style') ?? '';
+      return s.includes('grid-column: 5') && s.includes('grid-row: 5');
+    });
+    expect(legalFinish).toBeTruthy();
+    await legalFinish!.trigger('click');
+    await flushPromises();
+
+    // Hold: finisher paints pre-finish cell; record overlay index among .piece siblings.
+    const piecesBefore = wrapper.findAll('.piece');
+    const idxBefore = piecesBefore.findIndex((p) => {
+      const { prow, pcol } = pieceStyleVars(p);
+      return prow === '3' && pcol === '3';
+    });
+    expect(idxBefore).toBeGreaterThanOrEqual(0);
+    // Sibling unfinished must exist so unfinished→finished+clip shelf would reorder without D6.
+    expect(piecesBefore.length).toBeGreaterThanOrEqual(2);
+
+    // Mid-presentation sync finished at center (acting client) — must not migrate shelf / snap.
+    game.$patch({
+      seats: [
+        seatBase([
+          { pieceId: '0', row: 4, col: 4, finished: true, trapped: false },
+          { pieceId: '1', row: 3, col: 5, finished: false, trapped: false },
+        ]),
+      ],
+    });
+    await flushPromises();
+    await nextTick();
+
+    const piecesAfter = wrapper.findAll('.piece');
+    expect(piecesAfter.length).toBeGreaterThanOrEqual(2);
+    const idxAfter = piecesAfter.findIndex((p) => {
+      const { prow, pcol } = pieceStyleVars(p);
+      // Continuous travel paint: still clip from (hold) or to (travel|fade) — not absent.
+      return (prow === '3' && pcol === '3') || (prow === '4' && pcol === '4');
+    });
+    expect(idxAfter).toBe(idxBefore);
+
+    const finisher = piecesAfter[idxAfter]!;
+    expect(finisher.exists()).toBe(true);
+    // Must not be snap-only at center without having painted continuous travel origin path.
+    const { prow, pcol } = pieceStyleVars(finisher);
+    expect((prow === '3' && pcol === '3') || (prow === '4' && pcol === '4')).toBe(true);
+
+    // Hold→travel (clip rAF): same overlay index; paint moves to center `to` without shelf migrate.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+    await flushPromises();
+    await nextTick();
+
+    const piecesTravel = wrapper.findAll('.piece');
+    expect(piecesTravel.length).toBeGreaterThanOrEqual(2);
+    const idxTravel = piecesTravel.findIndex((p) => {
+      const vars = pieceStyleVars(p);
+      return vars.prow === '4' && vars.pcol === '4';
+    });
+    expect(idxTravel).toBe(idxBefore);
+    expect(piecesTravel[idxTravel]!.classes()).toContain('piece--disappearing');
   });
 
   it('SC-FINISH-35: finished mid-join without travel from omits board piece', async () => {
