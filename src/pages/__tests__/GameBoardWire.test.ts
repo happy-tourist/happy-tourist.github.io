@@ -797,7 +797,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     );
   });
 
-  it('SC-FINISH-01/17/19/20: longer finish travel + deferred race (SFC source)', async () => {
+  it('SC-FINISH-01/17/19/20: longer finish travel + presentation clip (SFC source)', async () => {
     const { readFileSync } = await import('node:fs');
     const path = await import('node:path');
     const pageSrc = readFileSync(path.resolve(__dirname, '../GamePage.vue'), 'utf8');
@@ -818,28 +818,23 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
     expect(pageSrc).toMatch(/beginMoveAnimation\(FINISH_TRAVEL_MS\)/);
     expect(pageSrc).not.toMatch(/Math\.max\(MOVE_ANIM_MS\s*\*\s*2,\s*FINISH_TRAVEL_MS\)/);
 
-    // Race: fading before clearing deferred; keep finished while deferred/pinned/visual.
-    expect(pageSrc).toMatch(
-      /disappearingKeys\.value\s*=\s*fading;[\s\S]*?catapultDeferFinishKeys\.value\s*=\s*deferred/,
-    );
-    expect(pageSrc).toMatch(
-      /!fading\.has\(key\)\s*&&\s*!deferredFinish\.has\(key\)\s*&&\s*!pinned\.has\(key\)\s*&&\s*!visual\.has\(key\)/,
-    );
-    // Catapult→center always paints finishAnimFrom then clears after paint (SC-FINISH-19/20).
+    // Presentation-owned travel clip (D1/D3) — not reconstruct finishAnimFrom+rAF / disappearingKeys.
+    expect(pageSrc).toMatch(/from ['"]@\/lib\/travelClip['"]/);
+    expect(pageSrc).toMatch(/function startTravelClip/);
     expect(pageSrc).toMatch(/async function releaseDeferredFinishAfterVanish/);
-    expect(pageSrc).toMatch(/function clearFinishAnimFromKey/);
-    expect(pageSrc).toMatch(
-      /finishAnimFromByKey\.value\s*=\s*nextFrom;[\s\S]*?requestAnimationFrame[\s\S]*?clearFinishAnimFromKey\(pieceKeyStr\)/,
-    );
+    expect(pageSrc).toMatch(/startTravelClip\(pieceKeyStr, 'finish', from, to\)/);
     expect(pageSrc).toMatch(/function shouldFinishTravelAfterVanish/);
-    expect(pageSrc).toMatch(
-      /catapultDeferFinishKeys\.value\.has\(key\)\s*\|\|\s*catapultOwnsPiece\(key\)/,
-    );
-    // SC-FINISH-35: click→center seeds lastKnown + finishAnimFrom; resolveFinishTravelFrom helper.
-    expect(pageSrc).toMatch(/boardActionPreCell\.value/);
-    expect(pageSrc).toMatch(/resolveFinishTravelFrom/);
-    expect(pageSrc).toMatch(/finishAnimFromByKey\.value\s*=\s*nextFrom/);
-    expect(pageSrc).toMatch(/isCenterCell\(row, col\).*lastKnownBoardCellByKey/s);
+    expect(pageSrc).toMatch(/function catapultOwnsPiece/);
+    expect(pageSrc).toMatch(/travelClipByKey\.value\.has\(key\)\s*\|\|\s*catapultOwnsPiece\(key\)/);
+    // Retired reconstruct stack must not return as truth.
+    expect(pageSrc).not.toMatch(/finishAnimFromByKey/);
+    expect(pageSrc).not.toMatch(/disappearingKeys/);
+    expect(pageSrc).not.toMatch(/catapultDeferFinishKeys/);
+    expect(pageSrc).not.toMatch(/resolveFinishTravelFrom/);
+    expect(pageSrc).not.toMatch(/finishTravelFrom/);
+    // SC-FINISH-35: own click→center starts finish clip; lastKnown mirror for observed only.
+    expect(pageSrc).toMatch(/startTravelClip\(key, 'finish', from,/);
+    expect(pageSrc).toMatch(/lastKnownBoardCellByKey/);
     expect(pageSrc).toMatch(/FINISH_TRAVEL_MS\s*\+\s*FINISH_FADE_MS/);
   });
 

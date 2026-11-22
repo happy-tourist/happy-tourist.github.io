@@ -522,7 +522,12 @@ import {
   type ActionableCandidate,
 } from '@/lib/focusActionable';
 import { tileSkinCssVars } from '@/lib/tileSkins';
-import { resolveFinishTravelFrom } from '@/lib/finishTravelFrom';
+import {
+  travelClipIsDisappearing,
+  travelClipPaintCell,
+  type TravelClip,
+  type TravelClipKind,
+} from '@/lib/travelClip';
 
 /** Reconnect grace length (seconds) — matches server / design D1. */
 const GRACE_SECONDS = 30;
@@ -535,7 +540,7 @@ const MOVE_ANIM_MS = 250;
  */
 const PIPELINE_SETTLE_MS = 600;
 /**
- * Enter-center finish slide (move/push/catapult→center) — matches `.piece--disappearing`
+ * Enter-center finish slide (move/catapult→center) — matches `.piece--disappearing`
  * left/top (D13 / SC-FINISH-01/17/19). Ordinary board moves stay on MOVE_ANIM_MS.
  */
 const FINISH_TRAVEL_MS = 550;
@@ -774,7 +779,7 @@ const boardActionPreCell = ref<{ pieceId: string; row: number; col: number } | n
 /** Ignore clicks while own piece travel / rescue approach animates (SC-MOVE-15). */
 const moveAnimating = ref(false);
 /**
- * Intent / gap lock: set before sendMove (and rescue/push/return); bridges
+ * Intent / gap lock: set before sendMove (and rescue/return); bridges
  * intent→send and move→catapult/grille until visual presentation owns busy (D4 / SC-BOARD-27).
  */
 const boardPipelineLock = ref(false);
@@ -782,25 +787,16 @@ let pipelineSettleTimer: ReturnType<typeof setTimeout> | undefined;
 /** Skip first paint transition so pieces do not fly from 0,0. */
 const pieceTransitionsReady = ref(false);
 /**
- * Return-from-finish travel: start cell (nearest center) keyed by pieceKey (SC-FINISH-15).
- * First paint uses this; nextTick clears so CSS slides to ring coords.
+ * Presentation-owned finish/return travel clip (design D1/D4 / SC-FINISH-15/35/36).
+ * Sync `finished`/coords confirm after clip ends — do not reconstruct from rAF clear.
  */
-const returnAnimFromByKey = ref(new Map<string, Cell>());
+const travelClipByKey = ref(new Map<string, TravelClip>());
+/** Timers advancing clip phases / clearing (keyed by pieceKey). */
+const travelClipTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /**
- * Finish travel from last board cell → center (SC-FINISH-01/17/18/35 / D10).
- * Hold `from` until painted, then clear so CSS slides onto center + disappear.
+ * Last non-center board cell per piece — mirror only for observed чужой finish `from` (D2/D3).
+ * Not a paint override.
  */
-const finishAnimFromByKey = ref(new Map<string, Cell>());
-/** Drop one finish-travel pin (silent reject / send fail / travel done / return). */
-function clearFinishAnimFromKey(key: string) {
-  if (!finishAnimFromByKey.value.has(key)) {
-    return;
-  }
-  const cleared = new Map(finishAnimFromByKey.value);
-  cleared.delete(key);
-  finishAnimFromByKey.value = cleared;
-}
-/** Last non-center board cell per piece — used when finish sync jumps to center. */
 const lastKnownBoardCellByKey = ref(new Map<string, Cell>());
 /** Own-marker preset picker open (SC-SAY-07). */
 const sayPickerOpen = ref(false);
@@ -843,8 +839,6 @@ const catapultPinByPieceKey = ref(new Map<string, Cell>());
 const catapultVisualByKey = ref(new Map<string, Cell>());
 /** Skip CSS travel while snapping to pin / intermediate (SC-BOARD-25). */
 const suppressPieceTransitionKeys = ref(new Set<string>());
-/** Finish watch defers travel/fade until catapult vanish (SC-FINISH-19). */
-const catapultDeferFinishKeys = ref(new Set<string>());
 /** True while deferred fling travel runs after vanish. */
 const flingTravelActive = ref(false);
 const catapultDelayTimers = new Set<ReturnType<typeof setTimeout>>();
@@ -870,13 +864,6 @@ let graceTick: ReturnType<typeof setInterval> | undefined;
 
 /** Avoid overlapping remount / soft-fail rejoin attempts. */
 let rejoinInFlight = false;
-
-/**
- * Keys of pieces that just finished — keep on board for slide + fade (SC-FINISH-01).
- * Cleared after FINISH_TRAVEL_MS + FINISH_FADE_MS; mid-join finished pieces never enter here.
- */
-const disappearingKeys = ref<Set<string>>(new Set());
-const finishFadeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Synced removed task keys as a Set for O(1) hole checks. */
 const removedTaskKeySet = computed(() => new Set(game.removedTaskKeys));
@@ -957,18 +944,16 @@ function isStripSlotTrapped(pieceId: string): boolean {
 const hasOwnPieces = computed(() => Boolean(mySeat.value && mySeat.value.pieces.length > 0));
 
 /**
- * Flat board overlay: unfinished + short-lived disappearing finishers.
- * Catapult→center: keep finished piece visible (no fade) while deferred / pinned
- * (SC-BOARD-25 / SC-FINISH-19/20) — `disappearing` only after overlay vanish.
+ * Flat board overlay: unfinished + finished while (a) finish/return travel clip
+ * or (b) catapult-owned pre-clip (D3 / SC-FINISH-36/37).
  */
 const boardPieces = computed((): BoardPiece[] => {
   const out: BoardPiece[] = [];
-  const fading = disappearingKeys.value;
-  const deferredFinish = catapultDeferFinishKeys.value;
-  const pinned = catapultPinByPieceKey.value;
-  const visual = catapultVisualByKey.value;
+  const clips = travelClipByKey.value;
 
   for (const piece of game.unfinishedBoardPieces) {
+    const key = pieceKey(piece.sessionId, piece.pieceId);
+    const clip = clips.get(key);
     out.push({
       sessionId: piece.sessionId,
       touristId: piece.touristId,
@@ -977,6 +962,8 @@ const boardPieces = computed((): BoardPiece[] => {
       col: piece.col,
       trapped: piece.trapped,
       remainingTurns: piece.remainingTurns ?? 0,
+      // Own click may start finish clip before sync marks finished.
+      disappearing: Boolean(clip && travelClipIsDisappearing(clip)),
     });
   }
 
@@ -986,8 +973,9 @@ const boardPieces = computed((): BoardPiece[] => {
         continue;
       }
       const key = pieceKey(seat.sessionId, piece.pieceId);
-      // Keep visible while catapult owns presentation even if finish synced late.
-      if (!fading.has(key) && !deferredFinish.has(key) && !pinned.has(key) && !visual.has(key)) {
+      const clip = clips.get(key);
+      // (a) active travel clip or (b) catapult pin/visual/queue before finish clip.
+      if (!clip && !catapultOwnsPiece(key)) {
         continue;
       }
       out.push({
@@ -997,8 +985,7 @@ const boardPieces = computed((): BoardPiece[] => {
         row: piece.row,
         col: piece.col,
         remainingTurns: 0,
-        // Fade only after deferred catapult vanish releases finish travel.
-        disappearing: fading.has(key) && !deferredFinish.has(key),
+        disappearing: Boolean(clip && travelClipIsDisappearing(clip)),
       });
     }
   }
@@ -1028,10 +1015,7 @@ function hasVisualBoardPresentation(): boolean {
   if (grilleOverlays.value.some((g) => g.phase === 'drop' || g.phase === 'rise')) {
     return true;
   }
-  if (disappearingKeys.value.size > 0) {
-    return true;
-  }
-  if (returnAnimFromByKey.value.size > 0 || finishAnimFromByKey.value.size > 0) {
+  if (travelClipByKey.value.size > 0) {
     return true;
   }
   return false;
@@ -1072,6 +1056,8 @@ function scheduleBoardPipelineSettle() {
 /**
  * Optional silent-reject recover (D3): if piece never left pre-send cell after settle,
  * clear local board-action spent so the player can retry.
+ * Return: pre is the finished center cell — still finished there means reject
+ * (do not store ring target as pre; that false-matches a successful return).
  */
 function maybeRecoverSilentBoardActionReject() {
   const pre = boardActionPreCell.value;
@@ -1079,12 +1065,17 @@ function maybeRecoverSilentBoardActionReject() {
     return;
   }
   const piece = mySeat.value.pieces.find((p) => p.pieceId === pre.pieceId);
-  if (piece && piece.row === pre.row && piece.col === pre.col && !piece.finished) {
-    const key = pieceKey(mySeat.value.sessionId, pre.pieceId);
-    clearFinishAnimFromKey(key);
-    boardActionSpent.value = false;
-    boardActionPreCell.value = null;
+  if (!piece || piece.row !== pre.row || piece.col !== pre.col) {
+    return;
   }
+  // Move/rescue: still unfinished on origin. Return: still finished on center pre.
+  if (piece.finished && !isCenterCell(piece.row, piece.col)) {
+    return;
+  }
+  const key = pieceKey(mySeat.value.sessionId, pre.pieceId);
+  clearTravelClip(key);
+  boardActionSpent.value = false;
+  boardActionPreCell.value = null;
 }
 
 function clearBoardActionSpent() {
@@ -1574,18 +1565,12 @@ function suppressPieceTransition(piece: BoardPiece): boolean {
 
 function pieceStyle(piece: BoardPiece): Record<string, string> {
   const key = pieceKey(piece.sessionId, piece.pieceId);
-  const returnFrom = returnAnimFromByKey.value.get(key);
-  if (returnFrom) {
+  const clip = travelClipByKey.value.get(key);
+  if (clip) {
+    const cell = travelClipPaintCell(clip);
     return {
-      '--prow': String(returnFrom.row),
-      '--pcol': String(returnFrom.col),
-    };
-  }
-  const finishFrom = finishAnimFromByKey.value.get(key);
-  if (finishFrom) {
-    return {
-      '--prow': String(finishFrom.row),
-      '--pcol': String(finishFrom.col),
+      '--prow': String(cell.row),
+      '--pcol': String(cell.col),
     };
   }
   const catapultPin = catapultPinByPieceKey.value.get(key);
@@ -1628,7 +1613,7 @@ function selectOwnPiece(pieceId: string) {
   selectedPieceId.value = pieceId;
 }
 
-/** Lock board chrome for travel (default) or approach+back (rescue/push = 2×). */
+/** Lock board chrome for travel (default) or approach+back (rescue = 2×). */
 function beginMoveAnimation(durationMs: number = MOVE_ANIM_MS) {
   moveAnimating.value = true;
   clearPipelineSettleTimer();
@@ -1647,8 +1632,8 @@ function submitMove(pieceId: string, row: number, col: number) {
     return;
   }
   beginBoardPipelineLock();
-  // D10 / SC-FINISH-35: seed lastKnown + finishAnimFrom before send so first/click→center
-  // paints one frame at origin (cleared on silent reject recover).
+  // D2: own click→center — start finish clip with from = local cell, to = center target.
+  let startedFinishClip = false;
   if (isCenterCell(row, col) && mySeat.value) {
     const piece = mySeat.value.pieces.find((p) => p.pieceId === pieceId && !isFinishedPiece(p));
     if (piece && !isCenterCell(piece.row, piece.col)) {
@@ -1657,15 +1642,13 @@ function submitMove(pieceId: string, row: number, col: number) {
       const nextKnown = new Map(lastKnownBoardCellByKey.value);
       nextKnown.set(key, from);
       lastKnownBoardCellByKey.value = nextKnown;
-      const nextFrom = new Map(finishAnimFromByKey.value);
-      nextFrom.set(key, from);
-      finishAnimFromByKey.value = nextFrom;
+      startedFinishClip = startTravelClip(key, 'finish', from, { row, col });
     }
   }
   // Animate / lock input only when the store actually sent (room + isMyTurn).
   if (!game.sendMove(pieceId, row, col)) {
-    if (mySeat.value) {
-      clearFinishAnimFromKey(pieceKey(mySeat.value.sessionId, pieceId));
+    if (mySeat.value && startedFinishClip) {
+      clearTravelClip(pieceKey(mySeat.value.sessionId, pieceId));
     }
     releaseBoardPipelineLock();
     return;
@@ -1675,7 +1658,7 @@ function submitMove(pieceId: string, row: number, col: number) {
   boardActionSpent.value = true;
   boardActionPreCell.value = pre ? { pieceId, row: pre.row, col: pre.col } : { pieceId, row, col };
   // Keep-focus after non-finishing move (SC-MOVE-46); clear only on center finish.
-  // Center finish: lock busy for FINISH_TRAVEL_MS so slide stays covered before disappearingKeys (D13).
+  // Center finish: lock busy for FINISH_TRAVEL_MS (+ fade covered by travel clip busy).
   if (isCenterCell(row, col)) {
     selectedPieceId.value = null;
     beginMoveAnimation(FINISH_TRAVEL_MS);
@@ -1716,12 +1699,26 @@ function submitReturn(pieceId: string, row: number, col: number) {
     return;
   }
   beginBoardPipelineLock();
+  const to: Cell = { row, col };
+  const from = nearestCenterCell(to);
+  const key = mySeat.value ? pieceKey(mySeat.value.sessionId, pieceId) : null;
+  // D2: own return — start clip before sync so ring does not snap without travel.
+  if (key) {
+    startTravelClip(key, 'return', from, to);
+  }
   if (!game.sendReturnFromFinish(pieceId, row, col)) {
+    if (key) {
+      clearTravelClip(key);
+    }
     releaseBoardPipelineLock();
     return;
   }
   boardActionSpent.value = true;
-  boardActionPreCell.value = { pieceId, row, col };
+  // Pre = finished center (origin), not ring target — silent-reject recover.
+  const finished = mySeat.value?.pieces.find((p) => p.pieceId === pieceId && p.finished);
+  boardActionPreCell.value = finished
+    ? { pieceId, row: finished.row, col: finished.col }
+    : { pieceId, row: from.row, col: from.col };
   returningPieceId.value = null;
   beginMoveAnimation();
 }
@@ -2204,7 +2201,7 @@ function isPieceFinishedInSync(key: string): boolean {
   return Boolean(piece?.finished);
 }
 
-/** Catapult queue/pin owns this piece's presentation (SC-FINISH-20). */
+/** Catapult queue/pin owns this piece's presentation (SC-FINISH-20/37). */
 function catapultOwnsPiece(key: string): boolean {
   if (catapultPinByPieceKey.value.has(key) || catapultVisualByKey.value.has(key)) {
     return true;
@@ -2220,7 +2217,7 @@ function shouldFinishTravelAfterVanish(item: CatapultQueueItem): boolean {
   if (!item.pieceKey || item.broken) {
     return false;
   }
-  if (item.finishes || catapultDeferFinishKeys.value.has(item.pieceKey)) {
+  if (item.finishes) {
     return true;
   }
   if (isPieceFinishedInSync(item.pieceKey)) {
@@ -2231,6 +2228,134 @@ function shouldFinishTravelAfterVanish(item: CatapultQueueItem): boolean {
   }
   const sync = syncCellForPieceKey(item.pieceKey);
   return Boolean(sync && isCenterCell(sync.row, sync.col));
+}
+
+function patchTravelClip(key: string, clip: TravelClip) {
+  const next = new Map(travelClipByKey.value);
+  next.set(key, clip);
+  travelClipByKey.value = next;
+}
+
+function clearTravelClipTimers(key: string) {
+  const timer = travelClipTimers.get(key);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    travelClipTimers.delete(key);
+  }
+}
+
+/** Drop one travel clip (silent reject / send fail / travel done / return cancel). */
+function clearTravelClip(key: string) {
+  clearTravelClipTimers(key);
+  if (!travelClipByKey.value.has(key)) {
+    return;
+  }
+  const next = new Map(travelClipByKey.value);
+  next.delete(key);
+  travelClipByKey.value = next;
+  removeSuppressTransition(key);
+}
+
+/**
+ * Return clip must outlive late unfinished sync (SC-FINISH-15): clearing while
+ * still finished drops the piece from boardPieces until sync, then re-starts travel.
+ */
+const RETURN_CLIP_SYNC_GRACE_MS = 2000;
+
+function clearReturnClipWhenUnfinished(key: string, deadlineMs: number) {
+  const clip = travelClipByKey.value.get(key);
+  if (!clip || clip.kind !== 'return') {
+    return;
+  }
+  if (isPieceFinishedInSync(key) && Date.now() < deadlineMs) {
+    travelClipTimers.set(
+      key,
+      setTimeout(() => {
+        travelClipTimers.delete(key);
+        clearReturnClipWhenUnfinished(key, deadlineMs);
+      }, 50),
+    );
+    return;
+  }
+  clearTravelClip(key);
+}
+
+/**
+ * Start presentation-owned travel clip (D1/D2). Idempotent per pieceKey while alive.
+ * Finish: hold → travel → fade; return: hold → travel (no finish-fade).
+ */
+function startTravelClip(key: string, kind: TravelClipKind, from: Cell, to: Cell): boolean {
+  if (travelClipByKey.value.has(key)) {
+    return false;
+  }
+  patchTravelClip(key, { kind, from: { ...from }, to: { ...to }, phase: 'hold' });
+  addSuppressTransition(key);
+
+  void (async () => {
+    await nextTick();
+    let clip = travelClipByKey.value.get(key);
+    if (!clip || clip.phase !== 'hold') {
+      return;
+    }
+    // Commit hold paint at `from` (layout + one frame), then advance by clip phase.
+    void document.body.offsetHeight;
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+    clip = travelClipByKey.value.get(key);
+    if (!clip || clip.phase !== 'hold') {
+      return;
+    }
+    removeSuppressTransition(key);
+    patchTravelClip(key, { ...clip, phase: 'travel' });
+
+    if (kind === 'finish') {
+      travelClipTimers.set(
+        key,
+        setTimeout(() => {
+          travelClipTimers.delete(key);
+          const traveling = travelClipByKey.value.get(key);
+          if (!traveling || traveling.phase !== 'travel') {
+            return;
+          }
+          patchTravelClip(key, { ...traveling, phase: 'fade' });
+          travelClipTimers.set(
+            key,
+            setTimeout(() => {
+              travelClipTimers.delete(key);
+              clearTravelClip(key);
+            }, FINISH_FADE_MS),
+          );
+        }, FINISH_TRAVEL_MS),
+      );
+      return;
+    }
+
+    travelClipTimers.set(
+      key,
+      setTimeout(() => {
+        travelClipTimers.delete(key);
+        clearReturnClipWhenUnfinished(key, Date.now() + RETURN_CLIP_SYNC_GRACE_MS);
+      }, MOVE_ANIM_MS),
+    );
+  })();
+  return true;
+}
+
+/** Center dest for finish clip after catapult vanish (sync or queue travelTo). */
+function resolveFinishClipTo(pieceKeyStr: string, fallback: Cell | null): Cell | null {
+  const sync = syncCellForPieceKey(pieceKeyStr);
+  if (sync && isCenterCell(sync.row, sync.col)) {
+    return sync;
+  }
+  if (fallback && isCenterCell(fallback.row, fallback.col)) {
+    return fallback;
+  }
+  const centers = CENTER_CELLS.value;
+  if (centers.length > 0) {
+    return { row: centers[0]!.row, col: centers[0]!.col };
+  }
+  return fallback;
 }
 
 function setCatapultPin(key: string, cell: Cell) {
@@ -2276,13 +2401,6 @@ function removeSuppressTransition(key: string) {
   const next = new Set(suppressPieceTransitionKeys.value);
   next.delete(key);
   suppressPieceTransitionKeys.value = next;
-}
-
-/** Mark finish travel owned by catapult queue — do not fade yet (SC-FINISH-19). */
-function markDeferredFinish(key: string) {
-  const next = new Set(catapultDeferFinishKeys.value);
-  next.add(key);
-  catapultDeferFinishKeys.value = next;
 }
 
 function resolveFlingPieceKey(
@@ -2533,10 +2651,6 @@ function enqueueCatapultPresentations(
     const itemFinishes =
       pk !== null && finishes && i === orderedNew.length - 1 && !broken && Boolean(travelTo);
 
-    if (itemFinishes && pk) {
-      markDeferredFinish(pk);
-    }
-
     // First hop may need synthesized land; later chain hops land via prior fling travel.
     const landFrom = i === 0 ? chainLandFrom : null;
 
@@ -2641,10 +2755,7 @@ async function runCatapultPresentation(item: CatapultQueueItem) {
   // After vanish: always finish travel if finished/center (even when finish sync
   // arrived after reveal enqueue — SC-FINISH-20 / SC-BOARD-31).
   if (item.pieceKey && shouldFinishTravelAfterVanish(item)) {
-    markDeferredFinish(item.pieceKey);
-    clearCatapultPin(item.pieceKey);
-    clearCatapultVisual(item.pieceKey);
-    await releaseDeferredFinishAfterVanish(item.pieceKey, catapultCell);
+    await releaseDeferredFinishAfterVanish(item.pieceKey, catapultCell, item.travelTo);
   } else if (item.pieceKey && item.travelTo) {
     await runDeferredFlingTravel(item);
   } else if (item.pieceKey) {
@@ -2663,10 +2774,7 @@ async function runDeferredFlingTravel(item: CatapultQueueItem) {
 
   // Re-check finish/center at travel time (paced finish may land mid-overlay).
   if (shouldFinishTravelAfterVanish(item)) {
-    markDeferredFinish(item.pieceKey);
-    clearCatapultPin(item.pieceKey);
-    clearCatapultVisual(item.pieceKey);
-    await releaseDeferredFinishAfterVanish(item.pieceKey, from);
+    await releaseDeferredFinishAfterVanish(item.pieceKey, from, to);
     flingTravelActive.value = false;
     return;
   }
@@ -2691,47 +2799,27 @@ async function runDeferredFlingTravel(item: CatapultQueueItem) {
   flingTravelActive.value = false;
 }
 
-async function releaseDeferredFinishAfterVanish(pieceKeyStr: string, from: Cell) {
-  // Add fading before clearing deferred so boardPieces never drops the finisher
-  // for a tick (finished ∧ !deferred ∧ !pinned ∧ !fading → invisible).
-  const fading = new Set(disappearingKeys.value);
-  fading.add(pieceKeyStr);
-  disappearingKeys.value = fading;
-
-  const deferred = new Set(catapultDeferFinishKeys.value);
-  deferred.delete(pieceKeyStr);
-  catapultDeferFinishKeys.value = deferred;
-
-  const nextFrom = new Map(finishAnimFromByKey.value);
-  nextFrom.set(pieceKeyStr, from);
-  finishAnimFromByKey.value = nextFrom;
-
-  await nextTick();
-  void document.body.offsetHeight;
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-
-  clearFinishAnimFromKey(pieceKeyStr);
-
-  const existing = finishFadeTimers.get(pieceKeyStr);
-  if (existing !== undefined) {
-    clearTimeout(existing);
+/**
+ * Catapult→center: start finish clip from catapult cell after vanish (D2 / SC-FINISH-19/20).
+ * Start clip before clearing pin so finished stays visible (SC-FINISH-36/37).
+ */
+async function releaseDeferredFinishAfterVanish(
+  pieceKeyStr: string,
+  from: Cell,
+  travelTo: Cell | null,
+) {
+  const to = resolveFinishClipTo(pieceKeyStr, travelTo);
+  const started = to ? startTravelClip(pieceKeyStr, 'finish', from, to) : false;
+  // Clear pin only when clip owns visibility (or already had a clip). Otherwise keep
+  // catapult ownership so early finished does not drop (SC-FINISH-37).
+  if (started || travelClipByKey.value.has(pieceKeyStr)) {
+    clearCatapultPin(pieceKeyStr);
+    clearCatapultVisual(pieceKeyStr);
   }
-  await new Promise<void>((resolve) => {
-    finishFadeTimers.set(
-      pieceKeyStr,
-      setTimeout(() => {
-        finishFadeTimers.delete(pieceKeyStr);
-        const next = new Set(disappearingKeys.value);
-        next.delete(pieceKeyStr);
-        disappearingKeys.value = next;
-        resolve();
-      }, FINISH_TRAVEL_MS + FINISH_FADE_MS),
-    );
-  });
+  await catapultDelay(FINISH_TRAVEL_MS + FINISH_FADE_MS + 50);
+  // Queue hop done — drop leftover pin if clip never started (no center dest).
+  clearCatapultPin(pieceKeyStr);
+  clearCatapultVisual(pieceKeyStr);
 }
 
 /**
@@ -2830,8 +2918,7 @@ watch(
 );
 
 /**
- * Track last unfinished board cell before finish sync (push/move → center; D10/D11).
- * Retain keys after finish so the finish watch can paint `from`.
+ * Track last unfinished non-center board cell — mirror only for observed finish `from` (D2/D3).
  * Never record a center cell as `from` (sync may land there before finished).
  */
 watch(
@@ -2850,20 +2937,14 @@ watch(
       next.set(p.key, { row: p.row, col: p.col });
     }
     lastKnownBoardCellByKey.value = next;
-    // Keep finishAnimFrom for unfinished keys: submitMove seeds it before the server
-    // marks finished (SC-FINISH-35 / D10). turnUntil / seats remirrors must not wipe that
-    // optimistic pin; silent-reject recover + return path + finish rAF clear it instead.
   },
   { flush: 'sync', immediate: true },
 );
 
 /**
- * Newly finished pieces: keep same DOM key for slide to center, then fade out (SC-FINISH-01/18).
- * Push/move→center: one painted frame at last-known pre-finish cell (SC-MOVE-76 / SC-FINISH-17 / D10–D11).
- * Pieces leaving finished → return travel from nearest center (SC-FINISH-15).
- * Catapult fling→center: deferred until overlay vanish (SC-FINISH-19/20 / SC-BOARD-23/31).
- * flush sync so disappearingKeys / returnAnimFrom / finishAnimFrom update before boardPieces re-render.
- * Initial sync skipped — already-finished / mid-join pieces stay as-is.
+ * Observed finish/return transitions → start travel clip (D2).
+ * Own click/return and catapult-after-vanish also start clips; start is idempotent.
+ * Catapult-owned pieces wait until vanish (SC-FINISH-19/20/37). Mid-join omit.
  */
 watch(
   () =>
@@ -2878,77 +2959,40 @@ watch(
     const nextFinished = new Set(finishedKeys);
 
     for (const key of finishedKeys) {
-      if (prev.has(key) || disappearingKeys.value.has(key)) {
+      if (prev.has(key)) {
+        continue;
+      }
+      // Already started (own click) or catapult pre-clip owns visibility until vanish.
+      if (travelClipByKey.value.has(key) || catapultOwnsPiece(key)) {
         continue;
       }
 
-      // Catapult queue owns finish travel after vanish — no fade yet (SC-FINISH-19/20).
-      if (catapultDeferFinishKeys.value.has(key) || catapultOwnsPiece(key)) {
-        markDeferredFinish(key);
+      const lastKnown = lastKnownBoardCellByKey.value.get(key);
+      if (!lastKnown || isCenterCell(lastKnown.row, lastKnown.col)) {
+        // Mid-join / unknown from — omit travel (D2).
         continue;
       }
-
-      const next = new Set(disappearingKeys.value);
-      next.add(key);
-      disappearingKeys.value = next;
-
-      // Paint `from` when last-known ≠ center; hold until real paint (D10 / SC-FINISH-35).
-      // Fallback: own click-to-center seeds boardActionPreCell / submitMove finishAnimFrom.
-      const from = resolveFinishTravelFrom({
-        lastKnown: lastKnownBoardCellByKey.value.get(key),
-        boardActionPre: boardActionPreCell.value,
-        pieceKey: key,
-        selfSessionId: mySeat.value?.sessionId,
-        isCenterCell,
-        pieceKeyOf: pieceKey,
-      });
-      if (from) {
-        const nextFrom = new Map(finishAnimFromByKey.value);
-        nextFrom.set(key, from);
-        finishAnimFromByKey.value = nextFrom;
-        void nextTick(() => {
-          // Force layout so the `from` frame is committed before we clear (match catapult path).
-          void document.body.offsetHeight;
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              clearFinishAnimFromKey(key);
-            });
-          });
-        });
+      const to = syncCellForPieceKey(key);
+      if (!to || !isCenterCell(to.row, to.col)) {
+        continue;
       }
-
-      const existing = finishFadeTimers.get(key);
-      if (existing !== undefined) {
-        clearTimeout(existing);
-      }
-      finishFadeTimers.set(
-        key,
-        setTimeout(() => {
-          finishFadeTimers.delete(key);
-          const cleared = new Set(disappearingKeys.value);
-          cleared.delete(key);
-          disappearingKeys.value = cleared;
-        }, FINISH_TRAVEL_MS + FINISH_FADE_MS),
-      );
+      startTravelClip(key, 'finish', lastKnown, to);
     }
 
-    // Return-from-finish: piece left finished set → animate from nearest center (all clients).
+    // Return-from-finish: piece left finished set → travel nearest center → ring (SC-FINISH-15).
     for (const key of prev) {
       if (nextFinished.has(key)) {
         continue;
       }
-      // Cancel any in-flight finish disappear for this piece.
-      const fadeTimer = finishFadeTimers.get(key);
-      if (fadeTimer !== undefined) {
-        clearTimeout(fadeTimer);
-        finishFadeTimers.delete(key);
+      const existing = travelClipByKey.value.get(key);
+      // Own/optimistic return clip already covering travel — leave it.
+      if (existing?.kind === 'return') {
+        continue;
       }
-      if (disappearingKeys.value.has(key)) {
-        const cleared = new Set(disappearingKeys.value);
-        cleared.delete(key);
-        disappearingKeys.value = cleared;
+      // Cancel in-flight finish clip if returning mid-travel.
+      if (existing?.kind === 'finish') {
+        clearTravelClip(key);
       }
-      clearFinishAnimFromKey(key);
 
       const colon = key.indexOf(':');
       if (colon <= 0) {
@@ -2961,19 +3005,9 @@ watch(
       if (!piece) {
         continue;
       }
-      const from = nearestCenterCell({ row: piece.row, col: piece.col });
-      const nextFrom = new Map(returnAnimFromByKey.value);
-      nextFrom.set(key, from);
-      returnAnimFromByKey.value = nextFrom;
-      // Paint at nearest center first, then slide to ring (SC-FINISH-15).
-      void nextTick(() => {
-        requestAnimationFrame(() => {
-          const cleared = new Map(returnAnimFromByKey.value);
-          if (cleared.delete(key)) {
-            returnAnimFromByKey.value = cleared;
-          }
-        });
-      });
+      const to: Cell = { row: piece.row, col: piece.col };
+      const from = nearestCenterCell(to);
+      startTravelClip(key, 'return', from, to);
     }
 
     // Drop selection if the selected piece just finished (SC-MOVE-24).
@@ -3054,10 +3088,10 @@ onUnmounted(() => {
   }
   clearPipelineSettleTimer();
   boardPipelineLock.value = false;
-  for (const timer of finishFadeTimers.values()) {
-    clearTimeout(timer);
+  for (const key of [...travelClipTimers.keys()]) {
+    clearTravelClipTimers(key);
   }
-  finishFadeTimers.clear();
+  travelClipByKey.value = new Map();
   for (const timer of knowledgeFallTimers.values()) {
     clearTimeout(timer);
   }
@@ -3081,7 +3115,6 @@ onUnmounted(() => {
   catapultPinByPieceKey.value = new Map();
   catapultVisualByKey.value = new Map();
   suppressPieceTransitionKeys.value = new Set();
-  catapultDeferFinishKeys.value = new Set();
   flingTravelActive.value = false;
   pendingGrilleDropKeys.value = new Set();
   rescueAnimOverride.value = null;
