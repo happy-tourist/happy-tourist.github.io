@@ -161,6 +161,14 @@
               class="presence-progress presence-progress--inner"
             />
             <img class="presence-avatar" :src="touristSrc(marker.touristId)" alt="" />
+            <!-- Bot seat caption under avatar (SC-PRESENCE-60 / D4). -->
+            <span
+              v-if="marker.isBot"
+              class="presence-ai-caption text-caption text-muted"
+              data-test-id="presence-ai-caption"
+            >
+              {{ $t('game.presenceAi') }}
+            </span>
 
             <!-- Top markers: bubbles stack down toward board (SC-SAY-11). -->
             <div class="say-bubbles say-bubbles--top" aria-live="polite">
@@ -385,6 +393,14 @@
                   class="presence-progress presence-progress--inner"
                 />
                 <img class="presence-avatar" :src="touristSrc(item.marker.touristId)" alt="" />
+                <!-- Bot seat caption under avatar (SC-PRESENCE-60 / D4) — same rules if mirrored in HUD. -->
+                <span
+                  v-if="item.marker.isBot"
+                  class="presence-ai-caption text-caption text-muted"
+                  data-test-id="presence-ai-caption"
+                >
+                  {{ $t('game.presenceAi') }}
+                </span>
 
                 <!-- Own bottom: bubbles stack up toward board (SC-SAY-12). -->
                 <div class="say-bubbles say-bubbles--bottom" aria-live="polite">
@@ -653,6 +669,8 @@ interface PresenceMarker {
   isCurrentTurn: boolean;
   /** Finish place; 0 = none (SC-PRESENCE-06/07). */
   finishPlace: number;
+  /** Synced AI seat — caption under avatar (SC-PRESENCE-60 / D4). */
+  isBot: boolean;
 }
 
 /** Bottom HUD items: seated own marker + optional strip (SC-PRESENCE-02/22). */
@@ -1839,6 +1857,7 @@ function toMarker(seat: GameSeat): PresenceMarker {
     isCurrentTurn:
       Boolean(game.currentTurnSessionId) && seat.sessionId === game.currentTurnSessionId,
     finishPlace: seat.finishPlace,
+    isBot: seat.isBot,
   };
 }
 
@@ -3141,7 +3160,8 @@ onUnmounted(() => {
   gap: 48px;
   width: 100%;
   min-height: 96px;
-  margin-bottom: 8px;
+  /* Reserve space under marker for bot «AI» caption (SC-PRESENCE-60; absolute top:100%). */
+  margin-bottom: 22px;
   overflow: visible;
   pointer-events: none;
 }
@@ -3294,6 +3314,19 @@ body.body--dark .knowledge-counter {
   width: 96px;
   height: 96px;
   flex-shrink: 0;
+}
+
+/* Bot «AI» caption under avatar (SC-PRESENCE-60 / D4). */
+.presence-ai-caption {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 2px;
+  white-space: nowrap;
+  z-index: 2;
+  pointer-events: none;
+  line-height: 1.2;
 }
 
 .presence-progress--outer {

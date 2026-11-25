@@ -171,6 +171,10 @@ const stubs = {
       </div>
     `,
   },
+  'q-icon': {
+    props: ['name', 'size'],
+    template: '<i class="q-icon-stub" :data-name="name" :data-icon="name" />',
+  },
   'q-option-group': {
     props: ['modelValue', 'options', 'type', 'disable'],
     emits: ['update:modelValue'],
@@ -182,6 +186,7 @@ const stubs = {
           :data-pack="opt.packTitle"
           :data-set="opt.setLabel"
           :data-set-n="opt.setOrdinal"
+          :data-icon="opt.icon"
         >
           <input
             v-if="type === 'checkbox'"
@@ -196,14 +201,24 @@ const stubs = {
             type="radio"
             :value="opt.value"
             :checked="modelValue === opt.value"
-            :data-test-id="'seat-' + opt.value"
+            :data-test-id="radioTestId(opt)"
+            :data-icon="opt.icon"
             @change="$emit('update:modelValue', opt.value)"
           />
-          <span>{{ opt.label }}</span>
+          <slot name="label" v-bind="opt">
+            <span>{{ opt.label }}</span>
+          </slot>
         </label>
       </div>
     `,
     methods: {
+      radioTestId(opt: { value: string | number; icon?: string }) {
+        const self = this as unknown as { $attrs: Record<string, unknown> };
+        if (self.$attrs['data-test-id'] === 'lobby-create-opponent-mode') {
+          return 'opponent-' + String(opt.value);
+        }
+        return 'seat-' + String(opt.value);
+      },
       onCheck(value: string, e: Event) {
         const self = this as unknown as {
           modelValue: unknown;
@@ -509,11 +524,101 @@ describe('lobby create & listing wire (SC-LOBBY-21…31)', () => {
       packId: 'pack-p',
       taskSetIds: ['s1'],
       maxSeats: 3,
+      opponentMode: 'people',
     });
     const createArg = gameState.createGame.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(createArg).not.toHaveProperty('grilleDensity');
     expect(createArg).not.toHaveProperty('catapultDensity');
     expect(routerPush).toHaveBeenCalledWith({ name: 'game', params: { roomId: 'room-new' } });
+  });
+
+  it('SC-LOBBY-50: create modal shows people vs AI radio after maxSeats (person/smart_toy; default people)', async () => {
+    const messages = (await import('@/i18n/en-US')).default;
+    expect(messages.lobby.opponentMode).toBe('Соперник');
+    expect(messages.lobby.opponentPeople).toBe('Люди');
+    expect(messages.lobby.opponentAi).toBe('AI');
+    expect(lobbyPageSrc).toMatch(/icon:\s*'person'/);
+    expect(lobbyPageSrc).toMatch(/icon:\s*'smart_toy'/);
+    // Icons must be in #label (QOptionGroup ignores options[].icon).
+    expect(lobbyPageSrc).toMatch(/#label[\s\S]*?q-icon[\s\S]*?opt\.icon/);
+    expect(lobbyPageSrc).toMatch(/lobby-create-max-seats[\s\S]*?lobby-create-opponent-mode/);
+
+    await openCreate();
+    expect(wrapper!.find('[data-test-id="lobby-create-opponent-mode"]').exists()).toBe(false);
+
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+
+    const opponent = wrapper!.get('[data-test-id="lobby-create-opponent-mode"]');
+    expect(opponent.attributes('data-test-id')).toBe('lobby-create-opponent-mode');
+    const people = wrapper!.get('[data-test-id="opponent-people"]');
+    const ai = wrapper!.get('[data-test-id="opponent-ai"]');
+    expect(people.attributes('data-icon')).toBe('person');
+    expect(ai.attributes('data-icon')).toBe('smart_toy');
+    // Visible Material icons via #label → q-icon (SC-LOBBY-50).
+    expect(opponent.findAll('[data-name="person"]')).toHaveLength(1);
+    expect(opponent.findAll('[data-name="smart_toy"]')).toHaveLength(1);
+    expect((people.element as HTMLInputElement).checked).toBe(true);
+    expect((ai.element as HTMLInputElement).checked).toBe(false);
+
+    await ai.setValue(true);
+    await flushPromises();
+    expect((ai.element as HTMLInputElement).checked).toBe(true);
+    expect((people.element as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('SC-LOBBY-51: confirm create sends opponentMode ai with maxSeats 3', async () => {
+    await openCreate();
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+    await wrapper!.get('[data-test-id="seat-3"]').setValue(true);
+    await wrapper!.get('[data-test-id="opponent-ai"]').setValue(true);
+    await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
+    await flushPromises();
+    await wrapper!.get('[data-test-id="check-s1"]').setValue(true);
+    await flushPromises();
+
+    await wrapper!.get('[data-test-id="lobby-create-confirm"]').trigger('click');
+    await flushPromises();
+
+    expect(gameState.createGame).toHaveBeenCalledWith({
+      mapId: 'map-m',
+      packId: 'pack-p',
+      taskSetIds: ['s1'],
+      maxSeats: 3,
+      opponentMode: 'ai',
+    });
+    expect(routerPush).toHaveBeenCalledWith({ name: 'game', params: { roomId: 'room-new' } });
+  });
+
+  it('SC-LOBBY-52: maxSeats 1 + AI still sends opponentMode ai (no client coerce)', async () => {
+    await openCreate();
+    await wrapper!.get('[data-test-id="opt-map-m"]').trigger('click');
+    await flushPromises();
+    await wrapper!.get('[data-test-id="seat-1"]').setValue(true);
+    await wrapper!.get('[data-test-id="opponent-ai"]').setValue(true);
+    await flushPromises();
+    // Radio stays available at maxSeats===1.
+    expect(wrapper!.find('[data-test-id="lobby-create-opponent-mode"]').exists()).toBe(true);
+    expect(
+      (wrapper!.get('[data-test-id="opponent-ai"]').element as HTMLInputElement).disabled,
+    ).toBe(false);
+
+    await wrapper!.get('[data-test-id="opt-pack-p"]').trigger('click');
+    await flushPromises();
+    await wrapper!.get('[data-test-id="check-s1"]').setValue(true);
+    await flushPromises();
+
+    await wrapper!.get('[data-test-id="lobby-create-confirm"]').trigger('click');
+    await flushPromises();
+
+    expect(gameState.createGame).toHaveBeenCalledWith({
+      mapId: 'map-m',
+      packId: 'pack-p',
+      taskSetIds: ['s1'],
+      maxSeats: 1,
+      opponentMode: 'ai',
+    });
   });
 
   it('SC-LOBBY-27: confirm without task set does not create a room', async () => {

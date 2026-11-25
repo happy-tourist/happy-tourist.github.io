@@ -52,13 +52,18 @@ export interface GameRoomMeta {
 }
 
 /** Create options — map + pack/sets + chosen maxSeats ≤ map.players (D2).
- * Trap seed is fixed server-side (15% grille / 20% catapult); no client density (SC-LOBBY-40/41). */
+ * Trap seed is fixed server-side (15% grille / 20% catapult); no client density (SC-LOBBY-40/41).
+ * `opponentMode` always sent; server coerces effective AI only when ai ∧ maxSeats≥2 (SC-LOBBY-50…52). */
+export type OpponentMode = 'people' | 'ai';
+
 export interface CreateGameOptions {
   mapId: string;
   packId: string;
   taskSetIds: string[];
   /** Chosen seats 1…map.players; server defaults to min(2, map.players) if omitted. */
   maxSeats: number;
+  /** People vs AI; client does not coerce when maxSeats===1 (SC-LOBBY-51/52). */
+  opponentMode: OpponentMode;
 }
 
 /** Mirrored piece from synced Seat.pieces (keyed by seat-local piece id `"0"`…). */
@@ -93,6 +98,8 @@ export interface GameSeat {
   finishPlace: number;
   /** Solo turn budget elapsed; moves rejected until leave (game/move). */
   timeExpired: boolean;
+  /** Synced AI seat flag — presence caption «AI» (SC-PRESENCE-60 / D4). */
+  isBot: boolean;
 }
 
 /** Flat unfinished piece for board overlay (SC-PIECE-09 / SC-FINISH-01). */
@@ -258,6 +265,8 @@ type SeatSync = {
   ready?: boolean;
   finishPlace?: number;
   timeExpired?: boolean;
+  /** Synced AI seat (SC-PRESENCE-60 / D4). */
+  isBot?: boolean;
   pieces?: {
     forEach: (cb: (piece: PieceSync, pieceId: string) => void) => void;
   };
@@ -1177,6 +1186,7 @@ export const useGameStore = defineStore('game', {
           ready: Boolean(seat.ready),
           finishPlace: Number(seat.finishPlace ?? 0) || 0,
           timeExpired: Boolean(seat.timeExpired),
+          isBot: Boolean(seat.isBot),
         });
       });
 

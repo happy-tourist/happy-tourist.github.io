@@ -61,6 +61,7 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
           ready: false,
           finishPlace: 0,
           timeExpired: false,
+          isBot: false,
           pieces,
         },
       ],
@@ -140,6 +141,7 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
         ready: false,
         finishPlace: 0,
         timeExpired: false,
+        isBot: false,
       },
     ];
     game.openPeek = {
@@ -187,6 +189,7 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
           ready: false,
           finishPlace: 0,
           timeExpired: false,
+          isBot: false,
           pieces,
         },
       ],
@@ -246,6 +249,7 @@ describe('game store board/peek/pieces (SC-BOARD-42/46, SC-PIECE-51/52)', () => 
         ready: false,
         finishPlace: 0,
         timeExpired: false,
+        isBot: false,
       },
     ];
 

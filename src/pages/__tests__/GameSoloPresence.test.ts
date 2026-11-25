@@ -34,6 +34,7 @@ function baseSeat(pieces: GameSeat['pieces'], sessionId = 's1', touristId = 1): 
     ready: false,
     finishPlace: 0,
     timeExpired: false,
+    isBot: false,
   };
 }
 

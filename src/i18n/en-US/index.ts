@@ -88,6 +88,10 @@ export default {
     mapRequired: 'Выберите карту',
     mapCapacity: '{players}×{tourists}',
     maxSeats: 'Число мест',
+    /** People vs AI opponent mode (SC-LOBBY-50; after maxSeats). */
+    opponentMode: 'Соперник',
+    opponentPeople: 'Люди',
+    opponentAi: 'AI',
     pack: 'Набор карточек',
     packRequired: 'Выберите набор',
     taskSets: 'Наборы заданий',
@@ -690,5 +694,7 @@ export default {
     allJailWarningModalOk: 'ОК',
     /** Room-wide all-jail turn skip toast (SC-PRESENCE-57 / D7). */
     allJailSkipToast: 'Все туристы в решётке — ход пропущен',
+    /** Presence caption under bot seat avatar (SC-PRESENCE-60 / D4). */
+    presenceAi: 'AI',
   },
 };

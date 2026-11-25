@@ -39,6 +39,7 @@ const createOptions: CreateGameOptions = {
   packId: 'p1',
   taskSetIds: ['ts1'],
   maxSeats: 2,
+  opponentMode: 'people',
 };
 
 describe('game store lobby enter (SC-LOBBY-05 / SC-LOBBY-37)', () => {

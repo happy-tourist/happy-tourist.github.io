@@ -34,6 +34,7 @@ function seatBase(pieces: GameSeat['pieces']): GameSeat {
     ready: false,
     finishPlace: 0,
     timeExpired: false,
+    isBot: false,
   };
 }
 

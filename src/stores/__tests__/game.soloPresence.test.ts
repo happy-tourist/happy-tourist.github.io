@@ -14,6 +14,7 @@ function seat(partial: Partial<GameSeat> & Pick<GameSeat, 'sessionId'>): GameSea
     ready: partial.ready ?? false,
     finishPlace: partial.finishPlace ?? 0,
     timeExpired: partial.timeExpired ?? false,
+    isBot: partial.isBot ?? false,
   };
 }
 

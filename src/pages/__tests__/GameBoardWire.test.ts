@@ -39,6 +39,7 @@ function seatWithPieces(count: number): GameSeat {
     ready: false,
     finishPlace: 0,
     timeExpired: false,
+    isBot: false,
   };
 }
 
@@ -519,6 +520,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
           ready: false,
           finishPlace: 0,
           timeExpired: false,
+          isBot: false,
         },
       ],
       holdingGrilleKeys: ['3,3'],
@@ -588,6 +590,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
           ready: false,
           finishPlace: 0,
           timeExpired: false,
+          isBot: false,
         },
       ],
       holdingGrilleKeys: ['3,3'],
@@ -927,6 +930,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
             ready: false,
             finishPlace: 0,
             timeExpired: false,
+            isBot: false,
           },
         ],
         holdingGrilleKeys: ['3,3'],
@@ -957,6 +961,7 @@ describe('GamePage board / peek / strip (SC-BOARD-42/46/49/50…54, SC-PIECE-52)
             ready: false,
             finishPlace: 0,
             timeExpired: false,
+            isBot: false,
           },
         ],
         holdingGrilleKeys: [],

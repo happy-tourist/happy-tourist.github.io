@@ -41,6 +41,7 @@ function baseSeat(pieces: GameSeat['pieces'], sessionId = 's1', touristId = 1): 
     ready: false,
     finishPlace: 0,
     timeExpired: false,
+    isBot: false,
   };
 }
 
@@ -72,6 +73,7 @@ function seedPlaying(opts: {
       ready: false,
       finishPlace: 0,
       timeExpired: false,
+      isBot: false,
     },
   ];
   game.$patch({
@@ -277,6 +279,7 @@ describe('GamePage focus @3 + knowledge HUD (SC-PRESENCE-30…33/37/50…56)', (
           ready: false,
           finishPlace: 0,
           timeExpired: false,
+          isBot: false,
         },
       ],
     });

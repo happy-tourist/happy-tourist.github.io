@@ -181,6 +181,30 @@
           />
         </q-card-section>
 
+        <q-card-section v-if="selectedMap" class="q-pt-none">
+          <div class="text-subtitle2 q-mb-sm">{{ $t('lobby.opponentMode') }}</div>
+          <!--
+            QOptionGroup does not map options[].icon — render Material icons via
+            #label (SC-LOBBY-50 / D2: person / smart_toy).
+          -->
+          <q-option-group
+            v-model="createOpponentMode"
+            type="radio"
+            color="primary"
+            data-test-id="lobby-create-opponent-mode"
+            :options="opponentModeOptions"
+            inline
+            :disable="creating"
+          >
+            <template #label="opt">
+              <span class="row items-center no-wrap q-gutter-xs">
+                <q-icon :name="opt.icon" size="sm" :data-icon="opt.icon" />
+                <span>{{ opt.label }}</span>
+              </span>
+            </template>
+          </q-option-group>
+        </q-card-section>
+
         <q-card-section class="q-pt-none">
           <q-select
             v-model="createPackId"
@@ -276,7 +300,7 @@ import LobbyRoomCardTile from '@/components/LobbyRoomCardTile.vue';
 import MapGridPreview from '@/components/MapGridPreview.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useContentStore, contentErrorI18nKey, type TaskSet } from '@/stores/content';
-import { useGameStore, type GameRoomMeta } from '@/stores/game';
+import { useGameStore, type GameRoomMeta, type OpponentMode } from '@/stores/game';
 import { mapsErrorI18nKey, useMapsStore } from '@/stores/maps';
 
 const auth = useAuthStore();
@@ -307,6 +331,8 @@ const createPackId = ref<string | null>(null);
 const createTaskSetIds = ref<string[]>([]);
 /** Chosen seats 1…map.players; default min(2, map.players) after map select (SC-LOBBY-28). */
 const createMaxSeats = ref(2);
+/** People vs AI; default people on open/reset (SC-LOBBY-50); no client coerce at maxSeats=1. */
+const createOpponentMode = ref<OpponentMode>('people');
 
 const inCatalogMaps = computed(() =>
   (maps.list ?? []).filter((m) => m.hasLive && m.inCatalog === true),
@@ -324,6 +350,12 @@ const maxSeatsOptions = computed(() => {
     return { label: String(n), value: n };
   });
 });
+
+/** Material icons already in bundle: person / smart_toy (SC-LOBBY-50 / D2). */
+const opponentModeOptions = computed(() => [
+  { label: t('lobby.opponentPeople'), value: 'people' as const, icon: 'person' },
+  { label: t('lobby.opponentAi'), value: 'ai' as const, icon: 'smart_toy' },
+]);
 
 const mapOptions = computed(() =>
   inCatalogMaps.value.map((m) => ({
@@ -406,6 +438,7 @@ function resetCreateForm() {
   createPackId.value = null;
   createTaskSetIds.value = [];
   createMaxSeats.value = 2;
+  createOpponentMode.value = 'people';
 }
 
 async function openCreateModal() {
@@ -493,6 +526,7 @@ async function onConfirmCreate() {
       packId: createPackId.value,
       taskSetIds: [...createTaskSetIds.value],
       maxSeats: createMaxSeats.value,
+      opponentMode: createOpponentMode.value,
     });
     createModalOpen.value = false;
     await router.push({ name: 'game', params: { roomId: room.roomId } });
